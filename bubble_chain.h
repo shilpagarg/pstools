@@ -553,6 +553,9 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_d
     }
 
     set<uint32_t> bubble_chain_end_begin;
+    map<uint32_t, uint32_t> pure_outgoing_num;
+    map<uint32_t, uint32_t> pure_incoming_num;
+    set<uint32_t> out_only;
     for(uint32_t i=0; i<n_vtx; i++){
         if(node_type[i] != 2){
             int num_outgoing_arcs = asg_arc_n(g, i);
@@ -607,7 +610,11 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_d
                     }
                 }
             }
-
+            pure_outgoing_num[i] = num_outgoing_arcs;
+            pure_incoming_num[i] = num_incoming_arcs;
+            if(num_incoming_arcs==0 && num_outgoing_arcs>0){
+                out_only.insert(i);
+            }
             if(!(num_incoming_arcs==1 && num_outgoing_arcs==1)){
                 // cout << g->seq[i/2].name << ": incoming " << num_incoming_arcs << "; outgoing " << num_outgoing_arcs <<"; bubbles:" << bubble_by_ending_begining[i].size() <<endl;
                 bubble_chain_end_begin.insert(i);
@@ -617,6 +624,26 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_d
         }
     }
 
+    // set<uint32_t> not_accessible;
+    // for(auto beg: out_only){
+    //     vector<asg_arc_t*> arc_stack;
+    //     vector<uint32_t> node_stack;  // DFS
+    //     vector<uint32_t> node_vi_stack;
+    //     node_stack.push_back(beg);
+    //     node_vi_stack.push_back(0);
+    //     bool visited[g->n_seq * 2];
+    //     for (int u=0; u<g->n_seq * 2; u++) {
+    //         visited[u] = false;
+    //     }
+    //     uint32_t cur_node = beg;
+    //     uint32_t linear_len = 1;
+    //     while(pure_outgoing_num.find(cur_node) != pure_outgoing_num.end() && pure_outgoing_num[cur_node]!=1) {
+    //         int num_outgoing_arcs = asg_arc_n(g, i);
+    //         asg_arc_t* all_outgoing_arcs = asg_arc_a(g, i);
+
+    //     }
+    // }
+    
     // set<string> names;
     // for(auto c : bubble_chain_end_begin){
     //     // cout << c << endl;
@@ -626,25 +653,262 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_d
     // for(auto c : names){
     //     cout << c << endl;
     // }
-    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_begin_end_nodes =  get_bubble_chain_graph(g,bubble_chain_end_begin,output_directory);
-    for(auto a: *bubble_chain_begin_end_nodes){
+    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_begin_end_nodes_buf =  get_bubble_chain_graph(g,bubble_chain_end_begin,output_directory);
+    for(auto a: *bubble_chain_begin_end_nodes_buf){
         for(auto b: a.second){
             for(auto bub: bubble_by_ending_begining[a.first]){
                 if(bub->begNode == a.first){
                     for(auto node: bub->starting_arcs){
-                        (*bubble_chain_begin_end_nodes)[a.first][b.first].insert(node);
+                        (*bubble_chain_begin_end_nodes_buf)[a.first][b.first].insert(node);
                     }
                 }
             }
             for(auto bub: bubble_by_ending_begining[b.first]){
                 if(bub->endNode == b.first){
                     for(auto node: bub->ending_arcs){
-                        (*bubble_chain_begin_end_nodes)[a.first][b.first].insert(node);
+                        (*bubble_chain_begin_end_nodes_buf)[a.first][b.first].insert(node);
                     }
                 }
             }
         }
     }
+    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_begin_end_nodes_buf2 = new map<uint32_t,map<uint32_t,set<uint32_t>>>();
+    for(auto a: *bubble_chain_begin_end_nodes_buf){
+        for(auto b: a.second){
+            if((*bubble_chain_begin_end_nodes_buf2).find(a.first) == (*bubble_chain_begin_end_nodes_buf2).end()){
+                (*bubble_chain_begin_end_nodes_buf2)[a.first] = map<uint32_t,set<uint32_t>>();
+            }
+            if((*bubble_chain_begin_end_nodes_buf2).find(b.first^1) == (*bubble_chain_begin_end_nodes_buf2).end()){
+                (*bubble_chain_begin_end_nodes_buf2)[b.first^1] = map<uint32_t,set<uint32_t>>();
+            }
+            (*bubble_chain_begin_end_nodes_buf2)[a.first][b.first] = b.second;
+            (*bubble_chain_begin_end_nodes_buf2)[b.first^1][a.first^1] = b.second;
+        }
+    }
+    delete bubble_chain_begin_end_nodes_buf;
+    set<uint32_t> unaccessable;
+    set<uint32_t> not_filtered;
+    for(auto a: *bubble_chain_begin_end_nodes_buf2){
+        if(pure_outgoing_num[a.first]>1 && pure_incoming_num[a.first]>0){
+            map<uint32_t,set<uint32_t>> non_outgoing;
+            for(auto b: a.second){
+                if(pure_outgoing_num[b.first]==0){
+                    non_outgoing[b.first]=b.second;
+                }
+            }
+            if(non_outgoing.size()==1){
+                for(auto x: non_outgoing){
+                    if(x.second.size() <= 8){
+                        unaccessable.insert(x.first>>1);
+                    }else{
+                        not_filtered.insert(x.first>>1);
+                    }
+                }
+            }else{
+                uint32_t greater_count = 0;
+                for(auto x: non_outgoing){
+                    if(x.second.size() > 8){
+                        greater_count++;
+                    }
+                }
+                if(greater_count>0){
+                    for(auto x: non_outgoing){
+                        if(x.second.size() <= 8){
+                            unaccessable.insert(x.first>>1);
+                        }else{
+                            not_filtered.insert(x.first>>1);
+                        }
+                    }   
+                }else{
+                    uint32_t max_idx = -1;
+                    uint32_t max_count = 0;
+                    for(auto x:non_outgoing){
+                        uint32_t cur_len = 0;
+                        for(auto i : x.second){
+                            cur_len+=g->seq[i>>1].len;
+                        }
+                        if(cur_len >= max_count){
+                            max_count = cur_len;
+                            max_idx = x.first;
+                        }
+                    }
+                    for(auto x:non_outgoing){
+                        if(x.first!=max_idx){
+                            unaccessable.insert(x.first>>1);
+                        }else{
+                            not_filtered.insert(x.first>>1);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_begin_end_nodes_buf3 = new map<uint32_t,map<uint32_t,set<uint32_t>>>();
+    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_end_begin_nodes_buf3 = new map<uint32_t,map<uint32_t,set<uint32_t>>>();
+
+    for(auto a: *bubble_chain_begin_end_nodes_buf2){
+        if(unaccessable.find(a.first>>1)==unaccessable.end()){
+            for(auto b: a.second){
+                if(unaccessable.find(b.first>>1)==unaccessable.end() && b.second.size()>1){
+                    if((*bubble_chain_begin_end_nodes_buf3).find(a.first) == (*bubble_chain_begin_end_nodes_buf3).end()){
+                        (*bubble_chain_begin_end_nodes_buf3)[a.first] = map<uint32_t,set<uint32_t>>();
+                    }
+                    if((*bubble_chain_begin_end_nodes_buf3).find(b.first^1) == (*bubble_chain_begin_end_nodes_buf3).end()){
+                        (*bubble_chain_begin_end_nodes_buf3)[b.first^1] = map<uint32_t,set<uint32_t>>();
+                    }
+                    (*bubble_chain_begin_end_nodes_buf3)[a.first][b.first] = b.second;
+                    (*bubble_chain_begin_end_nodes_buf3)[b.first^1][a.first^1] = b.second;
+                    if((*bubble_chain_end_begin_nodes_buf3).find(b.first) == (*bubble_chain_end_begin_nodes_buf3).end()){
+                        (*bubble_chain_end_begin_nodes_buf3)[b.first] = map<uint32_t,set<uint32_t>>();
+                    }
+                    if((*bubble_chain_end_begin_nodes_buf3).find(a.first^1) == (*bubble_chain_end_begin_nodes_buf3).end()){
+                        (*bubble_chain_end_begin_nodes_buf3)[a.first^1] = map<uint32_t,set<uint32_t>>();
+                    }
+                    (*bubble_chain_end_begin_nodes_buf3)[b.first][a.first] = b.second;
+                    (*bubble_chain_end_begin_nodes_buf3)[a.first^1][b.first^1] = b.second;
+                }
+            }
+        }
+    }
+    delete bubble_chain_begin_end_nodes_buf2;
+    set<vector<uint32_t>> extensions;
+    cout << "Start connect single branches" << endl;
+    for(auto beg: (*bubble_chain_begin_end_nodes_buf3)){
+        for(auto end: beg.second){
+            vector<uint32_t> to_expand;
+            set<uint32_t> visited;
+            visited.insert(beg.first);
+            visited.insert(end.first);
+            to_expand.push_back(beg.first);
+            to_expand.push_back(end.first);
+            while((*bubble_chain_begin_end_nodes_buf3).find(to_expand[to_expand.size()-1])!=(*bubble_chain_begin_end_nodes_buf3).end() 
+            && (*bubble_chain_begin_end_nodes_buf3)[to_expand[to_expand.size()-1]].size()==1
+            && (*bubble_chain_end_begin_nodes_buf3).find(to_expand[to_expand.size()-1])!=(*bubble_chain_end_begin_nodes_buf3).end() 
+            && (*bubble_chain_end_begin_nodes_buf3)[to_expand[to_expand.size()-1]].size()==1){
+                bool seen = false;;
+                for(auto i: (*bubble_chain_begin_end_nodes_buf3)[to_expand[to_expand.size()-1]]){
+                    if(visited.find(i.first)!=visited.end()){
+                        seen = true;
+                        break;
+                    }
+                    // cout << i.first << endl;
+                    to_expand.push_back(i.first);
+                    visited.insert(i.first);
+                }
+                if(seen){
+                    break;
+                }
+            }
+            extensions.insert(to_expand);
+        }
+    }
+    cout << "Start filter short connections:\t" << extensions.size() << endl;
+    vector<vector<uint32_t>> pathes;
+    for(auto path: extensions){
+        set<uint32_t> path_nodes;
+        for(auto n: path){
+            path_nodes.insert(n);
+        }
+        bool valid = true;
+        for(auto to_check: extensions){
+            set<uint32_t> to_check_nodes;
+            for(auto n: to_check){
+                to_check_nodes.insert(n);
+            }
+            bool found = true;
+            for(auto n: path_nodes){
+                if(to_check_nodes.find(n)==to_check_nodes.end()){
+                    found = false;
+                    break;
+                }
+            }
+            if(found && to_check_nodes.size()>path_nodes.size()){
+                valid = false;
+                break;
+            }
+        }
+        if(valid){
+            pathes.push_back(path);
+        }
+    }
+    cout << "End filter short connections:\t" << pathes.size() << endl;
+    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_begin_end_nodes_buf4 = new map<uint32_t,map<uint32_t,set<uint32_t>>>();
+
+    for(auto path: pathes){
+        set<uint32_t> to_insert;
+        for(int i = 0; i < path.size()-1; i++){
+            to_insert.insert((*bubble_chain_begin_end_nodes_buf3)[path[i]][path[i+1]].begin(),(*bubble_chain_begin_end_nodes_buf3)[path[i]][path[i+1]].end());
+        }
+        if(to_insert.size()>=2){
+            uint32_t beg = path[0];
+            uint32_t end = path[path.size()-1];
+            if((*bubble_chain_begin_end_nodes_buf4).find(beg) == (*bubble_chain_begin_end_nodes_buf4).end()){
+                (*bubble_chain_begin_end_nodes_buf4)[beg] = map<uint32_t,set<uint32_t>>();
+            }
+            if((*bubble_chain_begin_end_nodes_buf4).find(end^1) == (*bubble_chain_begin_end_nodes_buf4).end()){
+                (*bubble_chain_begin_end_nodes_buf4)[end^1] = map<uint32_t,set<uint32_t>>();
+            }
+            (*bubble_chain_begin_end_nodes_buf4)[beg][end] = to_insert;
+            (*bubble_chain_begin_end_nodes_buf4)[end^1][beg^1] = to_insert;
+        }
+
+    }
+    delete bubble_chain_begin_end_nodes_buf3;
+    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_begin_end_nodes = new map<uint32_t,map<uint32_t,set<uint32_t>>>();
+    
+    for(auto beg: (*bubble_chain_begin_end_nodes_buf4)){
+        (*bubble_chain_begin_end_nodes)[beg.first] = map<uint32_t,set<uint32_t>>();
+        for(auto end: beg.second){
+            set<uint32_t> to_insert;
+            for(auto n: end.second){
+                to_insert.insert(n>>1);
+            }
+            uint64_t all_len = 0;
+            // if(to_insert.size()>8 || (pure_incoming_num[beg.first]==0 && pure_outgoing_num[end.first] == 0)){
+                for(auto n: to_insert){
+                    all_len += g->seq[n].len;
+                }
+            // }
+            // if(to_insert.size()>8 || all_len > 10000000 || (pure_incoming_num[beg.first]==0 && pure_outgoing_num[end.first] == 0) ){
+            // if(to_insert.size()>8 || all_len > 10000000 || (pure_incoming_num[beg.first]==0 && pure_outgoing_num[end.first] == 0) ){
+            // if(all_len > 10000000 ){
+            if(all_len > 1000000 ){
+                (*bubble_chain_begin_end_nodes)[beg.first][end.first] = to_insert;
+            }
+        }
+    }
+    delete bubble_chain_begin_end_nodes_buf4;
+    cout << "Filtered Nodes: " << endl;
+    for(auto n: unaccessable){
+        cout << g->seq[n].name << ", ";
+    }
+    cout << endl;
+
+
+    cout << "Not Filtered Nodes: " << endl;
+    for(auto n: not_filtered){
+        cout << g->seq[n].name << ", ";
+    }
+    cout << endl;
+
+    // for(auto a: *bubble_chain_begin_end_nodes){
+    //     for(auto b: a.second){
+    //         // all_nodes.insert(b.second.begin(),b.second.end());
+    //         cout << g->seq[a.first>>1].name << ", " << g->seq[b.first>>1].name << endl;
+    //     }
+    // }
+
+    uint32_t branch_counter = 0;
+    set<uint32_t> all_nodes;
+    for(auto a: *bubble_chain_begin_end_nodes){
+        for(auto b: a.second){
+            branch_counter++;
+            all_nodes.insert(b.second.begin(),b.second.end());
+        }
+    }
+    cout << "Total Nodes in Chain Graph: " << all_nodes.size() << endl;
+    cout << "Branches: " << branch_counter << endl;
+    
 
     for(auto bubble: bubbles){
         delete bubble;

@@ -9,7 +9,7 @@
 #include <vector>
 
 #define YAK_MAX_KMER     31
-#define YAK_COUNTER_BITS 17
+#define YAK_COUNTER_BITS 18
 
 #define YAK_POS_ID_BITS 48
 #define YAK_POS_BITS 32
@@ -20,7 +20,9 @@
 #define YAK_N_COUNTS     (1<<YAK_COUNTER_BITS)
 #define YAK_MAX_COUNT    ((1<<YAK_COUNTER_BITS)-1)
 #define YAK_REPEAT_MASK    (1<<(YAK_COUNTER_BITS-1))
-#define YAK_KEY_MASK    ((1<<YAK_COUNTER_BITS)- 1 - YAK_REPEAT_MASK)
+#define YAK_FORWARD_MASK    (1<<(YAK_COUNTER_BITS-2))
+#define YAK_KEY_MASK    ((1<<YAK_COUNTER_BITS)- 1 - YAK_REPEAT_MASK - YAK_FORWARD_MASK)
+#define YAK_POS_MASK    ((1<<30)- 1)
 
 #define YAK_BLK_SHIFT  9 // 64 bytes, the size of a cache line
 #define YAK_BLK_MASK   ((1<<(YAK_BLK_SHIFT)) - 1)
@@ -116,11 +118,11 @@ yak_ch_t *yak_ch_init(int k, int pre, int n_hash, int n_shift);
 void yak_ch_destroy(yak_ch_t *h);
 void yak_ch_destroy_bf(yak_ch_t *h);
 int yak_ch_insert_list(yak_ch_t *h, int create_new, int n, const uint64_t *a);
-int yak_ch_insert_list_kmer_record_mapping(yak_ch_t *h, int create_new, int n, const uint64_t *a, recordset_t* recordset, const uint16_t *r,  long i, std::set<uint64_t>* deleted);
-int yak_ch_insert_list_kmer_pos(yak_ch_t *h, int create_new, int n, const uint64_t *a, recordset_ps_t * recordset, const uint16_t *r, const uint32_t*pos, long i, std::set<uint64_t>* deleted);
+int yak_ch_insert_list_kmer_record_mapping(yak_ch_t *h, int create_new, int n, const uint64_t *a, const bool *f, recordset_t* recordset, const uint16_t *r,  long i, std::set<uint64_t>* deleted);
+int yak_ch_insert_list_kmer_pos(yak_ch_t *h, yak_ch_t *h_pos, int create_new, int n, const uint64_t *a, const uint16_t *r, const uint32_t*pos, long i);
 int yak_ch_get(const yak_ch_t *h, uint64_t x);
-uint16_t yak_ch_get_k(const yak_ch_t *h, uint64_t x);
-record_ps_t* yak_ch_get_pos(const yak_ch_t *h, uint64_t x, recordset_ps_t *recordset);
+int yak_ch_get_k(const yak_ch_t *h, uint64_t x);
+uint16_t yak_ch_get_pos(const yak_ch_t *h, const yak_ch_t *h_pos, uint64_t x, uint32_t *pos);
 
 void yak_ch_clear(yak_ch_t *h, int n_thread);
 void yak_ch_hist(const yak_ch_t *h, int64_t cnt[YAK_N_COUNTS], int n_thread);

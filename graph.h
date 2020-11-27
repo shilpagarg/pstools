@@ -65,7 +65,6 @@ typedef struct {
 	char *name, *seq;
 	uint8_t c;
 } asg_seq_t;
-
 typedef struct {
 	uint32_t m_arc, n_arc:31, is_srt:1;  // m_arc is the size of edges; n_arc is the size of edges; 
 	asg_arc_t *arc;  // gives us arcs coming out of the node

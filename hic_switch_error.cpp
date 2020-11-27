@@ -13,7 +13,10 @@
 #include <string>
 #include <iostream>
 #include "kseq.h" // FASTA/Q parser
+#include <tuple>
+#include <inttypes.h>
 
+using namespace std;
 KSEQ_INIT(gzFile, gzread)
 #define CHUNK_SIZE 200000000
 
@@ -79,10 +82,12 @@ typedef struct { // global data structure for kt_pipeline()
 	int create_new;
 	kseq_t *ks;
 	yak_ch_t *h;
+	yak_ch_t *h_pos;
 	uint64_t global_counter;
 	int seg_n;
-	uint64_t tot_len;
-	recordset_ps_t *record_set;
+	uint32_t tot_len;
+	std::vector<std::string>* names;
+	std::vector<uint64_t>* lengths;
 } pldat_t;
 
 typedef struct { // data structure for each step in kt_pipeline()
@@ -98,9 +103,9 @@ static void worker_for(void *data, long i, int tid) // callback for kt_for()
 {
 	stepdat_t *s = (stepdat_t*)data;
 	yak_ch_t *h = s->p->h;
+	yak_ch_t *h_pos = s->p->h_pos;
 	ch_buf_t *b = &s->buf[i];
-	recordset_ps_t *r = &s->p->record_set[i];
-	b->n_ins += yak_ch_insert_list_kmer_pos(h, s->p->create_new, b->n, b->a, r, b->r, b->pos, i, NULL);
+	b->n_ins += yak_ch_insert_list_kmer_pos(h, h_pos, s->p->create_new, b->n, b->a, b->r, b->pos, i);
 }
 
 static void *worker_pipeline(void *data, int step, void *in) // callback for kt_pipeline()
@@ -116,6 +121,8 @@ static void *worker_pipeline(void *data, int step, void *in) // callback for kt_
 			p->global_counter++;
 			int l = p->ks->seq.l;
 			if (l < p->opt->k) continue;
+			p->names->push_back(std::string(p->ks->name.s));
+			p->lengths->push_back((uint64_t)l);
 			p->tot_len+=l;
 			if (s->n == s->m) {
 				s->m = s->m < 16? 16 : s->m + (s->n>>1);
@@ -180,14 +187,12 @@ pldat_t *yak_counting_switch_error(const char *fn1, const char *fn2, const yak_c
 	pldat_t* pl;
 	CALLOC(pl,1);
 	gzFile fp;
+	pl->names = new std::vector<std::string>();
+	pl->lengths = new std::vector<uint64_t>();
 	pl->opt = opt;
 	pl->create_new = 1;
 	pl->h = yak_ch_init(opt->k, opt->pre, opt->bf_n_hash, opt->bf_shift);
-	CALLOC(pl->record_set, 1<<opt->pre);
-	for(int i=0; i<(1<<opt->pre);i++){
-		pl->record_set[i].current_length = 16;
-		CALLOC(pl->record_set[i].records, 16);
-	}
+	pl->h_pos = yak_ch_init(opt->k, 30, opt->bf_n_hash, opt->bf_shift);
 	if ((fp = gzopen(fn1, "r")) == 0) return 0;
 	pl->ks = kseq_init(fp);
 	kt_pipeline(3, worker_pipeline, pl, 3);
@@ -228,10 +233,10 @@ typedef struct {
 	double ratio_thres;
 	bseq_file_t *fp;
 	yak_ch_t *ch;
+	yak_ch_t *ch_pos;
 	tb_buf_t *buf;
 	std::vector<mapping_res_t>* mappings;
 	int record_num;
-	recordset_ps_t *record_set;
 } tb_shared_t;
 
 typedef struct {
@@ -239,7 +244,7 @@ typedef struct {
 	tb_shared_t *aux;
 	bseq1_t *seq;
 	uint16_t *mappings;
-	uint64_t *map_pos;
+	uint32_t *map_pos;
 } tb_step_t;
 
 static void tb_worker(void *_data, long k, int tid)
@@ -251,8 +256,9 @@ static void tb_worker(void *_data, long k, int tid)
 	tb_buf_t *b = &aux->buf[tid];
 	uint64_t x[4], mask;
 	int i, l, shift;
+	uint32_t s_pos;
 	std::map<uint16_t,int> counts;
-	std::map<uint64_t,int> pos;
+	std::map<uint32_t,int> pos;
 	if (aux->ch->k < 32) {
 		mask = (1ULL<<2*aux->ch->k) - 1;
 		shift = 2 * (aux->ch->k - 1);
@@ -268,7 +274,6 @@ static void tb_worker(void *_data, long k, int tid)
 	memset(b->s, 0, s->l_seq * sizeof(uint32_t));
 	for (i = l = 0, x[0] = x[1] = x[2] = x[3] = 0; i < s->l_seq; ++i) {
 		int c = seq_nt4_table[(uint8_t)s->seq[i]];
-		record_ps_t* res;
 		if (c < 4) {
 			if (aux->ch->k < 32) {
 				x[0] = (x[0] << 2 | c) & mask;
@@ -286,10 +291,10 @@ static void tb_worker(void *_data, long k, int tid)
 					y = yak_hash64(x[0] < x[1]? x[0] : x[1], mask);
 				else
 					y = yak_hash_long(x);
-				res = yak_ch_get_pos(aux->ch, y, aux->record_set);
-				if(res != NULL){
-					counts[res->uni_id]++;
-					pos[res->uni_id] = res->pos;
+				uint16_t res = yak_ch_get_pos(aux->ch, aux->ch_pos, y, &s_pos);
+				if(res != 65535){
+					counts[res]++;
+					pos[res] = s_pos;
 				}
 			}
 		} else l = 0, x[0] = x[1] = x[2] = x[3] = 0;
@@ -316,7 +321,7 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 		s->aux = aux;
 		if (s->n_seq) {
 			s->mappings = (uint16_t*)calloc(s->n_seq, sizeof(uint16_t));
-			s->map_pos = (uint64_t*)calloc(s->n_seq, sizeof(uint64_t));
+			s->map_pos = (uint32_t*)calloc(s->n_seq, sizeof(uint32_t));
 			// fprintf(stderr, "[M::%s] read %d sequences\n", __func__, s->n_seq);
 			return s;
 		} else free(s);
@@ -338,15 +343,21 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 	return 0;
 }
 
-void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2)
+void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, std::map<std::string,std::string> contig2_1_map)
 {
+
+
+
+	std::vector<std::string> names = *pl->names;
+	std::vector<uint64_t> lengths = *pl->lengths;
+
 	if(hic_fn1 == 0 || hic_fn2 == 0){
 		fprintf(stderr, "ERROR: Please give two hic files\n");
 		exit(1);
 	}
 
 	ketopt_t o = KETOPT_INIT;
-	int i, c, min_cnt = 2, mid_cnt = 5;
+	int i, c;
 	tb_shared_t aux;
 
 	memset(&aux, 0, sizeof(tb_shared_t));
@@ -354,7 +365,7 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2)
 	aux.ratio_thres = 0.33;
 	aux.k = pl->h->k;
 	aux.ch = pl->h;
-	aux.record_set = pl->record_set;
+	aux.ch_pos = pl->h_pos;
 	aux.record_num = pl->global_counter;
 	
 	aux.fp = hic_fn1;
@@ -369,7 +380,6 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2)
 	free(aux.buf);
 
 
-
 	aux.fp = hic_fn2;
 	std::vector<mapping_res_t>* map2 = new std::vector<mapping_res_t>();
 	aux.mappings = map2;
@@ -381,102 +391,215 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2)
 	}
 	free(aux.buf);
 
-	uint64_t total_length = pl->tot_len;
-	uint64_t unsupported_hic = 0;
-	uint64_t supported_hic = 0;
-	uint64_t support_count[aux.record_num/2];
-	memset(support_count,0,sizeof(support_count));
-	uint64_t unsupport_count[aux.record_num/2];
-	memset(unsupport_count,0,sizeof(unsupport_count));
+	map<uint16_t, int> unid_id;
+	map<int, string> id_names;
+	map<int, uint64_t> id_lengths;
+	int ids = 0;
+	for(auto i: contig2_1_map){
+		for(int idx = 0; idx < names.size()/2; idx++){
+			if(names[idx]==i.first){
+				unid_id[idx] = ids;
+				id_names[ids] = names[idx];
+				id_lengths[ids] = lengths[idx];
+				break;
+			}
+		}
+		for(int idx = names.size()/2; idx < names.size(); idx++){
+			if(names[idx]==i.second){
+				unid_id[idx] = ids+1;
+				id_names[ids+1] = names[idx];
+				id_lengths[ids+1] = lengths[idx];
+				break;
+			}
+		}
+		ids+=2;
+	}
+	uint32_t overall_total_length = pl->tot_len;
+	uint64_t support_count[ids] = {0};
+	// memset(support_count,0,sizeof(support_count));
+	uint64_t unsupport_count[ids] = {0};
+	// memset(unsupport_count,0,sizeof(unsupport_count));
 	std::map<uint32_t, std::vector<uint32_t>> unsupported_position;
 	std::map<uint32_t, std::vector<uint32_t>> supported_position;
+
 	for(uint64_t j = 0; j < std::min(map1->size(), map2->size()); j++){
-		if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535){
+		
+
+		// if((*map1)[j].unit_id == 65535 && (*map2)[j].unit_id != 65535 && unid_id.find((*map2)[j].unit_id)!=unid_id.end()) {
+		// 		supported_hic++;
+		// 		support_count[unid_id[(*map2)[j].unit_id]]++;
+		// }else if((*map2)[j].unit_id == 65535 && (*map1)[j].unit_id != 65535 && unid_id.find((*map1)[j].unit_id)!=unid_id.end()) {
+		// 		supported_hic++;
+		// 		support_count[unid_id[(*map1)[j].unit_id]]++;
+		// }
+		
+		if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535 && unid_id.find((*map1)[j].unit_id)!=unid_id.end() && unid_id.find((*map2)[j].unit_id)!=unid_id.end()){
+		// printf("%d, %d\n", (*map1)[j].unit_id, (*map2)[j].unit_id);
+		// printf("%d, %d\n", (*map1)[j].pos, (*map2)[j].pos);
+
 			if((*map1)[j].unit_id == (*map2)[j].unit_id){
-				if((*map1)[j].unit_id >= aux.record_num/2){
-					support_count[(*map1)[j].unit_id - aux.record_num/2]++;
-				}else{
-					support_count[(*map1)[j].unit_id]++;
-				}
-				supported_position[(*map1)[j].unit_id].push_back((*map1)[j].pos);
-				supported_position[(*map2)[j].unit_id].push_back((*map2)[j].pos);
-				supported_hic++;
-			}else if( std::max((*map1)[j].unit_id, (*map2)[j].unit_id) - std::min((*map1)[j].unit_id, (*map2)[j].unit_id) == aux.record_num/2 ){
-				unsupport_count[std::min((*map1)[j].unit_id, (*map2)[j].unit_id)]++;
-				unsupported_position[(*map1)[j].unit_id].push_back((*map1)[j].pos);
-				unsupported_position[(*map2)[j].unit_id].push_back((*map2)[j].pos);
-				unsupported_hic++;
+				// if((*map1)[j].unit_id >= aux.record_num/2){
+					// support_count[(*map1)[j].unit_id - aux.record_num/2]++;
+				// }else{
+				support_count[unid_id[(*map1)[j].unit_id]]++;
+				support_count[unid_id[(*map2)[j].unit_id]]++;
+				// }
+				supported_position[unid_id[(*map1)[j].unit_id]].push_back((*map1)[j].pos);
+				supported_position[unid_id[(*map2)[j].unit_id]].push_back((*map2)[j].pos);
+			}else if( (unid_id[(*map2)[j].unit_id]>>1) == (unid_id[(*map1)[j].unit_id]>>1) ){
+				unsupport_count[unid_id[(*map1)[j].unit_id]]++;
+				unsupport_count[unid_id[(*map2)[j].unit_id]]++;
+				unsupported_position[unid_id[(*map1)[j].unit_id]].push_back((*map1)[j].pos);
+				unsupported_position[unid_id[(*map2)[j].unit_id]].push_back((*map2)[j].pos);
 			}
 		}
 	}
-	for(auto sup_pos : supported_position){
-		std::sort(supported_position[sup_pos.first].begin(),supported_position[sup_pos.first].end());
-	}
-	uint32_t switch_error_count = 0;
-	uint64_t switch_error_length = 0;
-	for(auto unsup_pos : unsupported_position){
-		std::sort(unsupported_position[unsup_pos.first].begin(),unsupported_position[unsup_pos.first].end());
-		std::vector<uint32_t> supported_pos = supported_position[unsup_pos.first];
-		std::vector<uint32_t> unsupported_pos = unsupported_position[unsup_pos.first];
-		uint32_t sup_idx = 0;
-		uint32_t unsup_idx = 0;
-		int unsup_counter = 0;
-		int sup_counter = 0;
-		uint64_t start = 0;
-		uint64_t end = 0;
-		for(uint32_t i = 0; i < supported_pos.size() + unsupported_pos.size(); i++){
-			if(sup_idx<supported_pos.size() && unsup_idx<unsupported_pos.size()){
-				if(supported_pos[sup_idx]<unsupported_pos[unsup_idx]){
-					sup_idx++;
-					sup_counter++;
-					if(unsup_counter>=3&&sup_counter>=3){
-						printf("Switch Error at Sequence %d, haplotype %d, position %d, length %d\n",(unsup_pos.first<aux.record_num/2)?unsup_pos.first:unsup_pos.first-aux.record_num/2,(unsup_pos.first<aux.record_num/2)?1:2, start, end-start);
-						switch_error_length += end-start;
-						switch_error_count++;
-						unsup_counter = 0;
-					}else if(sup_counter>=3){
-						unsup_counter = 0;
-					}
-				}else{
-					if(unsup_counter>0){
-						end = unsupported_pos[unsup_idx];
-					}else{
-						start = unsupported_pos[unsup_idx];
-					}
-					sup_counter = 0;
-					unsup_counter++;
-					unsup_idx++;
-				}
-			}else if(unsup_idx<unsupported_pos.size()){
-				if(unsupported_pos.size() - unsup_idx + unsup_counter >= 3){
-					end = unsupported_pos[unsupported_pos.size()-1];
-					if(unsup_counter == 0){
-						start = unsupported_pos[unsup_idx];
-					}
-					switch_error_count++;
-					printf("Switch Error at Sequence %d, haplotype %d, position %d, length %d\n",(unsup_pos.first<aux.record_num/2)?unsup_pos.first:unsup_pos.first-aux.record_num/2,(unsup_pos.first<aux.record_num/2)?1:2, start, end-start);
-					switch_error_length += end-start;
-				}
-				break;
+	
+	// uint32_t switch_error_count = 0;
+	// uint64_t switch_error_length = 0;
+	// uint32_t hamming_distance = 0;
+
+	uint32_t overall_total_vars = 0;
+	uint32_t overall_hamming_distance = 0;
+	uint32_t overall_switch_error_count = 0;
+	uint64_t overall_switch_error_length = 0;
+	uint32_t overall_potiential_switch_count = 0;
+
+	for(auto i: supported_position){
+		string name = id_names[i.first];
+		uint64_t total_length = id_lengths[i.first];
+		uint32_t total_vars = 0;
+		uint32_t switch_error_count = 0;
+		uint64_t switch_error_length = 0;
+		uint32_t hamming_distance = 0;
+		uint32_t potiential_switch_count = 1;
+		vector<uint32_t> sup_pos = i.second;
+		vector<uint32_t> unsup_pos;
+		if(unsupported_position.find(i.first)!=unsupported_position.end()){
+			unsup_pos = unsupported_position[i.first];
+		}
+
+		vector<pair<uint32_t,bool>> all_counting;
+		for(auto p: unsup_pos){
+			all_counting.push_back(make_pair(p, true));
+		}
+		for(auto p: sup_pos){
+			all_counting.push_back(make_pair(p, false));
+		}
+		sort(all_counting.begin(), all_counting.end(), [ ]( const auto& lhs, const auto& rhs )
+        {
+        return lhs.first < rhs.first;
+        });
+		vector<pair<uint32_t, int>> unsupport_counting;
+		uint32_t cur_pos = 0;
+		int cur_count = 0;
+		for(auto p: all_counting){
+			if(cur_pos != p.first){
+				unsupport_counting.push_back(make_pair(cur_pos,cur_count));
+				cur_pos = p.first;
+				cur_count = 0;
+			}
+			if(p.second){
+				cur_count++;
 			}else{
-				break;
+				cur_count--;
 			}
-
 		}
+		unsupport_counting.push_back(make_pair(cur_pos,cur_count));
+		uint32_t unsup_start = 0;
+		int kmer_count = 0;
+		bool init = false;
+		vector<pair<uint32_t,int>> condensed_counting;
+		int idx = 0;
+		while(idx < unsupport_counting.size()){
+			if(!init){
+					init = true;
+					unsup_start = unsupport_counting[idx].first;
+					kmer_count = unsupport_counting[idx].second;
+					idx++;
+			}else{
+				while(idx < unsupport_counting.size() && unsup_start >= unsupport_counting[idx].first - 150){
+					kmer_count += unsupport_counting[idx].second;
+					idx++;
+				}
+				condensed_counting.push_back(make_pair(unsup_start, kmer_count));
+				init = false;
+			}
+		}
+		total_vars = condensed_counting.size() - 1;
+		vector<uint32_t> switch_pos_vec;
+		for(int p = 0; p < condensed_counting.size()-1; p++){
+			if(condensed_counting[p].second > 0){
+				hamming_distance += 1;
+			}
+			if( (condensed_counting[p].second>0) ^ (condensed_counting[p+1].second>0)){
+				switch_error_count += 1;
+				switch_pos_vec.push_back(condensed_counting[p+1].first);
+			}
+		// printf("%d\n", condensed_counting[p].first);
+		}
+		if(condensed_counting.size()>0){
+			if(condensed_counting[condensed_counting.size()-1].second > 0){
+				hamming_distance += 1;
+			}
+		}
+		// printf("%d\n", condensed_counting[condensed_counting.size()-1].first);
+		// for(auto i:switch_pos_vec){
+			// printf("%u\n", i);
+		// }
+		if(switch_pos_vec.size()>=2){
+			for(int p = 0; p < switch_pos_vec.size()-1; p+=2){
+				switch_error_length+=switch_pos_vec[p+1] - switch_pos_vec[p];	
+			}
+		}
+		printf("\n%s\n",name.c_str());
+		printf("Unswitched: %"PRIu64"\n", total_vars - hamming_distance);
+		printf("Switched: %"PRIu64"\n", hamming_distance);
+		printf("Hamming distance rate: %.4f%%\n", ((double) hamming_distance)/ (total_vars) * 100);
+		printf("Switch error number: %"PRIu64", length: %"PRIu64", rate: %.4f%%\n", switch_error_count, switch_error_length, ((double) switch_error_count)/ (condensed_counting.size()-1) * 100);
+		printf("Switch error length: %"PRIu64", rate: %.4f%%\n", switch_error_length, ((double) switch_error_length)/ total_length * 100);
+		overall_total_vars += total_vars;
+		overall_hamming_distance += hamming_distance;
+		overall_switch_error_count += switch_error_count;
+		overall_switch_error_length += switch_error_length;
+		overall_potiential_switch_count += (condensed_counting.size()-1);
+		// if(unsup_pos_len.size()>0){
+		// 	vector<pair<uint32_t,uint32_t>> merged;
+		// 	uint32_t cur_starting = unsup_pos_len[0].first;
+		// 	uint32_t cur_ending = unsup_pos_len[0].first + unsup_pos_len[0].second;
+		// 	for(int idx = 1; idx < unsup_pos_len.size(); idx++){
+		// 		if(cur_ending+150 > unsup_pos_len[idx].first){
+		// 			cur_ending = unsup_pos_len[idx].first+unsup_pos_len[idx].second;
+		// 		}else{
+		// 			merged.push_back(make_pair(cur_starting, cur_ending-cur_starting));
+		// 			cur_starting = unsup_pos_len[idx].first;
+		// 			cur_ending = unsup_pos_len[idx].first + unsup_pos_len[idx].second;
+		// 		}
+		// 	}
+		// 	merged.push_back(make_pair(cur_starting, cur_ending-cur_starting));
+		// 	for(auto switches: merged){
+		// 		switch_error_count++;
+		// 		switch_error_length+=switches.second;
+		// 		printf("%s : switch at: %"PRIu32", length: %"PRIu32" \n", id_names[i.first].c_str(), switches.first, switches.second);
+		// 	}
+		// }
 	}
-
-
-	for(int i = 0; i < aux.record_num/2; i++){
-		printf("Sequence %d: sup: %d, unsup: %d, rate: %.4f%%\n", i, support_count[i], unsupport_count[i],
-		                                      ((double) support_count[i])/ (support_count[i] + unsupport_count[i]) * 100 );
-	}
-	printf("Total support pairs: %d\n", supported_hic);
-	printf("Total unsupport pairs: %d\n", unsupported_hic);
-	printf("Total hamming distance rate: %.4f%%\n", ((double) switch_error_count)/ (supported_hic + switch_error_count) * 100);
-	printf("Switch error length: %d, rate: %.4f%%\n", switch_error_length, ((double) switch_error_length)/ total_length * 100);
+	printf("\nOverall Unswitched: %"PRIu64"\n", overall_total_vars - overall_hamming_distance);
+	printf("Overall Switched: %"PRIu64"\n", overall_hamming_distance);
+	printf("Overall Hamming distance rate: %.4f%%\n", ((double) overall_hamming_distance)/ (overall_total_vars) * 100);
+	printf("Overall Switch error number: %"PRIu64", rate: %.4f%%\n", overall_switch_error_count, ((double) overall_switch_error_count)/ overall_potiential_switch_count * 100);
+	printf("Overall Switch error length: %"PRIu64", rate: %.4f%%\n", overall_switch_error_length, ((double) overall_switch_error_length)/ overall_total_length * 100);
+	// for(int i = 0; i < ids; i++){
+	// 	printf("%s : sup: %"PRIu64", unsup: %"PRIu64", rate: %.4f%%\n", id_names[i].c_str(), support_count[i], unsupport_count[i],
+	// 	                                      ((double) support_count[i])/ (support_count[i] + unsupport_count[i]) * 100 );
+	// }
+	// printf("Total support pairs: %"PRIu64"\n", supported_hic);
+	// printf("Total unsupport pairs: %"PRIu64"\n", unsupported_hic);
+	// printf("Total hamming distance rate: %.4f%%\n", ((double) unsupported_hic)/ (supported_hic + unsupported_hic) * 100);
+	// printf("Switch error number: %"PRIu64", length: %"PRIu64", length rate: %.4f%%\n", switch_error_count, switch_error_length, (((double) switch_error_length)/ ((double) total_length)) * 100);
 }
 
-int main_switch_error(yak_copt_t opt, char* hic_file1,char* hic_file2, char* hap_file1, char* hap_file2)
+int main_switch_error(yak_copt_t opt, char* hic_file1,char* hic_file2, char* hap_file1, char* hap_file2, std::map<std::string,std::string> contig2_1_map)
 {
 	pldat_t *h;
 	bseq_file_t* hic_fn1 = bseq_open(hic_file1);
@@ -486,10 +609,9 @@ int main_switch_error(yak_copt_t opt, char* hic_file1,char* hic_file2, char* hap
 		exit(1);
 	}
 
-
 	h = yak_counting_switch_error(hap_file1,hap_file2, &opt);
 
-	get_switch_error(h, hic_fn1, hic_fn2);
+	get_switch_error(h, hic_fn1, hic_fn2, contig2_1_map);
 	
 	yak_ch_destroy(h->h);
 	free(h);

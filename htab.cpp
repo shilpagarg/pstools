@@ -80,7 +80,7 @@ int yak_ch_insert_list(yak_ch_t *h, int create_new, int n, const uint64_t *a)
 	return n_ins;
 }
 
-int yak_ch_insert_list_kmer_record_mapping(yak_ch_t *h, int create_new, int n, const uint64_t *a, recordset_t * recordset, const uint16_t *r, long i, std::set<uint64_t>* deleted)
+int yak_ch_insert_list_kmer_record_mapping(yak_ch_t *h, int create_new, int n, const uint64_t *a, const bool *f, recordset_t * recordset, const uint16_t *r, long i, std::set<uint64_t>* deleted)
 {
 	int j, mask = (1<<h->pre) - 1, n_ins = 0;
 	yak_ch1_t *g;
@@ -99,6 +99,9 @@ int yak_ch_insert_list_kmer_record_mapping(yak_ch_t *h, int create_new, int n, c
 				if (absent){
 					++n_ins;
 					kh_key(g->h, k)|=r[j];
+					if(f[j]){
+						kh_key(g->h, k) |= YAK_FORWARD_MASK;
+					}
 				}else if(((kh_key(g->h, k)&YAK_KEY_MASK) ^ r[j]) != 0){
 					kh_key(g->h,k) |= YAK_REPEAT_MASK;
 				}
@@ -113,30 +116,16 @@ int yak_ch_insert_list_kmer_record_mapping(yak_ch_t *h, int create_new, int n, c
 	return n_ins;
 }
 
-void insert_record_set_pos(recordset_ps_t * recordset, uint32_t k,uint16_t id, uint64_t pos, long i){
-	// printf("%d, %ld\n",recordset->current_length,i);
-	if(recordset->current_length < k){
-		uint32_t next_len = (recordset->current_length*2 > k) ? (recordset->current_length*2) : (k);
-		REALLOC(recordset->records, next_len);
-		memset(&recordset->records[recordset->current_length] , 0, (next_len - recordset->current_length)*sizeof(record_ps_t));
-		recordset->current_length = next_len;
-	}
-	if(!recordset->records[k].init){
-		recordset->records[k].init = true;
-		recordset->records[k].uni_id = id;
-		recordset->records[k].pos = pos;
-	}else if(!recordset->records[k].repeated && recordset->records[k].uni_id != id){
-		recordset->records[k].repeated = true;
-	}
-}
-
-int yak_ch_insert_list_kmer_pos(yak_ch_t *h, int create_new, int n, const uint64_t *a, recordset_ps_t * recordset, const uint16_t *r, const uint32_t*pos, long i, std::set<uint64_t>* deleted)
+int yak_ch_insert_list_kmer_pos(yak_ch_t *h, yak_ch_t *h_pos, int create_new, int n, const uint64_t *a, const uint16_t *r, const uint32_t*pos, long i)
 {
 	int j, mask = (1<<h->pre) - 1, n_ins = 0;
+	int mask_pos = (1<<30)-1;
 	yak_ch1_t *g;
+	yak_ch1_t *g_pos;
 	// recordset_ps_t *cur_recordset = &recordset[a[0]&mask];
 	if (n == 0) return 0;
 	g = &h->h[a[0]&mask];
+	g_pos = &h_pos->h[a[0]&mask_pos];
 	for (j = 0; j < n; ++j) {
 		int ins = 1, absent;
 		uint64_t x = a[j] >> h->pre;
@@ -144,32 +133,44 @@ int yak_ch_insert_list_kmer_pos(yak_ch_t *h, int create_new, int n, const uint64
 		if ((a[j]&mask) != (a[0]&mask)) continue;
 		if (create_new) {
 			if (g->b)
-				ins = (yak_bf_insert(g->b, x) == h->n_hash);
+				ins = (yak_bf_insert(g->b, (a[j] >> h->pre)) == h->n_hash);
 			if (ins) {
-				k = yak_ht_put(g->h, x<<YAK_COUNTER_BITS, &absent);
+				k = yak_ht_put(g->h, (a[j] >> h->pre)<<YAK_COUNTER_BITS, &absent);
 				if (absent){
+					kh_key(g->h, k)|=r[j];
+					k = yak_ht_put(g_pos->h, (a[j] >> 30)<<30, &absent);
+					kh_key(g_pos->h, k)|=(pos[j]&YAK_POS_MASK);
 					++n_ins;
+				}else if(((kh_key(g->h, k)&YAK_KEY_MASK) ^ r[j]) != 0){
+					kh_key(g->h,k) |= YAK_REPEAT_MASK;
 				}
-				insert_record_set_pos(recordset, k, r[j], pos[j], i);
 			}
 		} else {
-			k = yak_ht_get(g->h, x<<YAK_COUNTER_BITS);
-			if(k != kh_end(g->h)){
-				insert_record_set_pos(recordset, k, r[j], pos[j], i);
+			k = yak_ht_get(g->h, (a[j] >> h->pre)<<YAK_COUNTER_BITS);
+			if(k != kh_end(g->h) && ((kh_key(g->h, k)&YAK_KEY_MASK) ^ r[j]) != 0){
+				kh_key(g->h,k) |= YAK_REPEAT_MASK;
 			}
 		}
 	}
 	return n_ins;
 }
 
-record_ps_t* yak_ch_get_pos(const yak_ch_t *h, uint64_t x, recordset_ps_t *recordset)
+uint16_t yak_ch_get_pos(const yak_ch_t *h, const yak_ch_t *h_pos, uint64_t x, uint32_t *pos)
 {
 	int mask = (1<<h->pre) - 1;
+	int mask_pos = (1<<30) - 1;
 	yak_ht_t *g = h->h[x&mask].h;
-	recordset_ps_t* records= &recordset[x&mask]; 
+	yak_ht_t *g_pos = h_pos->h[x&mask_pos].h;
 	khint_t k;
 	k = yak_ht_get(g, x >> h->pre << YAK_COUNTER_BITS);
-	return (k == kh_end(g) || (!records->records[k].init) || records->records[k].repeated ) ? NULL : &records->records[k];
+	if(k == kh_end(g) || (kh_key(g, k)&YAK_REPEAT_MASK) != 0 ){
+		return 65535;
+	}
+	uint16_t id = kh_key(g, k)&YAK_KEY_MASK;
+	k = yak_ht_get(g_pos, (x >> 30) << 30);
+	if(k!=kh_end(g_pos))
+	(*pos) = (kh_key(g_pos, k)&YAK_POS_MASK);
+	return id;
 }
 
 int yak_ch_get(const yak_ch_t *h, uint64_t x)
@@ -181,13 +182,13 @@ int yak_ch_get(const yak_ch_t *h, uint64_t x)
 	return k == kh_end(g)? -1 : kh_key(g, k)&YAK_MAX_COUNT;
 }
 
-uint16_t yak_ch_get_k(const yak_ch_t *h, uint64_t x)
+int yak_ch_get_k(const yak_ch_t *h, uint64_t x)
 {
 	int mask = (1<<h->pre) - 1;
 	yak_ht_t *g = h->h[x&mask].h;
 	khint_t k;
 	k = yak_ht_get(g, x >> h->pre << YAK_COUNTER_BITS);
-	return (k == kh_end(g) || (kh_key(g, k)&YAK_REPEAT_MASK) != 0 )? -1 : (kh_key(g, k)&YAK_KEY_MASK);
+	return (k == kh_end(g) || (kh_key(g, k)&YAK_REPEAT_MASK) != 0 )? -1 : kh_key(g, k);
 }
 /*************************
  * Clear all counts to 0 *

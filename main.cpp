@@ -1,6 +1,5 @@
 extern "C"{
 #include "paf.h"
-#
 }
 #include <string.h>
 #include <iostream>
@@ -280,19 +279,34 @@ int main_resolve_haplotypes(int argc, char* argv[]) {
     char* output_directory = argv[o.ind+2];
     printf("start main\n");
     asg_t* graph = gfa_read(gfa_filename);
+	// for(int i = 0; i<graph->n_seq; i++){
+	    // cout << graph->seq[0].len << "\t" << string(graph->seq[0].seq).length() << endl; 
+	    // cout << graph->seq[asg_arc_a(graph,0)[0].v>>1].len << "\t" << string(graph->seq[asg_arc_a(graph,0)[0].v>>1].seq).length() << endl; 
+	    // cout << asg_arc_a(graph,0)[0].ol << endl; 
+	// }
+	// graph->seq[asg_arc_a(graph,0)[0].v>>1].len
     map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph = get_bubbles(graph,string(output_directory));
-    uint16_t **connections;
-	CALLOC(connections,graph->n_seq);
+    uint32_t **connections_foward;
+	CALLOC(connections_foward,graph->n_seq);
 	for(int i = 0; i< graph->n_seq; i++){
-		CALLOC(connections[i], graph->n_seq);
-		memset(connections[i], 0, sizeof(*connections[i]));
+		CALLOC(connections_foward[i], graph->n_seq);
+		memset(connections_foward[i], 0, sizeof(*connections_foward[i]));
+	}
+	uint32_t **connections_backward;
+	CALLOC(connections_backward,graph->n_seq);
+	for(int i = 0; i< graph->n_seq; i++){
+		CALLOC(connections_backward[i], graph->n_seq);
+		memset(connections_backward[i], 0, sizeof(*connections_backward[i]));
 	}
     ifstream infile(connectionFile);
-    uint16_t i,j,count;
-    while(infile >> i >> j>> count){
-        connections[i][j] = count;
+    uint32_t i,j,count_forward,count_backward;
+    while(infile >> i >> j >> count_backward >> count_forward){
+        connections_backward[i][j] = count_backward;
+        connections_backward[j][i] = count_backward;
+        connections_foward[i][j] = count_forward;
+        connections_foward[j][i] = count_forward;
     }
-    get_haplotype_path(connections, graph, bubble_chain_graph, output_directory,n_threads);
+    get_haplotype_path(connections_foward, connections_backward, graph, bubble_chain_graph, output_directory,n_threads);
 
     return 0;
 }
@@ -342,7 +356,7 @@ int main_obtain_graph_sequence(int argc, char* argv[]){
 }
 
 int main_hic_mapping(int argc, char* argv[]){
-    return main_count_multi_new(argc, argv);
+    return main_hic_map(argc, argv);
 }
 
 // int main_completeness_check(int argc, char* argv[]){
@@ -446,21 +460,94 @@ int main_eval(int argc, char *argv[]){
 	char* hic1_file = argv[o.ind+2];
 	char* hic2_file = argv[o.ind+3];
 
-	hic_h = yak_count_create_new(hic1_file, &opt, 0);
-	hic_h = yak_count_create_new(hic2_file, &opt, hic_h);
-	kmer = hic_h->k;
-	yak_ch_hist(hic_h, hist, opt.n_thread);
 
-	yak_qv(&qopt, argv[o.ind+1], hic_h, cnt);
-	yak_qv_solve(hist, cnt, kmer, qopt.fpr, &qs);
-	yak_ch_destroy(hic_h);
+	string minimap2_cmd = string("minimap2 -ax asm5 -t");
+	minimap2_cmd += to_string(opt.n_thread) + string(" -o temp.sam ");
+	minimap2_cmd += string(hap1_file) + " " + string(hap2_file);
 
-	haplo_h = yak_count_create_new(hap1_file, &opt, 0);
-	haplo_h = yak_count_create_new(hap2_file, &opt, haplo_h);
-	completeness = main_completeness(haplo_h, opt.n_thread, hic1_file, hic2_file);
-	yak_ch_destroy(haplo_h);
+	ret = system(minimap2_cmd.c_str());
+	
+	map<string, map<string, uint32_t>> contig_name_map;
+	map<string, map<string, uint32_t>> contig_name_len;
+	map<string, map<string, uint32_t>> contig_name_mq;
+	map<string, uint32_t> contig_name_max_mq;
+	map<string, uint32_t> contig_name_max_len;
 
-	main_switch_error(opt, hic1_file, hic2_file, hap1_file, hap2_file);
+    ifstream infile("temp.sam");
+    string hap2_name, hap1_name, dump;
+	uint32_t mapq, mlen;
+	string line;
+	while (std::getline(infile, line)) {
+    	std::istringstream is(line);
+		is >> hap1_name;
+		if(hap1_name[0]=='@') continue;
+		is >> dump >> hap2_name;
+		is >> dump >> mapq;
+		is >> dump >> dump >> dump >> dump >> dump;
+		mlen = dump.size();
+		if(mlen == 1 && dump[0]=='='){
+			mlen = 0xFFFFFFFF;
+		}
+		// cout << hap1_name << " " << hap2_name << " " << mapq << " " << mlen << endl;
+		if(strcmp(hap1_name.c_str() ,"*") !=0 && (strcmp(hap2_name.c_str() ,"*") !=0)){
+			if(contig_name_map.find(hap2_name) == contig_name_map.end()){
+				contig_name_map[hap2_name] = map<string, uint32_t>();
+				contig_name_len[hap2_name] = map<string, uint32_t>();
+				contig_name_mq[hap2_name] = map<string, uint32_t>();
+				contig_name_max_mq[hap2_name] = 0;
+				contig_name_max_len[hap2_name] = 0;
+			}
+			if(contig_name_len[hap2_name].find(hap1_name)==contig_name_len[hap2_name].end()){
+				contig_name_len[hap2_name][hap1_name] = 0;
+			}
+			if(contig_name_mq[hap2_name].find(hap1_name)==contig_name_mq[hap2_name].end()){
+				contig_name_mq[hap2_name][hap1_name] = 0;
+			}
+			contig_name_max_mq[hap2_name] = max(mapq, contig_name_max_mq[hap2_name]);
+			contig_name_max_len[hap2_name] = max(mlen, contig_name_max_len[hap2_name]);
+			contig_name_len[hap2_name][hap1_name] = max(mlen, contig_name_len[hap2_name][hap1_name]);
+			contig_name_mq[hap2_name][hap1_name] = max(mapq, contig_name_mq[hap2_name][hap1_name]);
+			contig_name_map[hap2_name][hap1_name]++;
+		}
+	}
+	map<string,string> contig_map;
+	set<string> matched_contigs;
+	for(auto i : contig_name_map){
+		uint32_t mq_thred = (contig_name_max_mq[i.first] == 60 ? 50 : 0);
+		uint32_t max_count = 0;
+		string max_matched;
+		for(auto j : i.second){
+			if(contig_name_mq[i.first][j.first] > mq_thred && contig_name_len[i.first][j.first] > contig_name_max_len[i.first]*0.8 && max_count < j.second && matched_contigs.find(j.first)==matched_contigs.end()){
+				max_count = j.second;
+				max_matched = j.first;
+			}
+		}
+		if(max_count>0){
+			contig_map[i.first] = max_matched;
+			matched_contigs.insert(max_matched);
+		}
+	}
+	for(auto i : contig_map){
+		cout << i.first << " to " << i.second << endl;
+	}
+	cout << contig_map.size() << endl;
+	system("rm temp.sam");
+
+	// hic_h = yak_count_create_new(hic1_file, &opt, 0);
+	// hic_h = yak_count_create_new(hic2_file, &opt, hic_h);
+	// kmer = hic_h->k;
+	// yak_ch_hist(hic_h, hist, opt.n_thread);
+
+	// yak_qv(&qopt, argv[o.ind+1], hic_h, cnt);
+	// yak_qv_solve(hist, cnt, kmer, qopt.fpr, &qs);
+	// yak_ch_destroy(hic_h);
+
+	// haplo_h = yak_count_create_new(hap1_file, &opt, 0);
+	// haplo_h = yak_count_create_new(hap2_file, &opt, haplo_h);
+	// completeness = main_completeness(haplo_h, opt.n_thread, hic1_file, hic2_file);
+	// yak_ch_destroy(haplo_h);
+
+	main_switch_error(opt, hic1_file, hic2_file, hap1_file, hap2_file, contig_map);
 
 
 
@@ -477,8 +564,8 @@ int main_eval(int argc, char *argv[]){
 	// printf("ER\t%ld\t%.3f\n", (long)qs.tot, qs.err);
 	// printf("CV\t%.3f\n", qs.cov);
 	// printf("QV\t%.3f\t%.3f\n", qs.qv_raw, qs.qv);
-	printf("QV          \t%.3f\n", qs.qv_raw);
-	printf("Completeness\t%.4f\n",completeness);
+	// printf("QV          \t%.3f\n", qs.qv_raw);
+	// printf("Completeness\t%.4f\n",completeness);
 
 
 	

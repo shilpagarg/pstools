@@ -21,7 +21,9 @@ typedef struct {
 	uint64_t n_ins;
 	uint64_t *a;
 	uint16_t *r;
+	bool *f;
 } ch_buf_t;
+
 void printBits(size_t const size, void const * const ptr)
 {
     unsigned char *b = (unsigned char*) ptr;
@@ -36,7 +38,7 @@ void printBits(size_t const size, void const * const ptr)
     }
     puts("");
 }
-static inline void ch_insert_buf(ch_buf_t *buf, int p, uint64_t y, uint16_t seq_id) // insert a k-mer $y to a linear buffer
+static inline void ch_insert_buf(ch_buf_t *buf, int p, uint64_t y, uint16_t seq_id, bool f) // insert a k-mer $y to a linear buffer
 {
 	int pre = y & ((1<<p) - 1);
 	ch_buf_t *b = &buf[pre];
@@ -44,14 +46,17 @@ static inline void ch_insert_buf(ch_buf_t *buf, int p, uint64_t y, uint16_t seq_
 		b->m = b->m < 8? 8 : b->m + (b->m>>1);
 		REALLOC(b->a, b->m);
 		REALLOC(b->r, b->m);
+		REALLOC(b->f, b->m);
 	}
 	b->a[b->n] = y;
+	b->f[b->n] = f;
 	b->r[b->n++] = seq_id;
 }
 
 static void count_seq_buf(ch_buf_t *buf, int k, int p, int len, const char *seq, uint16_t seq_id) // insert k-mers in $seq to linear buffer $buf
 {
 	int i, l;
+	bool f;
 	uint64_t x[2], mask = (1ULL<<k*2) - 1, shift = (k - 1) * 2;
 	for (i = l = 0, x[0] = x[1] = 0; i < len; ++i) {
 		int c = seq_nt4_table[(uint8_t)seq[i]];
@@ -59,8 +64,9 @@ static void count_seq_buf(ch_buf_t *buf, int k, int p, int len, const char *seq,
 			x[0] = (x[0] << 2 | c) & mask;                  // forward strand
 			x[1] = x[1] >> 2 | (uint64_t)(3 - c) << shift;  // reverse strand
 			if (++l >= k) { // we find a k-mer
-				uint64_t y = x[0] < x[1]? x[0] : x[1];
-				ch_insert_buf(buf, p, yak_hash64(y, mask), seq_id);
+				f = x[0] < x[1];
+				uint64_t y = f ? x[0] : x[1];
+				ch_insert_buf(buf, p, yak_hash64(y, mask), seq_id, f);
 			}
 		} else l = 0, x[0] = x[1] = 0; // if there is an "N", restart
 	}
@@ -69,6 +75,7 @@ static void count_seq_buf(ch_buf_t *buf, int k, int p, int len, const char *seq,
 static void count_seq_buf_long(ch_buf_t *buf, int k, int p, int len, const char *seq, uint16_t seq_id) // insert k-mers in $seq to linear buffer $buf
 {
 	int i, l;
+	bool f;
 	uint64_t x[4], mask = (1ULL<<k) - 1, shift = k - 1;
 	for (i = l = 0, x[0] = x[1] = x[2] = x[3] = 0; i < len; ++i) {
 		int c = seq_nt4_table[(uint8_t)seq[i]];
@@ -78,7 +85,7 @@ static void count_seq_buf_long(ch_buf_t *buf, int k, int p, int len, const char 
 			x[2] = x[2] >> 1 | (uint64_t)(1 - (c&1))  << shift;
 			x[3] = x[3] >> 1 | (uint64_t)(1 - (c>>1)) << shift;
 			if (++l >= k)
-				ch_insert_buf(buf, p, yak_hash_long(x), seq_id);
+				ch_insert_buf(buf, p, yak_hash_long(x), seq_id, f);
 		} else l = 0, x[0] = x[1] = x[2] = x[3] = 0; // if there is an "N", restart
 	}
 }
@@ -107,7 +114,7 @@ static void worker_for(void *data, long i, int tid) // callback for kt_for()
 	stepdat_t *s = (stepdat_t*)data;
 	yak_ch_t *h = s->p->h;
 	ch_buf_t *b = &s->buf[i];
-	b->n_ins += yak_ch_insert_list_kmer_record_mapping(h, s->p->create_new, b->n, b->a, NULL, b->r, i, NULL);
+	b->n_ins += yak_ch_insert_list_kmer_record_mapping(h, s->p->create_new, b->n, b->a, b->f, NULL, b->r, i, NULL);
 }
 
 static void *worker_pipeline(void *data, int step, void *in) // callback for kt_pipeline()
@@ -148,6 +155,7 @@ static void *worker_pipeline(void *data, int step, void *in) // callback for kt_
 			s->buf[i].m = m;
 			MALLOC(s->buf[i].a, m);
 			MALLOC(s->buf[i].r, m);
+			MALLOC(s->buf[i].f, m);
 		}
 		for (i = 0; i < s->n; ++i) {
 			if (p->opt->k < 32)
@@ -168,6 +176,7 @@ static void *worker_pipeline(void *data, int step, void *in) // callback for kt_
 			n_ins += s->buf[i].n_ins;
 			free(s->buf[i].a);
 			free(s->buf[i].r);
+			free(s->buf[i].f);
 		}
 		p->h->tot += n_ins;
 		free(s->buf);
@@ -222,6 +231,7 @@ typedef struct {
 typedef struct {
 	char* name;
 	uint16_t unit_id;
+	bool forward;
 } mapping_res_t;
 
 typedef struct {
@@ -239,6 +249,7 @@ typedef struct {
 	tb_shared_t *aux;
 	bseq1_t *seq;
 	uint16_t *mappings;
+	bool *mappings_forward;
 } tb_step_t;
 
 static void tb_worker(void *_data, long k, int tid)
@@ -249,7 +260,9 @@ static void tb_worker(void *_data, long k, int tid)
 	tb_buf_t *b = &aux->buf[tid];
 	uint64_t x[4], mask;
 	int i, l, shift;
+	bool is_forward;
 	std::map<uint16_t,int> counts;
+	std::map<uint16_t,bool> forward;
 
 	if (aux->ch->k < 32) {
 		mask = (1ULL<<2*aux->ch->k) - 1;
@@ -280,13 +293,16 @@ static void tb_worker(void *_data, long k, int tid)
 			if (++l >= aux->k) {
 				int type = 0, c1, c2;
 				uint64_t y;
-				if (aux->ch->k < 32)
-					y = yak_hash64(x[0] < x[1]? x[0] : x[1], mask);
-				else
+				if (aux->ch->k < 32){
+					is_forward = x[0] < x[1];
+					y = yak_hash64(is_forward ? x[0] : x[1], mask);
+				}else{
 					y = yak_hash_long(x);
+				}
 				res = yak_ch_get_k(aux->ch, y);
-				if(res!= 65535){
-					counts[res]++;
+				if(res != -1){
+					counts[res&YAK_KEY_MASK]++;
+					forward[res&YAK_KEY_MASK] = !(((res&YAK_FORWARD_MASK)!=0) ^ is_forward);
 				}
 			}
 		} else l = 0, x[0] = x[1] = x[2] = x[3] = 0;
@@ -300,6 +316,7 @@ static void tb_worker(void *_data, long k, int tid)
 		}
 	}
 	t->mappings[k] = max_idx;
+	t->mappings_forward[k] = forward[max_idx];
 }
 
 static void *tb_pipeline(void *shared, int step, void *_data)
@@ -312,6 +329,7 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 		s->aux = aux;
 		if (s->n_seq) {
 			s->mappings = (uint16_t*)calloc(s->n_seq, sizeof(uint16_t));
+			s->mappings_forward = (bool*)calloc(s->n_seq, sizeof(bool));
 			// fprintf(stderr, "[M::%s] read %d sequences\n", __func__, s->n_seq);
 			return s;
 		} else free(s);
@@ -321,8 +339,9 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 		kt_for(aux->n_threads, tb_worker, s, s->n_seq);
 		for (i = 0; i < s->n_seq; ++i) {
 			mapping_res_t res;
-			res.name = strdup(s->seq[i].name);
+			// res.name = strdup(s->seq[i].name);
 			res.unit_id = s->mappings[i];
+			res.forward = s->mappings_forward[i];
 			aux->mappings->push_back(res);
 			free(s->seq[i].name); free(s->seq[i].seq); free(s->seq[i].qual); free(s->seq[i].comment);
 		}
@@ -333,7 +352,7 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 	return 0;
 }
 
-uint16_t** do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* out_fn)
+void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* out_fn)
 {
 	if(hic_fn1 == 0 || hic_fn2 == 0){
 		fprintf(stderr, "ERROR: Please give two hic files\n");
@@ -379,19 +398,43 @@ uint16_t** do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, c
 	printf("Map2 size: %ld;\n", map2->size());
 
 	uint64_t success_counter_result = 0;
-	uint16_t** connections;
-	CALLOC(connections,pl->global_counter);
+	uint32_t** connections_forward;
+	CALLOC(connections_forward,pl->global_counter);
 	for(int i = 0; i< pl->global_counter; i++){
-		CALLOC(connections[i], pl->global_counter);
-		memset(connections[i], 0, sizeof(connections[i]));
+		CALLOC(connections_forward[i], pl->global_counter);
+		memset(connections_forward[i], 0, sizeof(connections_forward[i]));
 	}
-	uint16_t coverage[pl->global_counter];
-	memset(coverage, 0, sizeof(uint16_t)*pl->global_counter);
+	uint32_t** connections_backward;
+	CALLOC(connections_backward,pl->global_counter);
+	for(int i = 0; i< pl->global_counter; i++){
+		CALLOC(connections_backward[i], pl->global_counter);
+		memset(connections_backward[i], 0, sizeof(connections_backward[i]));
+	}
+	uint32_t coverage[pl->global_counter];
+	memset(coverage, 0, sizeof(uint32_t)*pl->global_counter);
+	// uint16_t forward[pl->global_counter];
+	// memset(coverage, 0, sizeof(uint16_t)*pl->global_counter);
+	// uint16_t backward[pl->global_counter];
+	// memset(coverage, 0, sizeof(uint16_t)*pl->global_counter);
 	// printf("connections size: %ld;\n", sizeof(uint16_t)*pl->global_counter*pl->global_counter);
 	// printf("coverage size: %ld;\n",sizeof(uint16_t)*pl->global_counter);
 	std::vector<uint64_t> failed_matches;
 	const uint16_t max_count = -1;
 	for(uint64_t j = 0; j < std::min(map1->size(), map2->size()); j++){
+		// if((*map1)[j].unit_id != 65535){
+		// 	if((*map1)[j].forward){
+		// 		forward[(*map1)[j].unit_id]++;
+		// 	}else{
+		// 		backward[(*map1)[j].unit_id]++;
+		// 	}
+		// }
+		// if((*map2)[j].unit_id != 65535){
+		// 	if((*map2)[j].forward){
+		// 		forward[(*map2)[j].unit_id]++;
+		// 	}else{
+		// 		backward[(*map2)[j].unit_id]++;
+		// 	}
+		// }
 		if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535 && (*map1)[j].unit_id != (*map2)[j].unit_id){
 			// printf("%s and %s\n", (*pl->names)[(*map1)[j].unit_id],(*pl->names)[(*map2)[j].unit_id]);
 			// printf("%s and %s\n", (*map1)[j].name,(*map2)[j].name);
@@ -400,15 +443,19 @@ uint16_t** do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, c
 				failed_matches.push_back(j);
 			}
 			success_counter_result++;
-			if(max_count ^ coverage[(*map1)[j].unit_id] !=0){
+			// if(max_count ^ coverage[(*map1)[j].unit_id] !=0){
 				coverage[(*map1)[j].unit_id]++;
-			}
-			if(max_count ^ coverage[(*map2)[j].unit_id] !=0){
+			// }
+			// if(max_count ^ coverage[(*map2)[j].unit_id] !=0){
 				coverage[(*map2)[j].unit_id]++;
-			}
-			if(max_count ^ connections[(*map1)[j].unit_id][(*map2)[j].unit_id] !=0){
-				connections[(*map1)[j].unit_id][(*map2)[j].unit_id]++;
-			}
+			// }
+			// if(max_count ^ connections[(*map1)[j].unit_id][(*map2)[j].unit_id] !=0){
+				if(!((*map1)[j].forward ^ (*map2)[j].forward)){
+					connections_forward[(*map1)[j].unit_id][(*map2)[j].unit_id]++;
+				}else{
+					connections_backward[(*map1)[j].unit_id][(*map2)[j].unit_id]++;
+				}
+			// }
 		}
 	}
 
@@ -445,13 +492,20 @@ uint16_t** do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, c
 
 	if(out_fn){
 		FILE* fp = fopen (out_fn,"w");
+		
+		// for(int i = 0; i < pl->global_counter; i++){
+		// 	uint32_t is_forward = forward[i] > backward[i] ? 1 : 0;
+		// 	fprintf(fp, "%d\t%d\t%d\n", is_forward, backward[i], forward[i]);
+		// }
+		
 		for(int i = 0; i < pl->global_counter; i++){
 			for(int j = 0; j < pl->global_counter; j++){
-				if(connections[i][j] > 0){
+				if(connections_forward[i][j] > 0 || connections_backward[i][j] > 0){
 					if(i<j){
-						connections[j][i] += connections[i][j];
+						connections_forward[j][i] += connections_forward[i][j];
+						connections_backward[j][i] += connections_backward[i][j];
 					}else if(i>j){
-							fprintf(fp, "%d\t%d\t%d\n", i, j, connections[i][j]);
+							fprintf(fp, "%d\t%d\t%d\t%d\n", i, j, connections_forward[i][j], connections_backward[i][j]);
 					}
 				}
 			}
@@ -459,10 +513,10 @@ uint16_t** do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, c
 		fclose(fp);
 	}
 
-	return connections;
+	// return connections;
 }
 
-int main_count_multi_new(int argc, char *argv[])
+int main_hic_map(int argc, char *argv[])
 {
 	pldat_t *h;
 	int c;
@@ -470,7 +524,7 @@ int main_count_multi_new(int argc, char *argv[])
 	yak_copt_t opt;
 	ketopt_t o = KETOPT_INIT;
 	yak_copt_init(&opt);
-	opt.pre = 17;
+	opt.pre = YAK_COUNTER_BITS;
 	opt.n_thread = 32;
 	while ((c = ketopt(&o, argc, argv, 1, "k:p:K:t:b:H:o:", 0)) >= 0) {
 		if (c == 'k') opt.k = atoi(o.arg);
@@ -518,7 +572,7 @@ int main_count_multi_new(int argc, char *argv[])
 
 	h = yak_count_multi_new(argv[o.ind], &opt, 0);
 
-	uint16_t** connections = do_mapping(h, hic_fn1, hic_fn2, fn_out);
+	do_mapping(h, hic_fn1, hic_fn2, fn_out);
 
 
 	free(h->h);

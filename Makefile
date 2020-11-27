@@ -2,7 +2,7 @@ CFLAGS=		-g -gdwarf-3 -fpermissive -Wall -O0 #-O2
 CC=			g++
 INCLUDES=	-I.
 OBJS=		kthread.o bbf.o htab.o bseq.o misc.o sys.o \
-		    kalloc.o paf.o hic_mapping.o hic_completeness.o hic_qv.o count.o hic_switch_error.o
+		    kalloc.o paf.o hic_mapping.o  hic_completeness.o hic_qv.o count.o hic_switch_error.o
 PROG=		pstools
 LIBS=		-lm -lz -lpthread ./libminimap2.a ./libz.a
 
@@ -20,7 +20,7 @@ endif
 all:$(PROG)
 
 pstools: $(OBJS) main.o
-	$(CC) $(CFLAGS) main.cpp misc.o bbf.o bseq.o htab.o hic_mapping.o hic_completeness.o hic_switch_error.o hic_qv.o count.o kalloc.o paf.o seqio.o seqhash.o  $(UTILS_OBJS) $(LIBS) -o $@
+	$(CC) $(CFLAGS) main.cpp misc.o bbf.o bseq.o htab.o hic_mapping.o  hic_completeness.o hic_switch_error.o hic_qv.o count.o kalloc.o paf.o seqio.o seqhash.o  $(UTILS_OBJS) $(LIBS) -o $@
 clean:
 		rm -fr gmon.out *.o ext/*.o a.out $(PROG) *~  *.dSYM session*
 
