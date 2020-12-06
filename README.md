@@ -37,6 +37,7 @@ Table shows the benchmarking results of HG002 using OmniC or Arima genomics data
 ### Limitations
 1. At the current stage, the fully phased sequences don't contain centromeres.
 2. The UL nanopore data is not used.
+3. Need to be tested on trio-hifiasm graph
  
 
 
