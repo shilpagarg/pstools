@@ -471,8 +471,19 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubble_chain_graph(asg_t *g, set<
     return bubble_chain_begin_end_nodes;
 }
 
-map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_directory, int detect_cycle_flag=false, int detect_branch_flag=false) {
-
+map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_directory, uint32_t** connection_forward, uint32_t** connection_backward, int detect_cycle_flag=false, int detect_branch_flag=false) {
+    uint32_t **connections_count;
+	CALLOC(connections_count,g->n_seq);
+	for(int i = 0; i< g->n_seq; i++){
+		CALLOC(connections_count[i], g->n_seq);
+		memset(connections_count[i], 0, sizeof(*connections_count[i]));
+	}
+    for(int i = 0; i < g->n_seq; i++){
+        for(int j = 0; j < g->n_seq; j++){
+                connections_count[i][j] = connection_forward[i][j] + connection_backward[i][j];
+                connections_count[i][j] += connection_forward[j][i] + connection_backward[j][i];
+        }
+    }
     cout << "start get bubbles" << endl;
 
 	uint32_t n_vtx = g->n_seq * 2;
@@ -498,7 +509,6 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_d
 
         // cout << "start get bubble paths from " << g->seq[bubble_beginning /2].name<< " to " << g->seq[bubble_end /2].name << endl;
 
-        // bubble->paths = // TODO: do I need to initialize this even?
 
         vector<asg_arc_t*> arc_stack;
         vector<uint32_t> node_stack;  // DFS
@@ -624,6 +634,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_d
         }
     }
 
+    
     // set<uint32_t> not_accessible;
     // for(auto beg: out_only){
     //     vector<asg_arc_t*> arc_stack;
@@ -906,6 +917,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_d
             all_nodes.insert(b.second.begin(),b.second.end());
         }
     }
+    cout << "Nodes in original Graph: " << g->n_seq << endl;
     cout << "Total Nodes in Chain Graph: " << all_nodes.size() << endl;
     cout << "Branches: " << branch_counter << endl;
     
@@ -913,6 +925,11 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(asg_t *g, string output_d
     for(auto bubble: bubbles){
         delete bubble;
     }
+
+    for(int i = 0; i< g->n_seq; i++){
+		free(connections_count[i]);
+	}
+    free(connections_count);
     return bubble_chain_begin_end_nodes;
     // cout << bubble_chain_end_begin.size() << endl;
     // cout << names.size() << endl;

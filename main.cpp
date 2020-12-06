@@ -199,64 +199,64 @@ int main_intersect(int argc, char* argv[]) {
 }
 
 int main_bubble_chain(int argc, char* argv[]) {
-    printf("start main\n");
-    if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <gfa-file> <output-directory>" << std::endl;
-        return 1;
-    }
+    // printf("start main\n");
+    // if (argc != 3) {
+    //     std::cerr << "Usage: " << argv[0] << " <gfa-file> <output-directory>" << std::endl;
+    //     return 1;
+    // }
 
-    asg_t* g = gfa_read_cerr(argv[1]);
-    // print_gfa(GFAobj);
-    vector<uint32_t> sources = get_sources(g);
-	// get_bubble_chain_graph(g, sources);
-    get_bubbles(g,string(argv[2]));
-    printf("finish main\n");
+    // asg_t* g = gfa_read_cerr(argv[1]);
+    // // print_gfa(GFAobj);
+    // vector<uint32_t> sources = get_sources(g);
+	// // get_bubble_chain_graph(g, sources);
+    // get_bubbles(g,string(argv[2]));
+    // printf("finish main\n");
     return 0;
 }
 
 int main_resolve_repeat(int argc, char* argv[]) {
-    printf("start main\n");
-    asg_t* graph;
-    // paf_file_t *paf_file;
-    // struct access *paf_index;
-    if(argc!=4){
-        cout << "Usage: resolve_repeat <paf file> <gfa file> <output_directory>" << endl;
-        return -1;
-    }
-	repeat_resolver resolver;
-    char* paf_filename = argv[1];
-    char* gfa_filename = argv[2];
-    graph = gfa_read(gfa_filename);
-
-    if (graph == nullptr) {
-        cerr << "ERROR: failed to read the graph." << endl;
-  	} else {
-        cout << "GFA file read." << endl;
-    }
-
-    resolver.name_index_mapping = name2idx(graph);
-    paf_reader reader;
-    vector<vector<paf_rec_str_t>>* ordered_records = resolver.get_records_from_paf_file(reader,paf_filename);
-
-    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph = get_bubbles(graph,string(argv[3]));
-    // for(auto a : count_begin_end){
-    //     cout << graph->seq[a.first[0]>>1].name << " to " << graph->seq[a.first[1]>>1].name << ": " << a.second << endl;
+    // printf("start main\n");
+    // asg_t* graph;
+    // // paf_file_t *paf_file;
+    // // struct access *paf_index;
+    // if(argc!=4){
+    //     cout << "Usage: resolve_repeat <paf file> <gfa file> <output_directory>" << endl;
+    //     return -1;
     // }
-    map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeating_nodes = resolver.check_for_same_pos( ordered_records, graph, bubble_chain_graph);
-    resolver.checkForMatch(repeating_nodes, graph);
-    vector<vector<uint32_t>>* supported_pathes = resolver.count_support_reads_for_branches(ordered_records, bubble_chain_graph, graph);
-    cout << "finish getting supported pathes" << endl;
-    set<vector<uint32_t>>* after_covered = resolver.cover_gaps_in_long_path(supported_pathes);
-    cout << "finish trying to cover gaps in supported pathes" << endl;
-    free(supported_pathes);
-    get_seperate_haplotype(after_covered, ordered_records, bubble_chain_graph, graph);
-    free(ordered_records);
-    resolver.save_pathes_to_file(after_covered,bubble_chain_graph,graph,string(argv[3]));
-    cout << "finish saving pathes to files" << endl;
-    free(after_covered);
-    free(bubble_chain_graph);
+	// repeat_resolver resolver;
+    // char* paf_filename = argv[1];
+    // char* gfa_filename = argv[2];
+    // graph = gfa_read(gfa_filename);
 
-    printf("finish main\n");
+    // if (graph == nullptr) {
+    //     cerr << "ERROR: failed to read the graph." << endl;
+  	// } else {
+    //     cout << "GFA file read." << endl;
+    // }
+
+    // resolver.name_index_mapping = name2idx(graph);
+    // paf_reader reader;
+    // vector<vector<paf_rec_str_t>>* ordered_records = resolver.get_records_from_paf_file(reader,paf_filename);
+
+    // map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph = get_bubbles(graph,string(argv[3]));
+    // // for(auto a : count_begin_end){
+    // //     cout << graph->seq[a.first[0]>>1].name << " to " << graph->seq[a.first[1]>>1].name << ": " << a.second << endl;
+    // // }
+    // map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeating_nodes = resolver.check_for_same_pos( ordered_records, graph, bubble_chain_graph);
+    // resolver.checkForMatch(repeating_nodes, graph);
+    // vector<vector<uint32_t>>* supported_pathes = resolver.count_support_reads_for_branches(ordered_records, bubble_chain_graph, graph);
+    // cout << "finish getting supported pathes" << endl;
+    // set<vector<uint32_t>>* after_covered = resolver.cover_gaps_in_long_path(supported_pathes);
+    // cout << "finish trying to cover gaps in supported pathes" << endl;
+    // free(supported_pathes);
+    // get_seperate_haplotype(after_covered, ordered_records, bubble_chain_graph, graph);
+    // free(ordered_records);
+    // resolver.save_pathes_to_file(after_covered,bubble_chain_graph,graph,string(argv[3]));
+    // cout << "finish saving pathes to files" << endl;
+    // free(after_covered);
+    // free(bubble_chain_graph);
+
+    // printf("finish main\n");
     return 0;
 }
 
@@ -264,15 +264,36 @@ int main_resolve_repeat(int argc, char* argv[]) {
 int main_resolve_haplotypes(int argc, char* argv[]) {
 	ketopt_t o = KETOPT_INIT;
     int c,n_threads = 8;
-	while ((c = ketopt(&o, argc, argv, 1, "t:", 0)) >= 0) {
+	string enzymes_unsplit;
+	string identityFile;
+	bool check_identity = false;
+	while ((c = ketopt(&o, argc, argv, 1, "t:e:i:f:", 0)) >= 0) {
 		if (c == 't') n_threads = atoi(o.arg);
+		else if (c == 'e') enzymes_unsplit = string(o.arg);
+		else if (c == 'i') check_identity = strcmp(o.arg, "false");
+		else if (c == 'f') identityFile = string(o.arg);
 	}
 	if (argc - o.ind < 3) {
 		fprintf(stderr, "Usage: pstools resolve_haplotypes [options] <hic_mapping file> <gfa file> <output_directory>\n");
 		fprintf(stderr, "Options:\n");
 		fprintf(stderr, "  -t INT     number of threads [%d]\n", n_threads);
+		fprintf(stderr, "  -e STR     enzymes separated by comma, optional [%s]\n", enzymes_unsplit.c_str());
+		fprintf(stderr, "  -f STR     identity file path, identity check will be ran if it is enabled and no file is given [%s]\n", identityFile.c_str());
+		fprintf(stderr, "  -i BOOL    enable identity check on contigs, exclude identical ones while scaffolding [%s]\n", (check_identity ? "true":"false"));
 		return 1;
 	}
+
+	vector<string> enzymes;
+	if(enzymes_unsplit.size()>1){
+		stringstream s_stream(enzymes_unsplit);
+		while(s_stream.good()) {
+			string substr;
+			getline(s_stream, substr, ',');
+			substr.erase(remove(substr.begin(), substr.end(), '^'), substr.end());
+			enzymes.push_back(substr);
+		}
+	}
+
 
     char* connectionFile = argv[o.ind];
     char* gfa_filename = argv[o.ind+1];
@@ -285,7 +306,6 @@ int main_resolve_haplotypes(int argc, char* argv[]) {
 	    // cout << asg_arc_a(graph,0)[0].ol << endl; 
 	// }
 	// graph->seq[asg_arc_a(graph,0)[0].v>>1].len
-    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph = get_bubbles(graph,string(output_directory));
     uint32_t **connections_foward;
 	CALLOC(connections_foward,graph->n_seq);
 	for(int i = 0; i< graph->n_seq; i++){
@@ -306,7 +326,8 @@ int main_resolve_haplotypes(int argc, char* argv[]) {
         connections_foward[i][j] = count_forward;
         connections_foward[j][i] = count_forward;
     }
-    get_haplotype_path(connections_foward, connections_backward, graph, bubble_chain_graph, output_directory,n_threads);
+    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph = get_bubbles(graph,string(output_directory),connections_foward,connections_backward);
+    get_haplotype_path(connections_foward, connections_backward, graph, bubble_chain_graph, output_directory,n_threads, enzymes, identityFile, check_identity);
 
     return 0;
 }
@@ -465,7 +486,7 @@ int main_eval(int argc, char *argv[]){
 	minimap2_cmd += to_string(opt.n_thread) + string(" -o temp.sam ");
 	minimap2_cmd += string(hap1_file) + " " + string(hap2_file);
 
-	ret = system(minimap2_cmd.c_str());
+	// ret = system(minimap2_cmd.c_str());
 	
 	map<string, map<string, uint32_t>> contig_name_map;
 	map<string, map<string, uint32_t>> contig_name_len;
@@ -531,7 +552,7 @@ int main_eval(int argc, char *argv[]){
 		cout << i.first << " to " << i.second << endl;
 	}
 	cout << contig_map.size() << endl;
-	system("rm temp.sam");
+	// system("rm temp.sam");
 
 	// hic_h = yak_count_create_new(hic1_file, &opt, 0);
 	// hic_h = yak_count_create_new(hic2_file, &opt, hic_h);
@@ -571,6 +592,29 @@ int main_eval(int argc, char *argv[]){
 	
     return ret;
 }
+
+// int main_identity_check(int argc, char *argv[]){
+// 	stringstream minimap2_cmd;
+// 	int c;
+// 	yak_copt_t opt;
+// 	ketopt_t o = KETOPT_INIT;
+// 	yak_copt_init(&opt);
+// 	while ((c = ketopt(&o, argc, argv, 1, "t:", 0)) >= 0) {
+// 		if (c == 't') opt.n_thread = atoi(o.arg);
+// 	}
+// 	if (argc - o.ind < 1) {
+// 		fprintf(stderr, "Usage: pstools identity_check [options] [in.fa]\n");
+// 		fprintf(stderr, "Options:\n");
+// 		fprintf(stderr, "  -t INT     number of worker threads [%d]\n", opt.n_thread);
+// 		return 1;
+// 	}
+// 	minimap2_cmd << "minimap2 -I40G -x asm20 -Y -a --eqx -t" << opt.n_thread << " " << argv[o.ind] << " "<< argv[o.ind]; 
+// 	minimap2_cmd << " | samtools view -F 4 -u - | samtools sort - > haplotype_identity.bam";
+
+// 	int ret = system(minimap2_cmd.str().c_str());
+// 	ret = system("python ./samIdentity.py --header haplotype_identity.bam | awk '$1 != $5' > output.tbl");
+// 	return ret;
+// }
 
 int main_count(int argc, char *argv[])
 {
@@ -643,6 +687,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "  resolve_haplotypes    use hic data to resolve haplotypes\n");
 		fprintf(stderr, "  hic_mapping           map hic data to sequences in the graph\n");
 		fprintf(stderr, "  count                 count k-mers\n");
+		// fprintf(stderr, "  identity_check        generate identity table for contigs\n");
         fprintf(stderr, "  eval                  evaluate the prediction\n");
 		fprintf(stderr, "  version               print version number\n");
 		return 1;
@@ -657,6 +702,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "hic_mapping") == 0) ret = main_hic_mapping(argc-1, argv+1);
 	else if (strcmp(argv[1], "eval") == 0) ret = main_eval(argc-1, argv+1);
 	else if (strcmp(argv[1], "count") == 0) ret = main_count(argc-1, argv+1);
+	// else if (strcmp(argv[1], "identity_check") == 0) ret = main_identity_check(argc-1, argv+1);
 	else if (strcmp(argv[1], "version") == 0) {
 		printf("gfa.h: %s\nps: %s\n", PSTOOLS_VERSION, PSTOOLS_VERSION);
 		return 0;

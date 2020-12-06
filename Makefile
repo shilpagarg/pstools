@@ -39,8 +39,6 @@ seqio.o: seqio.h
 
 kalloc.o: kalloc.h
 paf.o: paf.h
-# sketch.o: sketch.cpp
-# htab.o: htab.cpp
 bbf.o: yak.h
 bseq.o: bseq.h kseq.h
 htab.o: htab.cpp kthread.h yak-priv.h yak.h khashl.h
@@ -52,6 +50,5 @@ hic_completeness.o: htab.o hic_mapping.h kthread.h ketopt.h bseq.h yak-priv.h ya
 hic_switch_error.o: htab.o hic_mapping.h kthread.h ketopt.h bseq.h yak-priv.h yak.h
 hic_qv.o: kthread.h yak-priv.h yak.h bseq.h
 count.o: kthread.h yak-priv.h yak.h kseq.h
-# modmap.o: modmap.c seqio.o seqhash.o $(UTILS_OBJS)
 
 main.o: main.cpp ketopt.h bubble_chain.h paf_intersect.h seqio.o seqhash.o resolve_repeat_haplotype.h $(UTILS_OBJS)

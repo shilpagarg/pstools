@@ -17,10 +17,24 @@
 #include "kthread.h"
 
 using namespace std;
-vector<vector<uint32_t>> best_buddy_calculation(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len);
 vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len);
-vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections);
-vector<vector<uint32_t>> best_buddy_order_orientation(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len);
+vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections, bool check_identity);
+
+size_t stringCount(const std::string& referenceString,
+                   const std::string& subString) {
+
+  const size_t step = subString.size();
+
+  size_t count(0);
+  size_t pos(0) ;
+
+  while( (pos=referenceString.find(subString, pos)) !=std::string::npos) {
+    pos +=step;
+    ++count ;
+  }
+
+  return count;
+}
 
 void draw_graph(uint32_t len, bool** seen, float** best_buddy, map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation, set<uint32_t> seen_node, uint32_t iteration, string output_dir, asg_t *graph, vector<uint32_t> beg_node, vector<uint32_t> end_node){
     string output_directory = output_dir+string("/best_buddy_graph");
@@ -496,14 +510,14 @@ map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeat_resolver::check_for_sam
     //             if(q.tn%2==1){
     //                 cout << "-" << endl;
     //                 int start = q.tl - q.te;
-    //                 cout << complement(string(graph->seq[q.tn>>1].seq)).substr(start,120) << endl;
-    //                 cout << (q.seq).substr(0,120) << endl;
-    //                 cout << translate(complement(string(graph->seq[q.tn>>1].seq)), start , q.seq).substr(0,120) << endl;
+    //                 cout << complement(string(graph->seq[q.tn>>1].seq)).substr(start,124) << endl;
+    //                 cout << (q.seq).substr(0,124) << endl;
+    //                 cout << translate(complement(string(graph->seq[q.tn>>1].seq)), start , q.seq).substr(0,124) << endl;
     //             }else{
     //                 cout << "+" << endl;
-    //                 cout << string(graph->seq[q.tn>>1].seq).substr(q.ts,120) << endl;
-    //                 cout << (q.seq).substr(0,120) << endl;
-    //                 cout << translate(graph->seq[q.tn>>1].seq, q.ts , q.seq).substr(0,120) << endl;
+    //                 cout << string(graph->seq[q.tn>>1].seq).substr(q.ts,124) << endl;
+    //                 cout << (q.seq).substr(0,124) << endl;
+    //                 cout << translate(graph->seq[q.tn>>1].seq, q.ts , q.seq).substr(0,124) << endl;
     //             }
     //             // break;
     //         }
@@ -1360,7 +1374,7 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
 
 
     for(auto bubble: bubbles_bubbles){
-        // if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2 && bubble->paths_nodes.size()>20){
+        // if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2 && bubble->paths_nodes.size()>24){
         if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2){
             set<uint32_t> nodes;
             for(auto path:bubble->paths_nodes){
@@ -3952,55 +3966,79 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
         for(auto node_1: current_nodes){
             for(auto node_2: current_nodes){
 
-                if(node_1 > node_2
-                && node_bubble_map->find(node_1) != node_bubble_map->end()
+                if(node_bubble_map->find(node_1) != node_bubble_map->end()
                 && node_bubble_map->find(node_2) != node_bubble_map->end()
                 && connections_count[node_1][node_2]!=0){
                     bubble_t* bub_1 = (*node_bubble_map)[node_1];
                     bubble_t* bub_2 = (*node_bubble_map)[node_2];
-                    set<uint32_t> pids_1 = (*node_path_id_map)[node_1];
-                    set<uint32_t> pids_2 = (*node_path_id_map)[node_2];
-                    // vector<bubble_t*> to_insert_bub;
-                    // to_insert_bub.push_back(bub_1);
-                    // to_insert_bub.push_back(bub_2);
-                    if(bubble_connection.find(bub_1)==bubble_connection.end()){
-                        bubble_connection[bub_1] = map<bubble_t*, map<uint32_t, map<uint32_t,uint32_t>>>();
-                    }
-                    if(bubble_connection[bub_1].find(bub_2)==bubble_connection[bub_1].end()){
-                        bubble_connection[bub_1][bub_2] = map<uint32_t, map<uint32_t,uint32_t>>();
-                    }
-                    for(auto pid_1: pids_1){
-                        for(auto pid_2:pids_2){
-                            if(bubble_connection[bub_1][bub_2].find(pid_1)==bubble_connection[bub_1][bub_2].end()){
-                                bubble_connection[bub_1][bub_2][pid_1] = map<uint32_t,uint32_t>();
-                            }
-                            if(bubble_connection[bub_1][bub_2][pid_1].find(pid_2)==bubble_connection[bub_1][bub_2][pid_1].end()){
-                                bubble_connection[bub_1][bub_2][pid_1][pid_2] = 0;
-                            }
-                            bubble_connection[bub_1][bub_2][pid_1][pid_2] += connections_count[node_1][node_2];
+                    if(bub_1!=bub_2){
+                        set<uint32_t> pids_1 = (*node_path_id_map)[node_1];
+                        set<uint32_t> pids_2 = (*node_path_id_map)[node_2];
+                        // vector<bubble_t*> to_insert_bub;
+                        // to_insert_bub.push_back(bub_1);
+                        // to_insert_bub.push_back(bub_2);
+                        if(bubble_connection.find(bub_1)==bubble_connection.end()){
+                            bubble_connection[bub_1] = map<bubble_t*, map<uint32_t, map<uint32_t,uint32_t>>>();
                         }
-                    }
+                        if(bubble_connection[bub_1].find(bub_2)==bubble_connection[bub_1].end()){
+                            bubble_connection[bub_1][bub_2] = map<uint32_t, map<uint32_t,uint32_t>>();
+                        }
+                        for(auto pid_1: pids_1){
+                            for(auto pid_2:pids_2){
+                                if(bubble_connection[bub_1][bub_2].find(pid_1)==bubble_connection[bub_1][bub_2].end()){
+                                    bubble_connection[bub_1][bub_2][pid_1] = map<uint32_t,uint32_t>();
+                                }
+                                if(bubble_connection[bub_1][bub_2][pid_1].find(pid_2)==bubble_connection[bub_1][bub_2][pid_1].end()){
+                                    bubble_connection[bub_1][bub_2][pid_1][pid_2] = 0;
+                                }
+                                bubble_connection[bub_1][bub_2][pid_1][pid_2] += connections_count[node_1][node_2];
+                            }
+                        }
 
-                    if(bubble_connection.find(bub_2)==bubble_connection.end()){
-                        bubble_connection[bub_2] = map<bubble_t*, map<uint32_t, map<uint32_t,uint32_t>>>();
-                    }
-                    if(bubble_connection[bub_2].find(bub_1)==bubble_connection[bub_2].end()){
-                        bubble_connection[bub_2][bub_1] = map<uint32_t, map<uint32_t,uint32_t>>();
-                    }
-                    for(auto pid_1: pids_1){
-                        for(auto pid_2:pids_2){
-                            if(bubble_connection[bub_2][bub_1].find(pid_2)==bubble_connection[bub_2][bub_1].end()){
-                                bubble_connection[bub_2][bub_1][pid_2] = map<uint32_t,uint32_t>();
+                        if(bubble_connection.find(bub_2)==bubble_connection.end()){
+                            bubble_connection[bub_2] = map<bubble_t*, map<uint32_t, map<uint32_t,uint32_t>>>();
+                        }
+                        if(bubble_connection[bub_2].find(bub_1)==bubble_connection[bub_2].end()){
+                            bubble_connection[bub_2][bub_1] = map<uint32_t, map<uint32_t,uint32_t>>();
+                        }
+                        for(auto pid_1: pids_1){
+                            for(auto pid_2:pids_2){
+                                if(bubble_connection[bub_2][bub_1].find(pid_2)==bubble_connection[bub_2][bub_1].end()){
+                                    bubble_connection[bub_2][bub_1][pid_2] = map<uint32_t,uint32_t>();
+                                }
+                                if(bubble_connection[bub_2][bub_1][pid_2].find(pid_1)==bubble_connection[bub_2][bub_1][pid_2].end()){
+                                    bubble_connection[bub_2][bub_1][pid_2][pid_1] = 0;
+                                }
+                                bubble_connection[bub_2][bub_1][pid_2][pid_1] += connections_count[node_1][node_2];
                             }
-                            if(bubble_connection[bub_2][bub_1][pid_2].find(pid_1)==bubble_connection[bub_2][bub_1][pid_2].end()){
-                                bubble_connection[bub_2][bub_1][pid_2][pid_1] = 0;
-                            }
-                            bubble_connection[bub_2][bub_1][pid_2][pid_1] += connections_count[node_1][node_2];
                         }
                     }
                 }
             }
         }
+        // stringstream to_print;
+        // for(auto bub_1: bubble_connection){
+        //     for(auto bub_2: bub_1.second){
+        //         for(auto pid_1: bub_2.second){
+        //             for(auto pid_2: pid_1.second){
+        //                 set<uint32_t> path_bub_1 = bub_1.first->paths_nodes[pid_1.first];
+        //                 set<uint32_t> path_bub_2 = bub_2.first->paths_nodes[pid_2.first];
+        //                 uint32_t connection_number = pid_2.second;
+        //                 for(auto n: path_bub_1){
+        //                     to_print << graph->seq[n].name << ",";
+        //                 }
+        //                 to_print << "\t";
+        //                 for(auto n: path_bub_2){
+        //                     to_print << graph->seq[n].name << ",";
+        //                 }
+        //                 to_print << "\t" << connection_number << endl;
+        //             }
+        //         }
+        //     }
+        // }
+
+        // cout << to_print.str() << endl;
+
         cout << "Get connections between bubble" << endl;
         bubble_t* max_bubble_1;
         bubble_t* max_bubble_2;
@@ -4011,7 +4049,7 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
             for(auto bub_2: bub_1.second){
                 for(auto path_1: bub_2.second){
                     for(auto path_2: path_1.second){
-                        if(max_count < path_2.second){
+                        if(max_count < path_2.second && bub_1.first != bub_2.first){
                             max_count = path_2.second;
                             max_bubble_1 = bub_1.first;
                             max_bubble_2 = bub_2.first;
@@ -4026,15 +4064,17 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
             bubble_path_id_1[max_bubble_1] = max_path_id_1;
             bubble_path_id_1[max_bubble_2] = max_path_id_2;
             if(max_bubble_1->paths_nodes.size()==2){
-                bubble_path_id_2[max_bubble_1] = 1;
                 if(max_path_id_1==1){
                     bubble_path_id_2[max_bubble_1] = 0;
+                }else{
+                    bubble_path_id_2[max_bubble_1] = 1;
                 }
             }
             if(max_bubble_2->paths_nodes.size()==2){
-                bubble_path_id_2[max_bubble_2] = 1;
                 if(max_path_id_2==1){
                     bubble_path_id_2[max_bubble_2] = 0;
+                }else{
+                    bubble_path_id_2[max_bubble_2] = 1;
                 }
             }
             while(bubble_connection.size()!= bubble_path_id_1.size()){
@@ -4071,9 +4111,10 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
                 if(max_count!= 0){
                     bubble_path_id_1[max_bubble] = max_path_id;
                     if(max_bubble->paths_nodes.size()==2){
-                        bubble_path_id_2[max_bubble] = 1;
                         if(max_path_id==1){
                             bubble_path_id_2[max_bubble] = 0;
+                        }else{
+                            bubble_path_id_2[max_bubble] = 1;
                         }
                     }
                 }else{
@@ -4082,19 +4123,21 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
             }
             cout << "Get connected path in hap1" << endl;
             max_count = 0;
-            for(auto bub_1: bubble_connection){
-                for(auto bub_2: bub_1.second){
-                    for(auto path_1: bub_2.second){
-                        for(auto path_2: path_1.second){
-                            if(max_count < path_2.second){
-                                if( (bubble_path_id_1.find(bub_1.first)==bubble_path_id_1.end() || bubble_path_id_1[bub_1.first] != path_1.first)
-                                && (bubble_path_id_1.find(bub_2.first)==bubble_path_id_1.end() || bubble_path_id_1[bub_2.first] != path_2.first)
-                                ){
-                                    max_count = path_2.second;
-                                    max_bubble_1 = bub_1.first;
-                                    max_bubble_2 = bub_2.first;
-                                    max_path_id_1 = path_1.first;
-                                    max_path_id_2 = path_2.first;
+            if(bubble_path_id_2.size() == 0){
+                for(auto bub_1: bubble_connection){
+                    for(auto bub_2: bub_1.second){
+                        for(auto path_1: bub_2.second){
+                            for(auto path_2: path_1.second){
+                                if(max_count < path_2.second){
+                                    if( (bubble_path_id_1.find(bub_1.first)==bubble_path_id_1.end() || bubble_path_id_1[bub_1.first] != path_1.first)
+                                    && (bubble_path_id_1.find(bub_2.first)==bubble_path_id_1.end() || bubble_path_id_1[bub_2.first] != path_2.first)
+                                    ){
+                                        max_count = path_2.second;
+                                        max_bubble_1 = bub_1.first;
+                                        max_bubble_2 = bub_2.first;
+                                        max_path_id_1 = path_1.first;
+                                        max_path_id_2 = path_2.first;
+                                    }
                                 }
                             }
                         }
@@ -4175,7 +4218,7 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
         }
         for(auto bubble: cur_bubbles){
             if(bubble_path_id_2.find(bubble)== bubble_path_id_2.end()){
-                bubble_path_id_2[bubble] = 0;
+                bubble_path_id_2[bubble] = 1;
             }
         }
 
@@ -4186,13 +4229,13 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
             set<uint32_t> cur_path = bubble.first->paths_nodes[bubble.second];
             set<uint32_t> current_path;
             for(auto node: cur_path){
-                current_path.insert(node>>1);
-                path_1_included.insert(node>>1);
+                current_path.insert(node);
+                path_1_included.insert(node);
             }
             for(auto path: bubble.first->paths_nodes){
                 for(auto node: path){
-                    if(current_path.find(node>>1)== current_path.end()){
-                        path_1_not_included.insert(node>>1);
+                    if(current_path.find(node)== current_path.end()){
+                        path_1_not_included.insert(node);
                     }
                 }
             }
@@ -4202,13 +4245,13 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
             set<uint32_t> cur_path = bubble.first->paths_nodes[bubble.second];
             set<uint32_t> current_path;
             for(auto node: cur_path){
-                current_path.insert(node>>1);
-                path_2_included.insert(node>>1);
+                current_path.insert(node);
+                path_2_included.insert(node);
             }
             for(auto path: bubble.first->paths_nodes){
                 for(auto node: path){
-                    if(current_path.find(node>>1)== current_path.end()){
-                        path_2_not_included.insert(node>>1);
+                    if(current_path.find(node)== current_path.end()){
+                        path_2_not_included.insert(node);
                     }
                 }
             }
@@ -4256,7 +4299,7 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
 
 
 
-void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connection_count_backward, asg_t *graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, char* output_directory, int n_threads){
+void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connection_count_backward, asg_t *graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, char* output_directory, int n_threads, vector<string> enzymes, string identityFile, bool check_identity){
     set<uint32_t> existing_nodes;
    
     cout << "Start get haplotypes" << endl;
@@ -4272,6 +4315,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
         for(int j = 0; j < graph->n_seq; j++){
             // if(connection_count_forward[i][j]+connection_count_backward[i][j]>0){
                 connections_count[i][j] = connection_count_forward[i][j] + connection_count_backward[i][j];
+                connections_count[i][j] += connection_count_forward[j][i] + connection_count_backward[j][i];
                 // if(connections_count_forward.find(i)==connections_count_forward.end()){
                 //     connections_count_forward[i] = map<uint32_t,uint32_t>();
                 // }
@@ -4388,7 +4432,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
 
 
     for(auto bubble: bubbles){
-        // if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2 && bubble->paths_nodes.size()>20){
+        // if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2 && bubble->paths_nodes.size()>24){
         if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2){
             set<uint32_t> nodes;
             for(auto path:bubble->paths_nodes){
@@ -4416,15 +4460,30 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     // set<uint32_t> nodes;
     // set<uint32_t> double_nodes;
     for(auto bubble: pure_bubbles){
+        set<set<uint32_t>> set_of_pathes;
+        for(auto path: bubble->paths_nodes){
+            set<uint32_t> buf_path;
+            for(auto n:path){
+                if((n>>1)!=(bubble->begNode>>1) && (n>>1)!=(bubble->endNode>>1)){
+                    buf_path.insert(n>>1);
+                } 
+            }
+            set_of_pathes.insert(buf_path);
+        }
+        vector<set<uint32_t>> vec_of_pathes;
+        for(auto p:set_of_pathes){
+            vec_of_pathes.push_back(p);
+        }
+        bubble->paths_nodes = vec_of_pathes;
+    }
+    for(auto bubble: pure_bubbles){
         for(int i = 0; i < bubble->paths_nodes.size(); i++){
             for(auto node: bubble->paths_nodes[i]){
-                if(node!=bubble->endNode && node!=bubble->begNode){
-                    node_bubble_map[node>>1] = bubble;
-                    if(node_path_id_map.find(node>>1)==node_path_id_map.end()){
-                        node_path_id_map[node>>1] = set<uint32_t>();
-                    }
-                    node_path_id_map[node>>1].insert(i);
+                node_bubble_map[node] = bubble;
+                if(node_path_id_map.find(node)==node_path_id_map.end()){
+                    node_path_id_map[node] = set<uint32_t>();
                 }
+                node_path_id_map[node].insert(i);
             }
         }
     }
@@ -4492,11 +4551,11 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
                     step.beg_node->push_back(beg.first);
                     step.end_node->push_back(end.first);
                     step.current_nodes->push_back(end.second);
-                    cout << graph->seq[beg.first>>1].name << (beg.first%2==0?"+":"-") <<" to " << graph->seq[end.first>>1].name << (end.first%2==0?"+":"-") << ": " << endl;
-                    for(auto node: end.second){
-                        cout << graph->seq[node].name << ", ";
-                    }
-                    cout << endl;
+                    // cout << graph->seq[beg.first>>1].name << (beg.first%2==0?"+":"-") <<" to " << graph->seq[end.first>>1].name << (end.first%2==0?"+":"-") << ": " << endl;
+                    // for(auto node: end.second){
+                    //     cout << graph->seq[node].name << ", ";
+                    // }
+                    // cout << endl;
                     counting_contigs++;
                     seen_beg_end.insert(make_pair(beg.first,end.first));
                     seen_beg_end.insert(make_pair(end.first^1, beg.first^1));
@@ -4541,7 +4600,19 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     step.haplo_pathes = (vector<uint32_t>*)calloc(step.beg_node->size()*2,sizeof(vector<uint32_t>));
     step.node_positions = (map<uint32_t,uint32_t>*)calloc(step.beg_node->size()*2,sizeof(map<uint32_t,uint32_t>));
 
+
     kt_for(n_threads, worker_for_single_step , &step, step.beg_node->size());
+    // for(auto bubble: pure_bubbles){
+    //     cout << "Bubble: " << graph->seq[bubble->begNode>>1].name << " to " << graph->seq[bubble->endNode>>1].name << endl;
+    //     for(auto path: bubble->paths_nodes){
+    //         for(auto n:path){
+    //             cout << graph->seq[n].name << ",";
+    //         }
+    //         cout << endl;
+    //     }
+    //     cout << endl;
+    // }
+
 
     ofstream outFile;
     ofstream outFileLen;
@@ -4567,6 +4638,30 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     }
     outFileBroken.close();
 
+
+    ofstream outFileContigHapNodes;
+    outFileContigHapNodes.open(string(output_directory)+string("/contig_hap_nodes.txt"), ofstream::out | ofstream::trunc);
+    for(int i = 0; i < step.beg_node->size()*2; i++){
+	// for(auto ns: hap2_nodes){
+        for(auto n: step.haplo_pathes[i]){
+            outFileContigHapNodes <<graph->seq[n>>1].name << ",";
+        }
+        outFileContigHapNodes << endl;
+    }
+    outFileContigHapNodes.close();
+
+
+    ofstream outFileContigNodes;
+    outFileContigNodes.open(string(output_directory)+string("/contig_nodes.txt"), ofstream::out | ofstream::trunc);
+    for(int i = 0; i < step.beg_node->size(); i++){
+	// for(auto ns: hap2_nodes){
+        for(auto n: (*step.current_nodes)[i]){
+            outFileContigNodes <<graph->seq[n].name << ",";
+        }
+        outFileContigNodes << endl;
+    }
+    outFileContigNodes.close();
+
     count_step cstep;
     cstep.len = step.beg_node->size()*2;
     cstep.counting_result = connect_num;
@@ -4577,30 +4672,132 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     cstep.node_positions = step.node_positions;
     
     kt_for(n_threads, counter_worker_single_step , &cstep, step.beg_node->size()*2);
-    for(int i = 0; i < len*4; i++){
-        double ratio_i = 1;
-        if(step.haplo_sequences[i>>1].size()<10000000){
-            ratio_i = 10000000.0/((double)step.haplo_sequences[i>>1].size());
-        }
-        for(int j = 0; j < len*4; j++){
-            double ratio_j = 1;
-            if(step.haplo_sequences[j>>1].size()<10000000){
-                ratio_j = 10000000.0/((double)step.haplo_sequences[i>>1].size());
+    if(enzymes.size()==0){
+        for(int i = 0; i < len*4; i++){
+            double ratio_i = 1;
+            if(step.haplo_sequences[i>>1].size()<10000000){
+                ratio_i = 10000000.0/((double)step.haplo_sequences[i>>1].size());
             }
+            for(int j = 0; j < len*4; j++){
+                double ratio_j = 1;
+                if(step.haplo_sequences[j>>1].size()<10000000){
+                    ratio_j = 10000000.0/((double)step.haplo_sequences[i>>1].size());
+                }
 
-            connect_num[i][j] = (uint32_t)(connect_num[i][j] * ratio_i * ratio_j);
+                connect_num[i][j] = (uint32_t)(connect_num[i][j] * ratio_i * ratio_j);
+            }
+        }
+    }else{
+        vector<uint32_t> front_re;
+        vector<uint32_t> back_re;
+        for(int i = 0; i < len*4; i++){
+            uint32_t cur_front = 0;
+            uint32_t cur_back = 0;
+            string whole_str = step.haplo_sequences[i>>1];
+            string ff = whole_str.substr(0,min(10000000,(int)whole_str.size()));
+            string fb = whole_str.substr(max(((int)whole_str.size())-10000000,0), whole_str.size());
+            for(auto e: enzymes){
+                cur_front += stringCount(ff,e);
+                cur_back += stringCount(fb,e);
+            }
+            front_re.push_back(cur_front);
+            back_re.push_back(cur_back);
+        }
+
+        ofstream outFileRECount;
+        outFileRECount.open(string(output_directory)+string("/re_count.txt"), ofstream::out | ofstream::trunc);
+        for(int i = 0; i < len*2; i++){
+            outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Front" << "\t" << front_re[i<<1] << endl;
+            outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Back" << "\t" << back_re[i<<1] << endl;
+        }
+        outFileRECount.close();
+
+        // for(int i = 0; i < len*4; i++){
+        //     uint32_t cur_front_i = front_re[i];
+        //     uint32_t cur_back_i = back_re[i];
+        //     for(int j = 0; j < len*4; j++){
+        //         uint32_t cur_front_j = front_re[j];
+        //         uint32_t cur_back_j = back_re[j];
+        //         if(i%2 == 0 && j%2 == 0){
+        //             connect_num[i][j] /= (((double)(cur_back_i))/10000);
+        //             connect_num[i][j] /= (((double)(cur_front_j))/10000);
+        //         }else if(i%2 == 1 && j%2 == 0){
+        //             connect_num[i][j] /= (((double)(cur_front_i))/10000);
+        //             connect_num[i][j] /= (((double)(cur_front_j))/10000);
+        //         }else if(i%2 == 0 && j%2 == 1){
+        //             connect_num[i][j] /= (((double)(cur_back_i))/10000);
+        //             connect_num[i][j] /= (((double)(cur_back_j))/10000);
+        //         }else if(i%2 == 1 && j%2 == 1){
+        //             connect_num[i][j] /= (((double)(cur_front_i))/10000);
+        //             connect_num[i][j] /= (((double)(cur_back_j))/10000);
+        //         }
+        //     }
+        // }
+
+        // for(int i = 0; i < len*4; i++){
+        //     uint32_t cur_front_i = front_re[i];
+        //     uint32_t cur_back_i = back_re[i];
+        //     for(int j = 0; j < len*4; j++){
+        //         uint32_t cur_front_j = front_re[j];
+        //         uint32_t cur_back_j = back_re[j];
+        //         if(i%2 == 0 && j%2 == 0){
+        //             connect_num[i][j] /= (((double)(cur_back_i + cur_front_j))/10000);
+        //         }else if(i%2 == 1 && j%2 == 0){
+        //             connect_num[i][j] /= (((double)(cur_front_i + cur_front_j))/10000);
+        //         }else if(i%2 == 0 && j%2 == 1){
+        //             connect_num[i][j] /= (((double)(cur_back_i + cur_back_j))/10000);
+        //         }else if(i%2 == 1 && j%2 == 1){
+        //             connect_num[i][j] /= (((double)(cur_front_i + cur_back_j))/10000);
+        //         }
+        //     }
+        // }
+        
+        for(int i = 0; i < len*4; i++){
+            uint32_t cur_front_i = front_re[i];
+            uint32_t cur_back_i = back_re[i];
+            for(int j = 0; j < len*4; j++){
+                uint32_t cur_front_j = front_re[j];
+                uint32_t cur_back_j = back_re[j];
+                double ratio = 0;
+                if(i%2 == 0 && j%2 == 0){
+                    ratio = 300000/((double)(cur_back_i + cur_front_j));
+                }else if(i%2 == 1 && j%2 == 0){
+                    ratio = 300000/((double)(cur_front_i + cur_front_j));
+                }else if(i%2 == 0 && j%2 == 1){
+                    ratio = 300000/((double)(cur_back_i + cur_back_j));
+                }else if(i%2 == 1 && j%2 == 1){
+                    ratio = 300000/((double)(cur_front_i + cur_back_j));
+                }
+                // ratio = 1;
+                connect_num[i][j] *= ratio;
+            }
         }
     }
+    map<string, string> contig_hap1s;
+    map<string, string> contig_hap2s;
+    map<string, uint32_t> contig_lengths;
+    map<string, uint32_t> contig_id;
+    map<uint32_t, string> id_contig;
 
+    for(uint32_t i = 0; i < step.beg_node->size(); i++){
+        string contig_name = string(graph->seq[(*step.beg_node)[i]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i]>>1].name));
+        contig_hap1s[contig_name] = step.haplo_sequences[i<<1];
+        contig_hap2s[contig_name] = step.haplo_sequences[(i<<1)+1];
+        contig_lengths[contig_name] = max(contig_hap1s[contig_name].size(), contig_hap2s[contig_name].size());
+        contig_id[contig_name] = i;
+        id_contig[i] = contig_name;
+    }
+
+    
     ofstream outFileScaffold;
     outFileScaffold.open(string(output_directory)+string("/scaffold_connection.txt"), ofstream::out | ofstream::trunc);
     for(int i = 0; i < len*4; i++){
         for(int j = 0; j < len*4; j++){
-            // if((i&2)==0){
-            //     connect_num[i][j] += connect_num[i^2][j^2];
-            // }else{
-            //     connect_num[i][j] = 0;
-            // }
+            if((i&2)==0){
+                connect_num[i][j] += connect_num[i^2][j^2];
+            }else{
+                connect_num[i][j] = 0;
+            }
             if(connect_num[i][j]>0){
                 outFileScaffold << string(graph->seq[(*step.beg_node)[i>>2]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>2]>>1].name)) << "_haplo_" << (i>>1)%2+1 << (i%2==0?"+":"-") << "\t" << string(graph->seq[(*step.beg_node)[j>>2]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[j>>2]>>1].name)) << "_haplo_" << (j>>1)%2+1 << (j%2==0?"+":"-") << "\t" << connect_num[i][j] << endl;
             }
@@ -4632,3540 +4829,614 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     }
     outFileScaffoldSimple.close();
 
+    uint32_t long_threshold = 5000000;
+    len = contig_lengths.size();
+	// float **best_buddy;
+	// bool **seen;
+	// best_buddy = (float**)calloc(len*4,sizeof(float*));
+	// seen = (bool**)calloc(len*4,sizeof(bool*));
+
+    
+    set<string> exclude_contigs;
+
+    if(check_identity){
+        if(identityFile.size()==0){
+            stringstream minimap2_cmd;
+            minimap2_cmd << "minimap2 -I40G -x asm20 -Y -a --eqx -t" << n_threads << " " << string(output_directory)+string("/pred_haplotypes.fa") << " "<< string(output_directory)+string("/pred_haplotypes.fa"); 
+            minimap2_cmd << " | samtools view -F 4 -u - | samtools sort - > haplotype_identity.bam";
+            system(minimap2_cmd.str().c_str());
+            stringstream py_cmd;
+            py_cmd << "python ./samIdentity.py --header haplotype_identity.bam | awk '$1 != $5' > " << string(output_directory) << "/output.tbl";
+            system(py_cmd.str().c_str());
+            identityFile = string(output_directory) + string("/output.tbl");
+        }
+        ifstream infile(identityFile.c_str());
+        string fileLine;
+        string contigName;
+        getline(infile,fileLine);
+        while (getline(infile, fileLine))
+        {
+            istringstream iss(fileLine);
+            iss >> contigName;
+            contigName = contigName.substr(0,contigName.size()-5);
+            exclude_contigs.insert(contigName);
+            iss >> contigName >> contigName >> contigName >> contigName;
+            contigName = contigName.substr(0,contigName.size()-5);
+            exclude_contigs.insert(contigName);
+        }
+
+        for(auto i: exclude_contigs){
+            cout << i << endl;
+        }
+    }
+	for(int i = 0; i < len*4; ++i){
+        best_buddy[i] = (float*)calloc(len*4, sizeof(float));
+        seen[i] = (bool*)calloc(len*4, sizeof(bool));
+	}
 	
-	for(int i = 0; i < len*4; i++){
-		for(int j = 0; j < len*4; j++){
-            uint32_t max_count = 0;
-            for(int i_s = 0; i_s<4; i_s++){
-                for(int j_s = 0; j_s<4; j_s++){
-                    max_count = max(max_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
+    uint32_t long_count = 0;
+    uint32_t all_count = 0;
+    for(auto n: contig_lengths){
+        if(exclude_contigs.find(n.first)==exclude_contigs.end()){
+            if(n.second > long_threshold){
+                long_count++;
+            }
+            if(n.second > 1500000){
+                all_count++;
+            }
+        }
+    }
+    cout << "Long ones: " << long_count << endl;
+    cout << "All above 1.5: " << all_count << endl;
+
+    uint32_t low_connect = 0;
+    vector<uint32_t> all_connect;
+    for(int i = 0; i < len; i++){
+        for(int j = 0; j < len; j++){
+            if( exclude_contigs.find(id_contig[i]) == exclude_contigs.end() && exclude_contigs.find(id_contig[j]) == exclude_contigs.end()
+                && connect_num[i][j] !=0 && i != j && contig_lengths[id_contig[i]] >= long_threshold && contig_lengths[id_contig[j]] >= long_threshold 
+            ){
+                uint32_t max_count = 0;
+                for(int i_s = 0; i_s<4; i_s++){
+                    for(int j_s = 0; j_s<4; j_s++){
+                        max_count = max(max_count, connect_num[(i<<2)+i_s][(j<<2)+j_s]);
+                    }
+                }
+                all_connect.push_back(max_count);
+            }
+        }
+    }
+    sort(all_connect.begin(), all_connect.end());
+    low_connect = all_connect[all_connect.size()* 0.9];
+
+	set<uint32_t> seen_node;
+	vector<vector<uint32_t>> graph_connection;
+    map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation;
+    uint32_t first_max_iter = 3;
+    while(first_max_iter > 0){
+        first_max_iter--;
+
+        uint32_t total_greaters = 0;
+        for(int i = 0; i < len*4; i++){
+            if(i%4==0 && contig_lengths[id_contig[i>>2]] >= long_threshold && exclude_contigs.find(id_contig[i>>2]) == exclude_contigs.end() ){
+                total_greaters++;
+            }
+            for(int j = 0; j < len*4; j++){
+                uint32_t max_count = 0;
+                for(int i_s = 0; i_s<4; i_s++){
+                    for(int j_s = 0; j_s<4; j_s++){
+                        max_count = max(max_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
+                    }
+                }
+                if( exclude_contigs.find(id_contig[i>>2]) != exclude_contigs.end() || exclude_contigs.find(id_contig[j>>2]) != exclude_contigs.end()
+                || connect_num[i][j] ==0 || i == j || contig_lengths[id_contig[i>>2]] < long_threshold || contig_lengths[id_contig[j>>2]] < long_threshold 
+                || (seen_node.find(i>>2) != seen_node.end() && seen_node.find(j>>2) != seen_node.end()) ){
+                    seen[i][j] = true;
+                }else{
+                    seen[i][j] = false;
+                }
+                // if(connect_num[i][j] ==0 || i == j || max_count > 10000){
+                // 	seen[i][j] = true;
+                // }
+            }
+        }
+        cout << "Left nodes to insert: " << total_greaters - seen_node.size() << endl;
+        // map<pair<uint32_t,uint32_t>, pair<uint32_t, uint32_t>> connection_relation;
+        bool next = true;
+        uint32_t safe_break = 0;
+        uint32_t iteration = 0;
+        // while(next){
+        
+        while(seen_node.size()<len && safe_break <= 5 && next){
+            next = false;
+            safe_break++;
+            // for(auto n: seen_node){
+            // 	printf("%d, ",n);
+            // }
+            // printf("\n");
+            vector<pair<float, pair<uint32_t,uint32_t>>> result;
+            // next = false;
+            update_best_buddy_haplo(seen, best_buddy,connect_num,len);
+            cout << "Update best buddy score." << endl;
+            for(int i = 0; i < len*4; i++){
+                for(int j = 0; j < len*4; j++){
+                    if(best_buddy[i][j] > 0.999){
+                        if(connect_num[i][j]>low_connect){
+                            next = true;
+                        }
+                        result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
+                    }
                 }
             }
-			if(connect_num[i][j] ==0 || i == j || step.haplo_sequences[(i>>2)<<1].size() < 5000000 || step.haplo_sequences[(j>>2)<<1].size() < 5000000
-            || step.haplo_sequences[((i>>2)<<1)+1].size() < 5000000 || step.haplo_sequences[((j>>2)<<1)+1].size() < 5000000 || max_count > 10000){
-				seen[i][j] = true;
-			}
-            // if(connect_num[i][j] ==0 || i == j || max_count > 10000){
-			// 	seen[i][j] = true;
-			// }
-		}
-	}
-	vector<vector<uint32_t>> graph_connection;
-    // map<pair<uint32_t,uint32_t>, pair<uint32_t, uint32_t>> connection_relation;
-    map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation;
-	bool next = true;
-	set<uint32_t> seen_node;
-    uint32_t safe_break = 0;
-    uint32_t iteration = 0;
-	// while(next){
-	while(seen_node.size()<len && safe_break <= 5 && next){
-        next = false;
-        safe_break++;
-		// for(auto n: seen_node){
-		// 	printf("%d, ",n);
-		// }
-		// printf("\n");
-		vector<pair<float, pair<uint32_t,uint32_t>>> result;
-		// next = false;
-		update_best_buddy_haplo(seen, best_buddy,connect_num,len);
-        cout << "Update best buddy score." << endl;
-		for(int i = 0; i < len*4; i++){
-			for(int j = 0; j < len*4; j++){
-				if(best_buddy[i][j] > 0.999){
-                    if(connect_num[i][j]>300){
-                        next = true;
-                    }
-					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-				}
-			}
-		}
-		if(!next){
-            break;
-        }
-		sort(result.begin(), result.end(),
-		[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-			return r1.first > r2.first;
-		});
-        cout << "Get potential connections " << result.size() << "." << endl;
+            if(!next){
+                break;
+            }
+            sort(result.begin(), result.end(),
+            [](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
+                return r1.first > r2.first;
+            });
+            cout << "Get potential connections " << result.size() << "." << endl;
 
-        for(auto res:result){
-            if(!seen[res.second.first][res.second.second]){
-                safe_break = 0;
-                bool erase_connection = false;
-                bool found = false;
-                uint16_t idx_i = 65535;
-                uint16_t idx_j = 65535;
-                uint16_t idx_i_sub = 65535;
-                uint16_t idx_j_sub = 65535;
-                for(int i = 0; i < graph_connection.size(); i++){
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first>>2))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.first>>2)){
-                                idx_i_sub = idx;
-                            }
-                        }
-                        idx_i = i;
-                        found = true;
+            for(auto res:result){
+                if(!seen[res.second.first][res.second.second]){
+                    bool erase_connection = false;
+                    if(connect_num[res.second.first][res.second.second]<low_connect){
+                        erase_connection = true;
                     }
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second>>2))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.second>>2)){
-                                idx_j_sub = idx;
+                    safe_break = 0;
+                    bool found = false;
+                    uint16_t idx_i = 65535;
+                    uint16_t idx_j = 65535;
+                    uint16_t idx_i_sub = 65535;
+                    uint16_t idx_j_sub = 65535;
+                    for(int i = 0; i < graph_connection.size(); i++){
+                        if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first>>2))!=graph_connection[i].end()){
+                            for(int idx=0; idx<graph_connection[i].size(); idx++){
+                                if(graph_connection[i][idx]==(res.second.first>>2)){
+                                    idx_i_sub = idx;
+                                }
                             }
+                            idx_i = i;
+                            found = true;
                         }
-                        idx_j = i;
-                        found = true;
+                        if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second>>2))!=graph_connection[i].end()){
+                            for(int idx=0; idx<graph_connection[i].size(); idx++){
+                                if(graph_connection[i][idx]==(res.second.second>>2)){
+                                    idx_j_sub = idx;
+                                }
+                            }
+                            idx_j = i;
+                            found = true;
+                        }
                     }
-                }
-                if(found && idx_i == idx_j){
-                    erase_connection = true;
-                }else if(!found){
-                    if(connect_num[res.second.first][res.second.second] > 300){
+
+                    if(erase_connection){
+
+                    }else if(found && idx_i == idx_j){
+                        erase_connection = true;
+                    }else if(!found){
                         vector<uint32_t> buf;
                         buf.push_back(res.second.first>>2);
                         buf.push_back(res.second.second>>2);
                         graph_connection.push_back(buf);
-                    }else{
-                        erase_connection = true;
-                    }
-                }else if(idx_j!=65535 && idx_i!=65535){
+                    }else if(idx_j!=65535 && idx_i!=65535){
 
-                    assert(idx_j_sub == 0);
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
+                        // assert(idx_j_sub == 0);
+                        // assert(idx_i_sub == graph_connection[idx_i].size()-1);
 
 
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
-                    adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
-                    uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
+                        uint32_t adj_connection = 65335;
+                        adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
+                        adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
+                        uint32_t average_connection = 0;
+                        for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
+                            pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
+                            average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
+                        }
+                        for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
+                            pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
+                            average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
+                        }
+                        average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
+                        if(average_connection*0.3>connect_num[res.second.first][res.second.second] ){
+                        // if(average_connection*0.3>connect_num[res.second.first][res.second.second] || adj_connection < 230|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                            erase_connection = true;
+                        }else{
+                            graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
+                            graph_connection.erase(graph_connection.begin()+idx_j);
+                        }
+                    }else if(idx_j!=65535){
+                        // assert(idx_j_sub == 0);
+                        uint32_t adj_connection = 65335;
+                        adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
+                        uint32_t average_connection = 0;
+                        for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
+                            pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
+                            average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
+                        }
+                        average_connection/=graph_connection[idx_j].size()-1;
+                        // if(average_connection*0.3>connect_num[res.second.first][res.second.second] || adj_connection < 230|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                        if(average_connection*0.3>connect_num[res.second.first][res.second.second]){
+                            erase_connection = true;
+                        }else{
+                            graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first>>2));
+                        }
+                    }else if(idx_i!=65535){
+                        // assert(idx_i_sub == graph_connection[idx_i].size()-1);
+                        uint32_t adj_connection = 65335;
+                        adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
+                        uint32_t average_connection = 0;
+                        for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
+                            pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
+                            average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
+                        }
+                        average_connection/=graph_connection[idx_i].size()-1;
+                        // if(average_connection*0.3>connect_num[res.second.first][res.second.second] || adj_connection < 230|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                        if(average_connection*0.3>connect_num[res.second.first][res.second.second]){
+                            erase_connection = true;
+                        }else{
+                            graph_connection[idx_i].push_back((res.second.second>>2));
+                        }
                     }
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 300){
-                        erase_connection = true;
+                    
+                    
+                    if(!erase_connection){
+                        for(int q = 0; q < len*4; q++){
+                            for(int i_s = 0; i_s < 4; i_s++){
+                                for(int j_s = 0; j_s < 4; j_s++){
+                                    seen[((res.second.first>>2)<<2)+i_s][q] = true;
+                                    seen[q][((res.second.second>>2)<<2)+j_s] = true;
+                                    seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
+                                }
+                            }
+                        }
+                        
+                        if(connection_relation.find(res.second.first>>2) == connection_relation.end()){
+                            connection_relation[res.second.first>>2] = map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>();
+                        }
+                        
+                        connection_relation[res.second.first>>2][res.second.second>>2] = res;
+                        seen_node.insert((res.second.first>>2));
+                        seen_node.insert((res.second.second>>2));
+                        
                     }else{
-                        graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
-                        graph_connection.erase(graph_connection.begin()+idx_j);
-                    }
-                }else if(idx_j!=65535){
-                    assert(idx_j_sub == 0);
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
-                    uint32_t average_connection = 0;
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    average_connection/=graph_connection[idx_j].size()-1;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 300){
-                        erase_connection = true;
-                    }else{
-                        graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first>>2));
-                    }
-                }else if(idx_i!=65535){
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
-                    uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    average_connection/=graph_connection[idx_i].size()-1;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 300){
-                        erase_connection = true;
-                    }else{
-                        graph_connection[idx_i].push_back((res.second.second>>2));
-                    }
-                }
-                
-                
-                if(!erase_connection){
-                    for(int q = 0; q < len*4; q++){
                         for(int i_s = 0; i_s < 4; i_s++){
                             for(int j_s = 0; j_s < 4; j_s++){
-                                seen[((res.second.first>>2)<<2)+i_s][q] = true;
-                                seen[q][((res.second.second>>2)<<2)+j_s] = true;
+                                seen[((res.second.first>>2)<<2)+i_s][((res.second.second>>2)<<2)+j_s] = true;
                                 seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
                             }
                         }
                     }
-                    
-                    if(connection_relation.find(res.second.first>>2) == connection_relation.end()){
-                        connection_relation[res.second.first>>2] = map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>();
-                    }
-                    
-                    connection_relation[res.second.first>>2][res.second.second>>2] = res;
-                    seen_node.insert((res.second.first>>2));
-                    seen_node.insert((res.second.second>>2));
-                    
-                }else{
-                    for(int i_s = 0; i_s < 4; i_s++){
-                        for(int j_s = 0; j_s < 4; j_s++){
-                            seen[((res.second.first>>2)<<2)+i_s][((res.second.second>>2)<<2)+j_s] = true;
-                            seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
-                        }
-                    }
                 }
             }
-        }
-        cout << "Insert connections." << endl;
-        draw_graph(len*4, seen, best_buddy, connection_relation, seen_node, iteration, string(output_directory), graph, (*step.beg_node), (*step.end_node));
-        cout << "Save graphs and scores." << endl;
+            cout << "Insert connections." << endl;
+            cout << "Save graphs and scores." << endl;
 
-        uint32_t counting_left = 0;
-        for(int i = 0; i < len*4 ; i++){
-            for(int j = 0; j < len*4 ; j++){
-                if(!seen[i][j]){
-                    next = true;
-                    counting_left++;
+            uint32_t counting_left = 0;
+            for(int i = 0; i < len*4 ; i++){
+                for(int j = 0; j < len*4 ; j++){
+                    if(!seen[i][j]){
+                        next = true;
+                        counting_left++;
+                    }
                 }
             }
+            cout << "Nodes in graph: " << seen_node.size() << "." << endl;
+            cout << "Left edges: " << counting_left << "." << endl;
+            iteration++;
         }
-		cout << "Nodes in graph: " << seen_node.size() << "." << endl;
-		cout << "Left edges: " << counting_left << "." << endl;
-        iteration++;
-	}
+    }
 	
     cout << "Finish get first scaffolds." << endl;
 
 
 
-    for(int i = 0; i < len*4; i++){
-		for(int j = 0; j < len*4; j++){
-            uint32_t max_count = 0;
-            for(int i_s = 0; i_s<4; i_s++){
-                for(int j_s = 0; j_s<4; j_s++){
-                    max_count = max(max_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
-                }
-            }
-			if(connect_num[i][j] ==0 || i == j || (seen_node.find(i>>2)!= seen_node.end() && seen_node.find(j>>2)!= seen_node.end()) || step.haplo_sequences[(i>>2)<<1].size() < 5000000 || step.haplo_sequences[(j>>2)<<1].size() < 5000000
-            || step.haplo_sequences[((i>>2)<<1)+1].size() < 5000000 || step.haplo_sequences[((j>>2)<<1)+1].size() < 5000000 || max_count > 10000){
-				seen[i][j] = true;
-			}else{
-                seen[i][j] = false;
-            }
-		}
-	}
-
 
 
     vector<vector<uint32_t>> cur_scaffold_result = graph_connection;
-    uint32_t to_break_stable = 0;
-    uint32_t iteration_num = 100;
-    while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=22 && to_break_stable>5 ) && iteration_num > 0){
-        iteration_num--;
-        uint32_t scaffold_len = cur_scaffold_result.size();
-        uint32_t** scaffold_connect_num;
-        float **scaffold_best_buddy;
-        bool **scaffold_seen;
-        scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
-        scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
-        scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-        for(int i = 0; i < scaffold_len; ++i){
-            scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
-            scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
-            scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
-        }
-
-        for(int i = 0; i < scaffold_len; i++){
-            for(int j = 0; j< scaffold_len; j++){
-                if(i==j){
-                    scaffold_seen[i][j] = true;
-                }else{
-                    for(auto n1: cur_scaffold_result[i]){
-                        for(auto n2: cur_scaffold_result[j]){
-                            scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
-                        }
-                    }
-                    scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-                }
-            }
-        }
-
-
-
-        vector<vector<uint32_t>> scaffold_graph = best_buddy_calculation(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len);
-        vector<vector<uint32_t>> new_scaffold_result;
-        set<uint32_t> seen_idx;
-        for(auto i : scaffold_graph){
-            vector<uint32_t> merged_graph;
-            for(auto j:i){
-                merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
-                seen_idx.insert(j);
-            }
-            new_scaffold_result.push_back(merged_graph);
-        }
-        for(int i = 0; i<cur_scaffold_result.size();i++){
-            if(seen_idx.find(i)==seen_idx.end()){
-                new_scaffold_result.push_back(cur_scaffold_result[i]);
-            }
-        }
-
-        for(int i = 0; i < scaffold_len; ++i){
-            free(scaffold_connect_num[i]);
-            free(scaffold_best_buddy[i]);
-            free(scaffold_seen[i]);
-        }
-        free(scaffold_connect_num);
-        free(scaffold_best_buddy);
-        free(scaffold_seen);
-
-        vector<vector<uint32_t>> separated_connections;
-        for(auto i : new_scaffold_result){
-            vector<uint32_t> nodes = i;
-            uint32_t single_len = nodes.size();
-            uint32_t** single_connect_num;
-            float **single_best_buddy;
-            bool **single_seen;
-            single_connect_num = (uint32_t**)calloc(single_len,sizeof(uint32_t*));
-            single_best_buddy = (float**)calloc(single_len,sizeof(float*));
-            single_seen = (bool**)calloc(single_len,sizeof(bool*));
-            for(int i = 0; i < single_len; ++i){
-                single_connect_num[i] = (uint32_t*)calloc(single_len, sizeof(uint32_t));
-                single_best_buddy[i] = (float*)calloc(single_len, sizeof(float));
-                single_seen[i] = (bool*)calloc(single_len, sizeof(bool));
-            }
-            for(int i = 0; i < nodes.size(); i++){
-                for(int j = 0; j< nodes.size(); j++){
-                    if(i==j){
-                        single_seen[i][j] = true;
-                    }else{
-                        single_connect_num[i][j] = connect_num[nodes[i]<<2][nodes[j]<<2];
-                    }
-                }
-            }
-
-            vector<vector<uint32_t>> single_graph = best_buddy_calculation(single_seen, single_best_buddy, single_connect_num, single_len);
-            for(int i = 0; i < single_graph.size(); i++){
-                for(int j = 0; j< single_graph[i].size(); j++){
-                    single_graph[i][j] = nodes[single_graph[i][j]];
-                }
-            }
-            separated_connections.insert(separated_connections.end(),single_graph.begin(), single_graph.end());
-            for(int i = 0; i < single_len; ++i){
-                free(single_connect_num[i]);
-                free(single_best_buddy[i]);
-                free(single_seen[i]);
-            }
-            free(single_connect_num);
-            free(single_best_buddy);
-            free(single_seen);
-        }
-        if(cur_scaffold_result.size() == separated_connections.size()){
-            to_break_stable++;
-        }else{
-            to_break_stable = 0;
-        }
-        cur_scaffold_result = separated_connections; 
-    }
-    
-    ofstream outFileIterationResult;
-    outFileIterationResult.open(string(output_directory)+string("/scaffold_result_iterated.txt"), ofstream::out | ofstream::trunc);
-
-    for(auto i : cur_scaffold_result){
-        for(auto j: i){
-            outFileIterationResult << string(graph->seq[(*step.beg_node)[j]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[j]>>1].name)) << "hap1+" << ", ";
-        }
-        outFileIterationResult << ": 123: 123" << endl;
-    }
-    outFileIterationResult.close();
-
-    cout << "Start bringing back short contigs." << endl;
-
-    // for(auto i : seen_node){
-    //     bool valid = false;
-    //     for(auto q: graph_connection){
-    //         if(q[0]==i || q[q.size()-1]==i){
-    //             valid = true;
-    //             break;
-    //         }
-    //     }
-    //     if(!valid){
-    //         for(int j = 0; j<len;j++){
-    //             for(int i_s = 0; i_s < 4; i_s++){
-    //                 for(int j_s = 0; j_s < 4; j_s++){
-    //                     seen[(i<<2)+i_s][(j<<2)+j_s] = true;
-    //                     seen[(j<<2)+j_s][(i<<2)+i_s] = true;
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
 
 
     vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
+    vector<uint32_t> nodes_to_insert;
+
+    
     for(int i = 0; i < len; i++){
-        if(seen_node.find(i) == seen_node.end()){
-            not_seen_nodes_len.push_back(make_pair(i,cstep.haplo_sequences[i<<1].size()));
+        if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > long_threshold && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+            not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
         }
     }
     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
         return r1.second > r2.second;
     });
-
     
-    
-    
+    for(auto n: not_seen_nodes_len){
+        nodes_to_insert.push_back(n.first);
+    }
 
-
-
-	vector<vector<uint32_t>> graph_connection_buf;
-    // map<pair<uint32_t,uint32_t>, pair<uint32_t, uint32_t>> connection_relation;
-    map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation_buf;
-	next = true;
-	set<uint32_t> seen_node_buf;
-    uint32_t safe_break_buf = 0;
-    uint32_t iteration_buf = 300;
-	// while(next){
-	while(seen_node_buf.size()<len && safe_break_buf <= 5 && next && iteration_buf < 320){
-        next = false;
-        safe_break_buf++;
-		// for(auto n: seen_node_buf){
-		// 	printf("%d, ",n);
-		// }
-		// printf("\n");
-		vector<pair<float, pair<uint32_t,uint32_t>>> result;
-		// next = false;
-		update_best_buddy_haplo(seen, best_buddy, connect_num,len);
-        cout << "Update best buddy score." << endl;
-		for(int i = 0; i < len*4; i++){
-			for(int j = 0; j < len*4; j++){
-				if(best_buddy[i][j] > 0.999){
-                    if(connect_num[i][j]>300){
-                        next = true;
-                    }
-					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-				}
-			}
-		}
-		if(!next){
-            break;
-        }
-		sort(result.begin(), result.end(),
-		[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-			return r1.first > r2.first;
-		});
-        cout << "Get potential connections " << result.size() << "." << endl;
-
-        for(auto res:result){
-            if(!seen[res.second.first][res.second.second]){
-                for(int i_s = 0; i_s < 4; i_s++){
-                    for(int j_s = 0; j_s < 4; j_s++){
-                        seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
-                        seen[((res.second.first>>2)<<2)+j_s][((res.second.second>>2)<<2)+i_s] = true;
+    vector<vector<uint32_t>> new_scaffold_result = cur_scaffold_result;
+    for(auto n : nodes_to_insert){
+        cout << id_contig[n] << endl;
+        vector<uint32_t> scores;
+        for(auto s: cur_scaffold_result){
+            vector<uint32_t> best_2(1,0);
+            for(auto sn : s){
+                uint32_t max_count = 0;
+                for(int i_s = 0; i_s<4; i_s++){
+                    for(int j_s = 0; j_s<4; j_s++){
+                        max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+                        max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
                     }
                 }
-                if(connect_num[res.second.first][res.second.second]<300){
-                    continue;
-                }
-                safe_break_buf = 0;
-                bool erase_connection = false;
-                bool found = false;
-                uint16_t idx_i = 65535;
-                uint16_t idx_j = 65535;
-                uint16_t idx_i_sub = 65535;
-                uint16_t idx_j_sub = 65535;
-                bool anchor_i = seen_node.find(res.second.first>>2)!=seen_node.end();
-                bool anchor_j = seen_node.find(res.second.second>>2)!=seen_node.end();
-
-                for(int i = 0; i < graph_connection_buf.size(); i++){
-                    if(find(graph_connection_buf[i].begin(), graph_connection_buf[i].end(), (res.second.first>>2))!=graph_connection_buf[i].end()){
-                        for(int idx=0; idx<graph_connection_buf[i].size(); idx++){
-                            if(graph_connection_buf[i][idx]==(res.second.first>>2)){
-                                idx_i_sub = idx;
-                            }
-                        }
-                        idx_i = i;
-                        found = true;
-                    }
-                    if(find(graph_connection_buf[i].begin(), graph_connection_buf[i].end(), (res.second.second>>2))!=graph_connection_buf[i].end()){
-                        for(int idx=0; idx<graph_connection_buf[i].size(); idx++){
-                            if(graph_connection_buf[i][idx]==(res.second.second>>2)){
-                                idx_j_sub = idx;
-                            }
-                        }
-                        idx_j = i;
-                        found = true;
+                for(int i = 0; i < best_2.size(); i++){
+                    if(max_count > best_2[i]){
+                        uint32_t buf = max_count;
+                        max_count = best_2[i];
+                        best_2[i] = buf;
                     }
                 }
-                if(anchor_i){
-                    if(idx_i!=65535){
-                        graph_connection_buf[idx_i].push_back(res.second.second>>2);
-                    }else{
-                        vector<uint32_t> buf;
-                        buf.push_back(res.second.first>>2);
-                        buf.push_back(res.second.second>>2);
-                        graph_connection_buf.push_back(buf);
-                    }
-                    for(int q = 0; q < len*4; q++){
-                        for(int i_s = 0; i_s < 4; i_s++){
-                            for(int j_s = 0; j_s < 4; j_s++){
-                                if(seen_node.find(q>>2)!=seen_node.end()){
-                                    seen[((res.second.second>>2)<<2)+j_s][q] = true;
-                                    seen[q][((res.second.second>>2)<<2)+j_s] = true;
-                                }
-                            }
-                        }
-                    }
-                }else if(anchor_j){
-                    if(idx_j!=65535){
-                        graph_connection_buf[idx_j].push_back(res.second.first>>2);
-                    }else{
-                        vector<uint32_t> buf;
-                        buf.push_back(res.second.first>>2);
-                        buf.push_back(res.second.second>>2);
-                        graph_connection_buf.push_back(buf);
-                    }
-                    for(int q = 0; q < len*4; q++){
-                        for(int i_s = 0; i_s < 4; i_s++){
-                            for(int j_s = 0; j_s < 4; j_s++){
-                                if(seen_node.find(q>>2)!=seen_node.end()){
-                                    seen[((res.second.first>>2)<<2)+j_s][q] = true;
-                                    seen[q][((res.second.first>>2)<<2)+j_s] = true;
-                                }
-                            }
-                        }
+            }
+            bool valid = true;
+            uint32_t idx_0 = 1;
+            for(int i = 0; i < best_2.size()-1; i++){
+                if(best_2[i+1] > 0){
+                    idx_0++;
+                    if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+                        valid = false;
+                        break;
                     }
                 }else{
-                    if(found && idx_i == idx_j){
-                    }else if(idx_i!=65535 && idx_j!=65535){
-                        bool anchor_in_i = false;
-                        bool anchor_in_j = false;
-                        for(auto i : graph_connection_buf[idx_i]){
-                            if(seen_node.find(i)!=seen_node.end()){
-                                anchor_in_i = true;
-                                break;
-                            }
-                        }
-                        for(auto i : graph_connection_buf[idx_j]){
-                            if(seen_node.find(i)!=seen_node.end()){
-                                anchor_in_j = true;
-                                break;
-                            }
-                        }
-                        if(anchor_in_i && anchor_in_j){
-                            
-                        }else if(anchor_in_i || anchor_in_j){
-                            graph_connection_buf[idx_i].insert(graph_connection_buf[idx_i].end(), graph_connection_buf[idx_j].begin(), graph_connection_buf[idx_j].end());
-                            for(auto i : graph_connection_buf[idx_i]){
-                                for(int i_s = 0; i_s < 4; i_s++){
-                                    for(int p = 0; p < len*4; p++){
-                                        if(seen_node.find(p>>2)!=seen_node.end()){
-                                            seen[p][(i<<2)+i_s] = true;
-                                            seen[(i<<2)+i_s][p] = true;
-                                        }
-                                    }
-                                }
-                            }
-                            graph_connection_buf.erase(graph_connection_buf.begin()+idx_j);
-                        }else{
-                            graph_connection_buf[idx_i].insert(graph_connection_buf[idx_i].end(), graph_connection_buf[idx_j].begin(), graph_connection_buf[idx_j].end());
-                            graph_connection_buf.erase(graph_connection_buf.begin()+idx_j);
-                        }
-                    }else if(idx_i!=65535){
-                        graph_connection_buf[idx_i].push_back(res.second.second>>2);
-                        bool anchor_in_i = false;
-                        for(auto i : graph_connection_buf[idx_i]){
-                            if(seen_node.find(i)!=seen_node.end()){
-                                anchor_in_i = true;
-                                break;
-                            }
-                        }
-                        if(anchor_in_i){
-                            for(int i_s = 0; i_s < 4; i_s++){
-                                for(int p = 0; p < len*4; p++){
-                                    if(seen_node.find(p>>2)!=seen_node.end()){
-                                        seen[p][((res.second.second>>2)<<2)+i_s] = true;
-                                        seen[((res.second.second>>2)<<2)+i_s][p] = true;
-                                    }
-                                }
-                            }
-                        }
-                    }else if(idx_j!=65535){
-                        graph_connection_buf[idx_j].push_back(res.second.first>>2);
-                        bool anchor_in_j = false;
-                        for(auto i : graph_connection_buf[idx_j]){
-                            if(seen_node.find(i)!=seen_node.end()){
-                                anchor_in_j = true;
-                                break;
-                            }
-                        }
-                        if(anchor_in_j){
-                            for(int i_s = 0; i_s < 4; i_s++){
-                                for(int p = 0; p < len*4; p++){
-                                    if(seen_node.find(p>>2)!=seen_node.end()){
-                                        seen[p][((res.second.first>>2)<<2)+i_s] = true;
-                                        seen[((res.second.first>>2)<<2)+i_s][p] = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // assert(false);
-                }
-                seen_node_buf.insert(res.second.second>>2);
-                seen_node_buf.insert(res.second.first>>2);
-            }
-        }
-        cout << "Insert connections." << endl;
-        draw_graph(len*4, seen, best_buddy, connection_relation_buf, seen_node_buf, iteration_buf, string(output_directory), graph, (*step.beg_node), (*step.end_node));
-        cout << "Save graphs and scores." << endl;
-        uint32_t counting_left = 0;
-        for(int i = 0; i < len*4 ; i++){
-            for(int j = 0; j < len*4 ; j++){
-                if(!seen[i][j]){
-                    next = true;
-                    counting_left++;
-                }
-            }
-        }
-		cout << "Nodes in graph: " << seen_node_buf.size() << "." << endl;
-		cout << "Left edges: " << counting_left << "." << endl;
-        iteration_buf++;
-	}
-
-    cout << "Finish bring back short contigs." << endl;
-
-
-    vector<set<uint32_t>> merged_graph_connections;
-    // set<set<uint32_t>> before_merged_graph_connections;
-    // graph_connection.insert(graph_connection.end(),graph_connection_buf.begin(),graph_connection_buf.end());
-    for(auto i: graph_connection){
-        set<uint32_t> to_insert;
-        for(auto n:i){
-            to_insert.insert(n);
-        }
-        for(auto i_2: graph_connection_buf){
-            bool found = false;
-            for(auto j_2: i_2){
-                if(to_insert.find(j_2)!=to_insert.end()){
-                    found = true;
                     break;
                 }
             }
-            for(auto j_2: i_2){
-                to_insert.insert(j_2);
+            uint32_t best_2_total = 0;
+            for(auto i : best_2){
+                best_2_total += i;
             }
-        }
-        merged_graph_connections.push_back(to_insert);
-    }
-    
-
-    // set<set<uint32_t>> to_merge = before_merged_graph_connections;
-    
-    // for(auto i: to_merge){
-
-    // }
-
-
-
-
-
-    vector<string> hap1s;
-    vector<string> hap2s;
-
-    ofstream outFileScaffoldResult;
-    outFileScaffoldResult.open(string(output_directory)+string("/scaffold_result.txt"), ofstream::out | ofstream::trunc);
-
-
-    for(auto path: graph_connection){
-        stringstream result_hap1;
-        stringstream result_hap2;
-        vector<bool> reverse;
-        vector<bool> hap2;
-        for(int i = 1; i < path.size(); i++){
-            pair<float, pair<uint32_t, uint32_t>> cur_edge = connection_relation[path[i-1]][path[i]];
-            uint32_t cur_node = cur_edge.second.first;
-            uint32_t next_node = cur_edge.second.second;
-            if(i == 1){
-                reverse.push_back((cur_node&1)>0);
-                hap2.push_back((cur_node&2)>0);
-                reverse.push_back((next_node&1)>0);
-                hap2.push_back((next_node&2)>0);
+            if(!valid){
+                scores.push_back(0);
             }else{
-                reverse.push_back((reverse[reverse.size()-1] ^ ((cur_node&1)>0)) ^ ((next_node&1)>0));
-                hap2.push_back((hap2[hap2.size()-1] ^ ((cur_node&2)>0)) ^ ((next_node&2)>0));
+                scores.push_back(best_2_total/idx_0);
             }
         }
         
-        for(int i = 0; i < path.size(); i++){
-            string cur_hap1 = cstep.haplo_sequences[path[i]<<1];
-            string cur_hap2 = cstep.haplo_sequences[(path[i]<<1)+1];
-
-            outFileScaffoldResult << string(graph->seq[(*step.beg_node)[path[i]]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[path[i]]>>1].name));
-            if(hap2[i]){
-                outFileScaffoldResult << "_hap2";
-            }else{
-                outFileScaffoldResult << "_hap1";
-            }
-            if(reverse[i]){
-                outFileScaffoldResult << "-";
-            }else{
-                outFileScaffoldResult << "+";
-            }
-            outFileScaffoldResult << ", ";
-            if(reverse[i]){
-                cur_hap1 = complement(cur_hap1);
-                cur_hap2 = complement(cur_hap2);
-            }
-            if(hap2[i]){
-                result_hap1 << cur_hap2 << string(100, 'N');
-                result_hap2 << cur_hap1 << string(100, 'N');
-            }else{
-                result_hap1 << cur_hap1 << string(100, 'N');
-                result_hap2 << cur_hap2 << string(100, 'N');
+        uint32_t max_idx = 0;
+        uint32_t max_score = 65535;
+        for(int i = 0; i < scores.size(); i++){
+            if(max_score < scores[i]){
+                max_score = scores[i];
+                max_idx = i;
             }
         }
-        hap1s.push_back(result_hap1.str());
-        hap2s.push_back(result_hap2.str());
-        outFileScaffoldResult << ": " << hap1s[hap1s.size()-1].length();
-        outFileScaffoldResult << ": " << hap2s[hap2s.size()-1].length();
-        outFileScaffoldResult << endl;
+        if(max_idx!=65535 && max_score > low_connect){
+            cur_scaffold_result[max_idx].push_back(n);
+            seen_node.insert(n);
+        }else{
+            vector<uint32_t> buf;
+            buf.push_back(n);
+            cur_scaffold_result.push_back(buf);
+        }
     }
 
-    outFileScaffoldResult << endl << endl;
+// //    vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
+// //     vector<uint32_t> nodes_to_insert;
+//     not_seen_nodes_len = vector<pair<uint32_t,uint32_t>>();
+//     nodes_to_insert = vector<uint32_t>();
 
-    for(auto path: graph_connection_buf){
-        stringstream result_hap1;
-        stringstream result_hap2;
-        for(int i = 0; i<path.size(); i++){
-            outFileScaffoldResult << string(graph->seq[(*step.beg_node)[path[i]]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[path[i]]>>1].name)) << "_hap1+, ";
-            if(seen_node.find(path[i])==seen_node.end()){
-                result_hap1 << cstep.haplo_sequences[path[i]<<1];
-                result_hap2 << cstep.haplo_sequences[(path[i]<<1)+1];
-            }
-        }
-        hap1s.push_back(result_hap1.str());
-        hap2s.push_back(result_hap2.str());
-        outFileScaffoldResult << " : 123: 123 " << endl;
-    }
-
-    outFileScaffoldResult.close();
-
-	// printf("Result:\n");
-    // ofstream outFileScaffoldResult;
-    // outFileScaffoldResult.open(string(output_directory)+string("/scaffold_result.txt"), ofstream::out | ofstream::trunc);
-	// for(int i = 0; i < graph_connection.size(); i++){
-	// 	vector<uint32_t> cur_set = graph_connection[i];
-	// 	for(auto p:cur_set){
-    //         outFileScaffoldResult << string(graph->seq[(*step.beg_node)[p]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[p]>>1].name))+string(", ");
-	// 	}
-    //     outFileScaffoldResult << endl;
-	// }
-    // outFileScaffoldResult.close();
-
-
-
-
-    ofstream outFileHap1;
-    outFileHap1.open(string(output_directory)+string("/pred_hap1.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap1s.size(); i++){
-        outFileHap1 << ">utg" << i << "l_hap1" << endl;
-        outFileHap1 << hap1s[i] << endl;
-	}
-    outFileHap1.close();
     
-
-    ofstream outFileHap2;
-    outFileHap2.open(string(output_directory)+string("/pred_hap2.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap2s.size(); i++){
-        outFileHap2 << ">utg" << i << "l_hap2" << endl;
-        outFileHap2 << hap2s[i] << endl;
-	}
-    outFileHap2.close();
-
-
-
-
-
-
-    ofstream outFileHap1Broken;
-    outFileHap1Broken.open(string(output_directory)+string("/pred_hap1_broken.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap1s.size(); i++){
-        for (unsigned j = 0; j < hap1s[i].length(); j += 3000000) {
-            outFileHap1Broken << ">utg" << i << "l_hap1" << "_" << to_string(j) << endl;
-            outFileHap1Broken << hap1s[i].substr(j, 3000000) << endl;
-        }
-	}
-    outFileHap1Broken.close();
-
-    ofstream outFileHap2Broken;
-    outFileHap2Broken.open(string(output_directory)+string("/pred_hap2_broken.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap2s.size(); i++){
-        for (unsigned j = 0; j < hap2s[i].length(); j += 3000000) {
-            outFileHap2Broken << ">utg" << i << "l_hap2" << "_" << to_string(j) << endl;
-            outFileHap2Broken << hap2s[i].substr(j, 3000000) << endl;
-        }
-	}
-    outFileHap2Broken.close();
-}
-
-
-
-
-
-
-
-
-
-
-
-
-// void get_haplotype_path(uint16_t** connection_count,asg_t *graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, char* output_directory, int n_threads){
-//     set<uint32_t> existing_nodes;
-   
-//     cout << "Start get haplotypes" << endl;
-//     map<uint16_t,map<uint16_t,uint16_t>> connections_count;
-//     for(int i = 0; i < graph->n_seq; i++){
-//         for(int j = 0; j < graph->n_seq; j++){
-//             if(connection_count[i][j]>0){
-//                 if(connections_count.find(i)==connections_count.end()){
-//                     connections_count[i] = map<uint16_t,uint16_t>();
-//                 }
-//                 connections_count[i][j] += connection_count[i][j];
-//             }
-//         }
-//         free(connection_count[i]);
-//     }
-//     free(connection_count);
-
-//     uint32_t n_vtx = graph->n_seq * 2;
-//     int node_type[n_vtx];
-
-//     vector<bubble_t*> bubbles;
-//     vector<bubble_t*> pure_bubbles;
-//     vector<bubble_t*> complex_bubbles;
-//     map<uint32_t,bubble_t*> node_bubble_map;
-//     map<uint32_t,set<uint32_t>> node_path_id_map;
-
-//     for(uint32_t i=0; i<n_vtx; i++){
-//         node_type[i] = 0;
-//         bubble_t* result = detect_bubble(graph, i);
-//         if(result!=nullptr){
-//             result->id = i;
-//             bubbles.push_back(result);
+//     for(int i = 0; i < len; i++){
+//         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+//             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
 //         }
 //     }
-
-
-//     for (int b=0; b<bubbles.size(); b++) {
-//         bubble_t* bubble = bubbles[b];
-//         uint32_t bubble_beginning = bubble->begNode;
-//         uint32_t bubble_end = bubble->endNode;
-
-//         // cout << "start get bubble paths from " << g->seq[bubble_beginning /2].name<< " to " << g->seq[bubble_end /2].name << endl;
-
-//         vector<asg_arc_t*> arc_stack;
-//         vector<uint32_t> node_stack;  // DFS
-//         vector<uint32_t> node_vi_stack;
-//         node_stack.push_back(bubble_beginning);
-//         node_vi_stack.push_back(0);
-//         int stack_count = 0;
-//         uint32_t lastNode = bubble_beginning;
-//         while(!node_stack.empty()) {
-//             uint32_t u = node_stack.back();
-//             uint32_t vi = node_vi_stack.back();
-//             if (u==bubble_end) {
-//                 for (int ui=0; ui<node_stack.size(); ui++) {
-//                     // cout << g->seq[node_stack[ui]/2].name << " ";
-//                     if(ui==0 || ui == node_stack.size()-1){
-//                         if(node_type[node_stack[ui]] != 2){
-//                             node_type[node_stack[ui]] = BUBBLE_END_BEGIN;
-//                         }
-//                     }else{
-//                         node_type[node_stack[ui]] = BUBBLE_INSIDE;
-//                     }
-//                 }
-//                 stack_count ++;
-//                 // cout << endl;
-//                 set<uint32_t> buf_path_node = set<uint32_t>();
-//                 for(auto arc_buf: arc_stack){
-//                     // if(arc_buf->v!=bubble->endNode){
-//                         buf_path_node.insert(arc_buf->v);
-//                     // }
-//                 }
-//                 buf_path_node.insert(bubble->begNode);
-//                 buf_path_node.insert(bubble->endNode);
-//                 // bubble_nodes.insert(buf_path_node);
-//                 bubble->paths_nodes.push_back(buf_path_node);
-//                 bubble->paths.push_back(arc_stack);
-//                 bubble->starting_arcs.insert(arc_stack.front()->v);
-//                 bubble->ending_arcs.insert(lastNode);
-//                 arc_stack.pop_back();
-//                 node_stack.pop_back();
-//                 node_vi_stack.pop_back();
-//                 continue;
-//             }
-
-//             uint32_t num_outgoing_arcs = asg_arc_n(graph, u);
-//             if (vi < num_outgoing_arcs) {
-//                 asg_arc_t *outgoing_arcs = asg_arc_a(graph, u);
-//                 uint32_t v = outgoing_arcs[vi].v;
-//                 node_vi_stack.back()++;
-//                 arc_stack.push_back(outgoing_arcs + vi);
-//                 node_stack.push_back(v);
-//                 node_vi_stack.push_back(0);
-//             } else {
-//                 arc_stack.pop_back();
-//                 node_stack.pop_back();
-//                 node_vi_stack.pop_back();
-//             }
-//             lastNode = u;
-//         }
-//         // cout << stack_count << endl;
-//         // cout << "finish get bubble paths from " << bubble_beginning << " to " << bubble_end << endl;
-//     }
-
-
-
-//     for(auto bubble: bubbles){
-//         // if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2 && bubble->paths_nodes.size()>20){
-//         if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2){
-//             set<uint32_t> nodes;
-//             for(auto path:bubble->paths_nodes){
-//                 for(auto node: path){
-//                     nodes.insert(node);
-//                 }
-//             }
-//             if(nodes.size()>12){
-//                 complex_bubbles.push_back(bubble);
-//             }else{
-//                 pure_bubbles.push_back(bubble);
-//             }
-//             // cout << endl;
-//             // for(auto path: bubble->paths_nodes){
-//             //     for(auto node: path){
-//             //         cout << graph->seq[node>>1].name << "\t";
-//             //     }
-//             //     cout << endl;
-//             // }
-//         }else{
-//             delete bubble;
-//         }
-//     }
-
-//     // set<uint32_t> nodes;
-//     // set<uint32_t> double_nodes;
-//     for(auto bubble: pure_bubbles){
-//         for(int i = 0; i < bubble->paths_nodes.size(); i++){
-//             for(auto node: bubble->paths_nodes[i]){
-//                 if(node!=bubble->endNode && node!=bubble->begNode){
-//                     node_bubble_map[node>>1] = bubble;
-//                     if(node_path_id_map.find(node>>1)==node_path_id_map.end()){
-//                         node_path_id_map[node>>1] = set<uint32_t>();
-//                     }
-//                     node_path_id_map[node>>1].insert(i);
-//                 }
-//             }
-//         }
-//     }
-
-//     cout << "Bubbles Retrieved" << endl;
-
-//     // map<uint32_t,map<uint32_t,uint32_t>> cnt_count_branches;
-//     map<uint32_t,map<uint32_t,set<uint32_t>>> bubble_chain_graph_full_buf;
-//     map<uint32_t,map<uint32_t,set<uint32_t>>> bubble_chain_graph_full;
-//     map<uint32_t,vector<vector<uint32_t>>> node_beg_end;
-//     for(auto begin: *bubble_chain_graph){
-//         for(auto end: begin.second){
-//             set<uint32_t> to_insert;
-//             for(auto node: end.second){
-//                 to_insert.insert(node>>1);
-//             }
-
-
-//             if(bubble_chain_graph_full_buf.find(begin.first) != bubble_chain_graph_full_buf.end()){
-//                 bubble_chain_graph_full_buf[begin.first] = map<uint32_t,set<uint32_t>>();
-//             }
-//             bubble_chain_graph_full_buf[begin.first][end.first] = to_insert;
-
-//             if(bubble_chain_graph_full_buf.find(end.first^1) != bubble_chain_graph_full_buf.end()){
-//                 bubble_chain_graph_full_buf[end.first^1] = map<uint32_t,set<uint32_t>>();
-//             }
-//             bubble_chain_graph_full_buf[end.first^1][begin.first^1] = to_insert;
-
-//         }
-//     }
-//     delete bubble_chain_graph;
+//     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+//     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+//         return r1.second > r2.second;
+//     });
     
-    
-//     for(auto begin: bubble_chain_graph_full_buf){
-//         // uint64_t max_len = 0;
-//         // for(auto buf_end: begin.second){
-//         //     uint64_t cur_len = 0;
-//         //     for(auto cur_node: buf_end.second){
-//         //         cur_len+=graph->seq[cur_node].len;
-//         //     }
-//         //     max_len = max(cur_len, max_len);
-//         // }
-//         // for(auto buf_end: (bubble_chain_graph_full_buf[begin.first^1])){
-//         //     uint64_t cur_len = 0;
-//         //     for(auto cur_node: buf_end.second){
-//         //         cur_len+=graph->seq[cur_node].len;
-//         //     }
-//         //     max_len = max(cur_len, max_len);
-//         // }
-//         for(auto end: begin.second){
-//             // uint64_t cur_len = 0;
-//             // for(auto cur_node: end.second){
-//             //     cur_len+=graph->seq[cur_node].len;
-//             // }
-//             // if(cur_len>max_len*0.3){
-//                 set<uint32_t> to_insert;
-//                 vector<uint32_t> vec1;
-//                 vec1.push_back(begin.first);
-//                 vec1.push_back(end.first);
-//                 vector<uint32_t> vec2;
-//                 vec1.push_back(end.first^1);
-//                 vec1.push_back(begin.first^1);
-//                 for(auto node: end.second){
-//                     to_insert.insert(node);
-//                     node_beg_end[node] = vector<vector<uint32_t>>();
-//                     node_beg_end[node].push_back(vec1);
-//                     node_beg_end[node].push_back(vec2);
-//                 }
-
-
-//                 if(bubble_chain_graph_full.find(begin.first) != bubble_chain_graph_full.end()){
-//                     bubble_chain_graph_full[begin.first] = map<uint32_t,set<uint32_t>>();
-//                 }
-//                 bubble_chain_graph_full[begin.first][end.first] = to_insert;
-
-//                 if(bubble_chain_graph_full.find(end.first^1) != bubble_chain_graph_full.end()){
-//                     bubble_chain_graph_full[end.first^1] = map<uint32_t,set<uint32_t>>();
-//                 }
-//                 bubble_chain_graph_full[end.first^1][begin.first^1] = to_insert;
-
-//             // }
-//         }
+//     for(auto n: not_seen_nodes_len){
+//         nodes_to_insert.push_back(n.first);
 //     }
 
-//     map<vector<uint32_t>, map<vector<uint32_t>,uint32_t>> branch_connections;
-
-//     for(auto x: connections_count){
-//         if(node_beg_end.find(x.first)!=node_beg_end.end()){
-//             vector<vector<uint32_t>> vec1s = node_beg_end[x.first];
-//             for(auto y: x.second){
-//                 if(node_beg_end.find(y.first)!=node_beg_end.end() && y.second>0){
-//                     vector<vector<uint32_t>> vec2s = node_beg_end[y.first];
-//                     for(auto vec1: vec1s){
-//                         for(auto vec2: vec2s){
-//                             bool valid = false;
-//                             for(auto node_1: vec1){
-//                                 for(auto node_2: vec2){
-//                                     if(node_1 == node_2){
-//                                         valid = (!valid);
-//                                     }
-//                                 }
-//                             }
-//                             if(valid){
-//                                 if(branch_connections.find(vec1)==branch_connections.end()){
-//                                     branch_connections[vec1] = map<vector<uint32_t>,uint32_t>();
-//                                 }
-//                                 if(branch_connections[vec1].find(vec2)==branch_connections[vec1].end()){
-//                                     branch_connections[vec1][vec2] = 0;
-//                                 }
-//                                 branch_connections[vec1][vec2] += y.second;
-
-//                                 if(branch_connections.find(vec2)==branch_connections.end()){
-//                                     branch_connections[vec2] = map<vector<uint32_t>,uint32_t>();
-//                                 }
-//                                 if(branch_connections[vec2].find(vec1)==branch_connections[vec2].end()){
-//                                     branch_connections[vec2][vec1] = 0;
-//                                 }
-//                                 branch_connections[vec2][vec1] += y.second;
-//                             }
-//                         }
+//     for(auto n : nodes_to_insert){
+//         cout << id_contig[n] << endl;
+//         vector<uint32_t> scores;
+//         for(auto s: cur_scaffold_result){
+//             vector<uint32_t> best_2(1,0);
+//             for(auto sn : s){
+//                 uint32_t max_count = 0;
+//                 for(int i_s = 0; i_s<4; i_s++){
+//                     for(int j_s = 0; j_s<4; j_s++){
+//                         max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+//                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
 //                     }
 //                 }
-//             }
-//         }
-//     }
-
-//     cout << "Get connections between branches" << endl;
-//     set<vector<vector<uint32_t>>> to_expand;
-//     for(auto begin: bubble_chain_graph_full){
-//         for(auto ending: begin.second){
-//             uint32_t beg = begin.first;
-//             uint32_t end = ending.first;
-//             vector<uint32_t> to_insert_single;
-//             to_insert_single.push_back(beg);
-//             to_insert_single.push_back(end);
-//             vector<vector<uint32_t>> to_insert;
-//             to_insert.push_back(to_insert_single);
-//             to_expand.insert(to_insert);
-//         }
-//     }
-//     set<vector<vector<uint32_t>>> all_pathes = to_expand;
-//     while(to_expand.size()>0){
-//         set<vector<vector<uint32_t>>> new_to_expand;
-//         set<vector<vector<uint32_t>>> not_touched;
-//         for(auto existing_path : to_expand){
-//             uint32_t path_beg = existing_path[0][0];
-//             uint32_t path_end = existing_path[existing_path.size()-1][1];
-//             set<vector<uint32_t>> beginning_expansion;
-//             set<vector<uint32_t>> ending_expansion;
-//             if(bubble_chain_graph_full.find(path_beg^1)!=bubble_chain_graph_full.end()){
-//                 if(bubble_chain_graph_full[path_beg^1].size()==1){
-//                     uint32_t cur_end = path_beg;
-//                     for(auto ending: bubble_chain_graph_full[path_beg^1]){
-//                         uint32_t cur_beg = ending.first^1;
-//                         vector<uint32_t> to_insert_single;
-//                         to_insert_single.push_back(cur_beg);
-//                         to_insert_single.push_back(cur_end);
-//                         bool seen = false;
-//                         for(auto p: existing_path){
-//                             if(p==to_insert_single){
-//                                 seen = true;
-//                                 break;
-//                             }
-//                         }
-//                         if(!seen){
-//                             beginning_expansion.insert(to_insert_single);
-//                         }
-//                     }
-//                 }else if(bubble_chain_graph_full[path_beg^1].size()>0){
-//                     uint32_t cur_end = path_beg;
-//                     for(auto ending: bubble_chain_graph_full[path_beg^1]){
-//                         uint32_t cur_beg = ending.first^1;
-//                         vector<uint32_t> to_insert_single;
-//                         to_insert_single.push_back(cur_beg);
-//                         to_insert_single.push_back(cur_end);
-//                         if( branch_connections.find(to_insert_single)!=branch_connections.end()
-//                             && branch_connections[to_insert_single].find(existing_path[0]) != branch_connections[to_insert_single].end()
-//                             && branch_connections[to_insert_single][existing_path[0]] > 15){
-                            
-//                             bool seen = false;
-//                             for(auto p: existing_path){
-//                                 if(p==to_insert_single){
-//                                     seen = true;
-//                                     break;
-//                                 }
-//                             }
-//                             if(!seen){
-//                                 beginning_expansion.insert(to_insert_single);
-//                             }
-//                         }
+//                 for(int i = 0; i < best_2.size(); i++){
+//                     if(max_count > best_2[i]){
+//                         uint32_t buf = max_count;
+//                         max_count = best_2[i];
+//                         best_2[i] = buf;
 //                     }
 //                 }
-//             }
-
-//             if(bubble_chain_graph_full.find(path_end)!=bubble_chain_graph_full.end()){
-//                 if(bubble_chain_graph_full[path_end].size()==1){
-//                     uint32_t cur_beg = path_end;
-//                     for(auto ending: bubble_chain_graph_full[path_end]){
-//                         uint32_t cur_end = ending.first;
-//                         vector<uint32_t> to_insert_single;
-//                         to_insert_single.push_back(cur_beg);
-//                         to_insert_single.push_back(cur_end);
-//                         bool seen = false;
-//                         for(auto p: existing_path){
-//                             if(p==to_insert_single){
-//                                 seen = true;
-//                                 break;
-//                             }
-//                         }
-//                         if(!seen){
-//                             ending_expansion.insert(to_insert_single);
-//                         }
-//                     }
-//                 }else if(bubble_chain_graph_full[path_end].size()>0){
-//                     uint32_t cur_beg = path_beg;
-//                     for(auto ending: bubble_chain_graph_full[path_end]){
-//                         uint32_t cur_end = ending.first;
-//                         vector<uint32_t> to_insert_single;
-//                         to_insert_single.push_back(cur_beg);
-//                         to_insert_single.push_back(cur_end);
-//                         if( branch_connections.find(to_insert_single)!=branch_connections.end()
-//                             && branch_connections[to_insert_single].find(existing_path[existing_path.size()-1]) != branch_connections[to_insert_single].end()
-//                             && branch_connections[to_insert_single][existing_path[existing_path.size()-1]] > 15){
-                            
-//                             bool seen = false;
-//                             for(auto p: existing_path){
-//                                 if(p==to_insert_single){
-//                                     seen = true;
-//                                     break;
-//                                 }
-//                             }
-//                             if(!seen){
-//                                 ending_expansion.insert(to_insert_single);
-//                             }
-//                         }
-//                     }
-//                 }
-//             }
-
-//             if(ending_expansion.size() > 0 || beginning_expansion.size() > 0){
-//                 for(auto to_end: ending_expansion){
-//                     vector<vector<uint32_t>> to_insert_path = existing_path;
-//                     to_insert_path.push_back(to_end);
-//                     new_to_expand.insert(to_insert_path);
-//                 }
-//                 for(auto to_begin: beginning_expansion){
-//                     vector<vector<uint32_t>> to_insert_path = existing_path;
-//                     to_insert_path.insert(to_insert_path.begin(),to_begin);
-//                     new_to_expand.insert(to_insert_path);
-//                 }
-//                 for(auto to_end: ending_expansion){
-//                     for(auto to_begin: beginning_expansion){
-//                         vector<vector<uint32_t>> to_insert_path = existing_path;
-//                         to_insert_path.push_back(to_end);
-//                         to_insert_path.insert(to_insert_path.begin(),to_begin);
-//                         new_to_expand.insert(to_insert_path);
-//                     }
-//                 }
-//             }else{
-//                 not_touched.insert(existing_path);
-//             }
-//         }
-//         all_pathes.insert(not_touched.begin(), not_touched.end());
-//         to_expand = new_to_expand;
-//     }
-//     cout << "Get all possible pathes, total num: ";
-//     cout << all_pathes.size() << endl;
-
-//     for(auto x: all_pathes){
-//         uint32_t beg = -1;
-        
-//         for(auto y: x){
-//             assert(beg==-1 || beg==y[0]);
-//             beg = y[1];
-//         }
-//     }
-
-//     set<vector<vector<uint32_t>>> expanded_pathes;
-//     for(auto path: all_pathes){
-//         if(expanded_pathes.find(path) == expanded_pathes.end()){
-//             set<uint32_t> path_set;
-//             for(auto sing_path: path){
-//                 path_set.insert(bubble_chain_graph_full[sing_path[0]][sing_path[1]].begin(),bubble_chain_graph_full[sing_path[0]][sing_path[1]].end());
 //             }
 //             bool valid = true;
-//             for(auto to_check: all_pathes){
-//                 set<uint32_t> check_path;
-//                 for(auto sing_path: to_check){
-//                     check_path.insert(bubble_chain_graph_full[sing_path[0]][sing_path[1]].begin(),bubble_chain_graph_full[sing_path[0]][sing_path[1]].end());
-//                 }
-//                 bool all_found = true;
-//                 uint32_t not_found_count = 0;
-//                 for(auto node_buf: path_set){
-//                     if(check_path.find(node_buf)==check_path.end()){
-//                         all_found = false;
-//                         not_found_count++;
-//                         // break;
-//                     }
-//                 }
-//                 if( (all_found || (not_found_count <= ((double)(path_set.size()) * 0.1) && path.size() < to_check.size()) ) && path != to_check){
-//                     valid = false;
-//                     break;
-//                 }
-//             }
-//             if(valid){
-//                 expanded_pathes.insert(path);
-//             }
-//         }
-//     }
-
-//     cout << "Filtering short path, total num: ";
-//     cout << expanded_pathes.size() << endl;
-
-//     map<vector<uint32_t>,set<uint32_t>> expanded_pathes_nodes;
-//     map<uint32_t,set<uint32_t>> path_reach_out_set_beg;
-//     map<uint32_t,set<uint32_t>> path_reach_out_set_end;
-//     for(auto path: expanded_pathes){
-//         uint32_t beg = path[0][0];
-//         uint32_t end = path[path.size()-1][1];  
-//         if(path_reach_out_set_beg.find(beg)==path_reach_out_set_beg.end()){
-//             path_reach_out_set_beg[beg] = set<uint32_t>();
-//             uint32_t num_incoming_arcs_beg = asg_arc_n(graph, beg^1);
-//             asg_arc_t *incoming_arcs_beg = asg_arc_a(graph, beg^1);
-//             for(int i = 0; i < num_incoming_arcs_beg; i++){
-//                 path_reach_out_set_beg[beg].insert(incoming_arcs_beg[i].v^1);
-//                 uint32_t num_incoming_arcs_beg_sec = asg_arc_n(graph, incoming_arcs_beg[i].v^1);
-//                 asg_arc_t *incoming_arcs_beg_sec = asg_arc_a(graph, incoming_arcs_beg[i].v^1);
-//                 for(int j = 0; j < num_incoming_arcs_beg_sec; j++){
-//                     path_reach_out_set_beg[beg].insert(incoming_arcs_beg_sec[j].v^1);
-//                 }
-//             }
-//         }
-//         if(path_reach_out_set_end.find(end)==path_reach_out_set_end.end()){
-//             path_reach_out_set_end[end] = set<uint32_t>();
-//             uint32_t num_outgoing_arcs_end = asg_arc_n(graph, end);
-//             asg_arc_t *outgoing_arcs_end = asg_arc_a(graph, end);
-//             for(int i = 0; i < num_outgoing_arcs_end; i++){
-//                 path_reach_out_set_end[end].insert(outgoing_arcs_end[i].v);
-//                 uint32_t num_outgoing_arcs_end_sec = asg_arc_n(graph, outgoing_arcs_end[i].v);
-//                 asg_arc_t *outgoing_arcs_end_sec = asg_arc_a(graph, outgoing_arcs_end[i].v);
-//                 for(int j = 0; j < num_outgoing_arcs_end_sec; j++){
-//                     path_reach_out_set_end[end].insert(outgoing_arcs_end_sec[j].v);
-//                 }
-//             }
-//         }
-//     }
-
-//     for(auto path: expanded_pathes){
-//         set<uint32_t> nodes;
-//         for(auto single_path: path){
-//             nodes.insert(bubble_chain_graph_full[single_path[0]][single_path[1]].begin(),
-//             bubble_chain_graph_full[single_path[0]][single_path[1]].end());
-//             nodes.insert(single_path[0]>>1);
-//             nodes.insert(single_path[1]>>1);
-//         }
-//         uint32_t beg = path[0][0];
-//         uint32_t end = path[path.size()-1][1];
-//         bool inserted = false;
-//         for(auto to_reach_out: expanded_pathes){
-//             uint32_t r_beg = to_reach_out[0][0];
-//             uint32_t r_end = to_reach_out[to_reach_out.size()-1][1]; 
-//             set<uint32_t> cur_nodes;
-//             for(auto single_path: to_reach_out){
-//                 cur_nodes.insert(bubble_chain_graph_full[single_path[0]][single_path[1]].begin(),
-//                 bubble_chain_graph_full[single_path[0]][single_path[1]].end());
-//                 cur_nodes.insert(single_path[0]>>1);
-//                 cur_nodes.insert(single_path[1]>>1);
-//             } 
-//             if(path_reach_out_set_beg[r_beg].find(end)!=path_reach_out_set_beg[r_beg].end() && 
-//             ( (cur_nodes.size()<10 || nodes.size()<10) || (branch_connections.find(path[path.size()-1])!=branch_connections.end()
-//                 && branch_connections[path[path.size()-1]].find(to_reach_out[0])!=branch_connections[path[path.size()-1]].end()
-//                 && branch_connections[path[path.size()-1]][to_reach_out[0]]>15))){
-//                 vector<uint32_t> vec;
-//                 vec.push_back(beg);
-//                 vec.push_back(to_reach_out[to_reach_out.size()-1][1]);
-//                 inserted = true;
-//                 cur_nodes.insert(nodes.begin(),nodes.end());
-//                 bool found = false;
-//                 uint32_t num_outgoing_arcs_end = asg_arc_n(graph, end);
-//                 asg_arc_t *outgoing_arcs_end = asg_arc_a(graph, end);
-//                 for(int i = 0; i < num_outgoing_arcs_end; i++){
-//                     if(found){
+//             uint32_t idx_0 = 1;
+//             for(int i = 0; i < best_2.size()-1; i++){
+//                 if(best_2[i+1] > 0){
+//                     idx_0++;
+//                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+//                         // valid = false;
 //                         break;
 //                     }
-//                     if(outgoing_arcs_end[i].v==to_reach_out[0][0]){
-//                         found = true;
-//                         break;
-//                     }
-//                     uint32_t num_outgoing_arcs_end_sec = asg_arc_n(graph, outgoing_arcs_end[i].v);
-//                     asg_arc_t *outgoing_arcs_end_sec = asg_arc_a(graph, outgoing_arcs_end[i].v);
-//                     for(int j = 0; j < num_outgoing_arcs_end_sec; j++){
-//                         if(outgoing_arcs_end_sec[j].v==to_reach_out[0][0]){
-//                             found = true;
-//                             cur_nodes.insert(outgoing_arcs_end[i].v);
-//                             break;
-//                         }
-//                     }
-//                 }
-//                 cout << "Connected " << graph->seq[beg>>1].name << " , " << graph->seq[end>>1].name << " , ";
-//                 cout << graph->seq[to_reach_out[0][0]>>1].name << " , " << graph->seq[to_reach_out[to_reach_out.size()-1][1]>>1].name << " , " << "Total Num: " << cur_nodes.size() << endl;
-//                 expanded_pathes_nodes[vec] = cur_nodes;
-//             }else if(path_reach_out_set_end[r_end].find(beg)!=path_reach_out_set_end[r_end].end() && 
-//             ( (cur_nodes.size()<10 || nodes.size()<10) || (branch_connections.find(to_reach_out[to_reach_out.size()-1])!=branch_connections.end()
-//                 && branch_connections[to_reach_out[to_reach_out.size()-1]].find(path[0])!=branch_connections[to_reach_out[to_reach_out.size()-1]].end()
-//                 && branch_connections[to_reach_out[to_reach_out.size()-1]][path[0]]>15))){
-//                 vector<uint32_t> vec;
-//                 vec.push_back(to_reach_out[0][0]);
-//                 vec.push_back(end);
-//                 inserted = true;
-//                 cur_nodes.insert(nodes.begin(),nodes.end());
-//                 bool found = false;
-//                 uint32_t num_incoming_arcs_beg = asg_arc_n(graph, beg^1);
-//                 asg_arc_t *incoming_arcs_beg = asg_arc_a(graph, beg^1);
-//                 for(int i = 0; i < num_incoming_arcs_beg; i++){
-//                     if(found){
-//                         break;
-//                     }
-//                     if(incoming_arcs_beg[i].v^1==to_reach_out[0][0]){
-//                         found = true;
-//                         break;
-//                     }
-//                     uint32_t num_incoming_arcs_beg_sec = asg_arc_n(graph, incoming_arcs_beg[i].v^1);
-//                     asg_arc_t *incoming_arcs_beg_sec = asg_arc_a(graph, incoming_arcs_beg[i].v^1);
-//                     for(int j = 0; j < num_incoming_arcs_beg_sec; j++){
-//                         if(incoming_arcs_beg_sec[j].v^1==to_reach_out[0][0]){
-//                             found = true;
-//                             cur_nodes.insert(incoming_arcs_beg[i].v^1);
-//                             break;
-//                         }
-//                     }
-//                 }
-//                 cout << "Connected " << graph->seq[to_reach_out[0][0]>>1].name << " , " << graph->seq[to_reach_out[to_reach_out.size()-1][1]>>1].name;
-//                 cout  << " , "  << graph->seq[beg>>1].name << " , " << graph->seq[end>>1].name << " , " << "Total Num: " << cur_nodes.size() << endl;
-//                 expanded_pathes_nodes[vec] = cur_nodes;
-//             }
-//         }
-//         if(!inserted){
-//             vector<uint32_t> vec;
-//             vec.push_back(beg);
-//             vec.push_back(end);
-//             expanded_pathes_nodes[vec] = nodes;
-//         }
-//     }
-
-//     uint32_t path_counting = 0;
-//     map<uint32_t,map<uint32_t,set<uint32_t>>> bubble_chain_graph_connected;
-//     for(auto path: expanded_pathes_nodes){
-//         uint32_t beg = path.first[0];
-//         uint32_t end = path.first[1];
-//         if((bubble_chain_graph_connected.find(end^1)!=bubble_chain_graph_connected.end()
-//         && bubble_chain_graph_connected[end^1].find(beg^1)!=bubble_chain_graph_connected[end^1].end()
-//         ) || (bubble_chain_graph_connected.find(beg)!=bubble_chain_graph_connected.end()
-//         && bubble_chain_graph_connected[beg].find(end)!=bubble_chain_graph_connected[beg].end()
-//         )){
-//             continue;
-//         }
-//         path_counting++;
-//         if(bubble_chain_graph_connected.find(beg)==bubble_chain_graph_connected.end()){
-//             bubble_chain_graph_connected[beg] = map<uint32_t,set<uint32_t>>();
-//         }
-//         bubble_chain_graph_connected[beg][end] = path.second;
-//     }
-
-//     cout << "Delete duplicated pathes, total unique pathes: ";
-//     cout << path_counting << endl;
-
-//     for(auto begin: bubble_chain_graph_connected){
-//         for(auto end: begin.second){
-//             cout << graph->seq[begin.first>>1].name <<" to " << graph->seq[end.first>>1].name << ": " << endl;
-//             for(auto node: end.second){
-//                 cout << graph->seq[node].name << ", ";
-//             }
-//             cout << endl;
-//         }
-//     }
-
-//     shared_data shared;
-//     shared.graph = graph;
-//     shared.connections_count = &connections_count;
-//     shared.node_path_id_map = &node_path_id_map;
-//     shared.node_bubble_map = &node_bubble_map;
-//     step_data step;
-//     step.p = &shared;
-//     step.beg_node = new vector<uint32_t>();
-//     step.end_node = new vector<uint32_t>();
-//     step.current_nodes = new vector<set<uint32_t>>();
-//     // for(auto beg: bubble_chain_graph_full){
-//     for(auto beg: bubble_chain_graph_connected){
-//         for(auto end: beg.second){
-//             // if(end.second.size() < 100){
-//                 step.beg_node->push_back(beg.first);
-//                 step.end_node->push_back(end.first);
-//                 step.current_nodes->push_back(end.second);
-//             // }
-//         }
-//     }
-
-//     // set<uint32_t> seen_nodes;
-// 	uint32_t** connect_num;
-// 	float **best_buddy;
-// 	bool **seen;
-//     uint32_t len = step.current_nodes->size();
-// 	connect_num = (uint32_t**)calloc(len,sizeof(uint32_t*));
-// 	best_buddy = (float**)calloc(len,sizeof(float*));
-// 	seen = (bool**)calloc(len,sizeof(bool*));
-
-// 	for(int i = 0; i < len; ++i){
-//         connect_num[i] = (uint32_t*)calloc(len, sizeof(uint32_t));
-//         seen[i] = (bool*)calloc(len, sizeof(bool));
-//         best_buddy[i] = (float*)calloc(len, sizeof(float));
-// 	}
-
-//     set<uint32_t> seen_nodes;
-//     for(auto x: (*step.current_nodes)){
-//         seen_nodes.insert(x.begin(),x.end());
-//     }
-
-//     ofstream covered_nodesFile;
-//     covered_nodesFile.open(string(output_directory)+string("/covered_nodes.txt"), ofstream::out | ofstream::trunc);
-//     for(auto n: seen_nodes){
-//         covered_nodesFile << string(graph->seq[n].name) << ",\t";
-//     }
-//     covered_nodesFile << endl;
-//     covered_nodesFile.close();
-//     cout << seen_nodes.size() << " out of " << graph->n_seq << endl;
-
-//     count_step cstep;
-//     cstep.counting_result = connect_num;
-//     cstep.connections_count = &connections_count;
-//     cstep.current_nodes = step.current_nodes;
-    
-//     kt_for(n_threads, counter_worker_single_step , &cstep, len);
-
-//     ofstream outFileScaffold;
-//     outFileScaffold.open(string(output_directory)+string("/scaffold_connection.txt"), ofstream::out | ofstream::trunc);
-//     for(int i = 0; i < len; i++){
-//         for(int j = 0; j < i; j++){
-//             if(connect_num[i][j]>0){
-//                 outFileScaffold << i << "\t" << j << "\t" << connect_num[i][j] << endl;
-//             }
-//         }
-//     }
-//     outFileScaffold.close();
-//     ofstream outFileScaffoldMap;
-//     outFileScaffoldMap.open(string(output_directory)+string("/scaffold_id_name.txt"), ofstream::out | ofstream::trunc);
-//     for(int p = 0; p < step.beg_node->size(); p++){
-//         outFileScaffoldMap << p << "\t"<< string(graph->seq[(*step.beg_node)[p]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[p]>>1].name)) << endl;
-//     }
-//     outFileScaffoldMap.close();
-    
-//     // vector<vector<uint32_t>> seen_sets(23);
-// 	// // uint32_t len = pl->global_counter/2;
-// 	// for(int i = 0; i < len; i++){
-// 	// 	for(int j = 0; j < len; j++){
-// 	// 		if(connect_num[i][j]==0 || i == j){
-// 	// 			seen[i][j] = true;
-// 	// 		}
-// 	// 	}
-// 	// }
-// 	// for(int s = 0; s < 23; s++){
-// 	// 	bool next = true;
-// 	// 	while(next){
-// 	// 		vector<pair<float, pair<uint32_t,uint32_t>>> result;
-// 	// 		next = false;
-// 	// 		update_best_buddy_haplo(seen, best_buddy,connect_num,len);
-// 	// 		for(int i = 0; i < len; i++){
-// 	// 			for(int j = 0; j < len; j++){
-// 	// 				if(i<j && !seen[i][j] && best_buddy[i][j] > 0.999){
-// 	// 					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-// 	// 				}
-// 	// 			}
-// 	// 		}
-// 	// 		sort(result.begin(), result.end(),
-// 	// 		[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-// 	// 			return r1.first > r2.first;
-// 	// 		});
-			
-// 	// 		for(auto res: result){
-// 	// 			bool found = false;
-// 	// 			for(int q = 0; q < s; q++){
-// 	// 				if(( find(seen_sets[q].begin(), seen_sets[q].end(), res.second.first) != seen_sets[q].end() ) || ( find(seen_sets[q].begin(), seen_sets[q].end(), res.second.second) != seen_sets[q].end() )){
-// 	// 					found = true;
-// 	// 					next = true;
-// 	// 					seen[res.second.first][res.second.second] = true;
-// 	// 					seen[res.second.second][res.second.first] = true;
-// 	// 					break;
-// 	// 				}
-// 	// 			}
-// 	// 			if(!found){
-// 	// 				if(seen_sets[s].size()==0){
-// 	// 					seen_sets[s].push_back(res.second.first);
-// 	// 					seen_sets[s].push_back(res.second.second);
-// 	// 					next = true;
-// 	// 					seen[res.second.first][res.second.second] = true;
-// 	// 					seen[res.second.second][res.second.first] = true;
-// 	// 				}else{
-// 	// 					if(( find(seen_sets[s].begin(), seen_sets[s].end(), res.second.first) != seen_sets[s].end() ) && ( find(seen_sets[s].begin(), seen_sets[s].end(), res.second.second) != seen_sets[s].end() )){
-// 	// 						next = true;
-// 	// 						seen[res.second.first][res.second.second] = true;
-// 	// 						seen[res.second.second][res.second.first] = true;
-// 	// 					}else if(seen_sets[s][0]==res.second.first){
-// 	// 						seen_sets[s].insert(seen_sets[s].begin(), res.second.second);
-// 	// 						next = true;
-// 	// 						seen[res.second.first][res.second.second] = true;
-// 	// 						seen[res.second.second][res.second.first] = true;
-// 	// 					}else if(seen_sets[s][0]==res.second.second){
-// 	// 						seen_sets[s].insert(seen_sets[s].begin(), res.second.first);
-// 	// 						next = true;
-// 	// 						seen[res.second.first][res.second.second] = true;
-// 	// 						seen[res.second.second][res.second.first] = true;
-// 	// 					}else if(seen_sets[s][seen_sets[s].size()-1]==res.second.first){
-// 	// 						seen_sets[s].push_back(res.second.second);
-// 	// 						next = true;
-// 	// 						seen[res.second.first][res.second.second] = true;
-// 	// 						seen[res.second.second][res.second.first] = true;
-// 	// 					}else if(seen_sets[s][seen_sets[s].size()-1]==res.second.second){
-// 	// 						seen_sets[s].push_back(res.second.first);
-// 	// 						next = true;
-// 	// 						seen[res.second.first][res.second.second] = true;
-// 	// 						seen[res.second.second][res.second.first] = true;
-// 	// 					}
-// 	// 				}
-// 	// 			}
-// 	// 		}
-// 	// 	}
-// 	// }
-	
-// 	// bool next = true;
-// 	// while(next){
-// 	// 	vector<pair<float, pair<uint32_t,uint32_t>>> result;
-// 	// 	next = false;
-// 	// 	update_best_buddy_haplo(seen, best_buddy,connect_num,len);
-// 	// 	for(int i = 0; i < len; i++){
-// 	// 		for(int j = 0; j < len; j++){
-// 	// 			if(i<j && !seen[i][j] && best_buddy[i][j] > 0.999){
-// 	// 				result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-// 	// 			}
-// 	// 		}
-// 	// 	}
-// 	// 	sort(result.begin(), result.end(),
-// 	// 	[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-// 	// 		return r1.first > r2.first;
-// 	// 	});
-		
-// 	// 	for(auto res: result){
-// 	// 		bool found = false;
-// 	// 		bool once = true;
-// 	// 		uint32_t id = 0;
-// 	// 		for(int q = 0; q < 23; q++){
-// 	// 			if(( find(seen_sets[q].begin(), seen_sets[q].end(), res.second.first) != seen_sets[q].end() ) || ( find(seen_sets[q].begin(), seen_sets[q].end(), res.second.second) != seen_sets[q].end() )){
-// 	// 				if(!found){
-// 	// 					found = true;
-// 	// 				}else{
-// 	// 					once = false;
-// 	// 				}
-// 	// 				// found = true;
-// 	// 				next = true;
-// 	// 				seen[res.second.first][res.second.second] = true;
-// 	// 				seen[res.second.second][res.second.first] = true;
-// 	// 				id = q;
-// 	// 				// break;
-// 	// 			}
-// 	// 		}
-// 	// 		if(found&&once){
-// 	// 			if(( find(seen_sets[id].begin(), seen_sets[id].end(), res.second.first) != seen_sets[id].end() ) && ( find(seen_sets[id].begin(), seen_sets[id].end(), res.second.second) != seen_sets[id].end() )){
-// 	// 				next = true;
-// 	// 				seen[res.second.first][res.second.second] = true;
-// 	// 				seen[res.second.second][res.second.first] = true;
-// 	// 			}else if(seen_sets[id][0]==res.second.first){
-// 	// 				seen_sets[id].insert(seen_sets[id].begin(), res.second.second);
-// 	// 				next = true;
-// 	// 				seen[res.second.first][res.second.second] = true;
-// 	// 				seen[res.second.second][res.second.first] = true;
-// 	// 			}else if(seen_sets[id][0]==res.second.second){
-// 	// 				seen_sets[id].insert(seen_sets[id].begin(), res.second.first);
-// 	// 				next = true;
-// 	// 				seen[res.second.first][res.second.second] = true;
-// 	// 				seen[res.second.second][res.second.first] = true;
-// 	// 			}else if(seen_sets[id][seen_sets[id].size()-1]==res.second.first){
-// 	// 				seen_sets[id].push_back(res.second.second);
-// 	// 				next = true;
-// 	// 				seen[res.second.first][res.second.second] = true;
-// 	// 				seen[res.second.second][res.second.first] = true;
-// 	// 			}else if(seen_sets[id][seen_sets[id].size()-1]==res.second.second){
-// 	// 				seen_sets[id].push_back(res.second.first);
-// 	// 				next = true;
-// 	// 				seen[res.second.first][res.second.second] = true;
-// 	// 				seen[res.second.second][res.second.first] = true;
-// 	// 			}
-// 	// 		}
-// 	// 	}
-// 	// }
-
-// 	// printf("Result:\n");
-// 	// for(int i = 0; i < seen_sets.size(); i++){
-// 	// 	vector<uint32_t> cur_set = seen_sets[i];
-// 	// 	for(auto p:cur_set){
-//     //         cout << string(graph->seq[(*step.beg_node)[p]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[p]>>1].name))+string(", ");
-// 	// 	}
-//     //     cout << endl;
-// 	// }
-	
-// 	for(int i = 0; i < len; i++){
-// 		for(int j = 0; j < len; j++){
-// 			if(connect_num[i][j] ==0 || i == j){
-// 				seen[i][j] = true;
-// 			}
-// 		}
-// 	}
-// 	vector<vector<uint32_t>> graph_connection;
-// 	bool next = true;
-// 	set<uint32_t> seen_node;
-//     uint32_t safe_break = 0;
-// 	// while(next){
-// 	while(seen_node.size()!=len && safe_break <= 100 && next){
-//         next = false;
-//         safe_break++;
-// 		// for(auto n: seen_node){
-// 		// 	printf("%d, ",n);
-// 		// }
-// 		// printf("\n");
-// 		vector<pair<float, pair<uint32_t,uint32_t>>> result;
-// 		// next = false;
-// 		update_best_buddy_haplo(seen, best_buddy,connect_num,len);
-// 		for(int i = 0; i < len; i++){
-// 			for(int j = 0; j < len; j++){
-// 				if(i<j && !seen[i][j] && best_buddy[i][j] > 0.999){
-// 					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-// 				}
-// 			}
-// 		}
-		
-// 		sort(result.begin(), result.end(),
-// 		[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-// 			return r1.first > r2.first;
-// 		});
-//         printf("%d",result.size());
-	
-// 		for(auto res: result){
-// 			// printf("%d, %d\n",res.second.first,res.second.second);
-// 			next = true;
-//             seen[res.second.first][res.second.second] = true;
-//             seen[res.second.second][res.second.first] = true;
-// 			bool found = false;
-// 			uint32_t idx_i = 65535;
-// 			uint32_t idx_j = 65535;
-// 			uint32_t idx_i_sub = 65535;
-// 			uint32_t idx_j_sub = 65535;
-// 			for(int i = 0; i < graph_connection.size(); i++){
-// 				if(find(graph_connection[i].begin(), graph_connection[i].end(), res.second.first)!=graph_connection[i].end()){
-// 					for(int idx=0; idx<graph_connection[i].size(); idx++){
-// 						if(graph_connection[i][idx]==res.second.first){
-// 							idx_i_sub = idx;
-// 						}
-// 					}
-// 					idx_i = i;
-// 					found = true;
-// 				}
-// 				if(find(graph_connection[i].begin(), graph_connection[i].end(), res.second.second)!=graph_connection[i].end()){
-// 					for(int idx=0; idx<graph_connection[i].size(); idx++){
-// 						if(graph_connection[i][idx]==res.second.second){
-// 							idx_j_sub = idx;
-// 						}
-// 					}
-// 					idx_j = i;
-// 					found = true;
-// 				}
-// 			}
-// 			if(!found){
-// 				vector<uint32_t> buf;
-// 				buf.push_back(min(res.second.first, res.second.second));
-// 				buf.push_back(max(res.second.first, res.second.second));
-// 				graph_connection.push_back(buf);
-// 				seen_node.insert(res.second.first);
-// 				seen_node.insert(res.second.second);
-//                 safe_break = 0;
-// 			}else{
-// 				vector<uint32_t> connect_i;
-// 				vector<uint32_t> connect_j;
-// 				if(idx_i!=65535){
-// 					vector<uint32_t> connect_i = graph_connection[idx_i];
-// 				}
-// 				if(idx_j!=65535){
-// 					vector<uint32_t> connect_j = graph_connection[idx_j];
-// 				}
-// 				if(idx_i == idx_j){
-//                     safe_break = 0;
 //                 }else{
-// 					if(idx_i == 65535){
-// 						if(idx_j_sub >= graph_connection[idx_j].size()/2){
-// 							graph_connection[idx_j].push_back(res.second.first);
-// 						}else{
-// 							graph_connection[idx_j].insert(graph_connection[idx_j].begin(), res.second.first);
-// 						}
-// 						seen_node.insert(res.second.first);
-// 						seen_node.insert(res.second.second);
-//                         safe_break = 0;
-// 					}else if(idx_j == 65535){
-// 						if(idx_i_sub >= graph_connection[idx_i].size()/2){
-// 							graph_connection[idx_i].push_back(res.second.second);
-// 						}else{
-// 							graph_connection[idx_i].insert(graph_connection[idx_i].begin(), res.second.second);
-// 						}
-// 						seen_node.insert(res.second.first);
-// 						seen_node.insert(res.second.second);
-//                         safe_break = 0;
-// 					}else{
-// 						// graph_connection.erase(graph_connection.begin()+idx_i);
-// 						// graph_connection.erase(graph_connection.begin()+idx_j);
-// 						if(idx_i_sub >= graph_connection[idx_i].size()/2 && idx_j_sub < graph_connection[idx_j].size()/2){
-// 							for(auto n: graph_connection[idx_j]){
-// 								graph_connection[idx_i].push_back(n);
-// 							}
-// 						}else if(idx_i_sub >= graph_connection[idx_i].size()/2 && idx_j_sub >= graph_connection[idx_j].size()/2){
-// 							reverse(graph_connection[idx_j].begin(), graph_connection[idx_j].end());
-// 							for(auto n: graph_connection[idx_j]){
-// 								graph_connection[idx_i].push_back(n);
-// 							}
-// 						}else if(idx_i_sub < graph_connection[idx_i].size()/2 && idx_j_sub < graph_connection[idx_j].size()/2){
-// 							reverse(graph_connection[idx_i].begin(), graph_connection[idx_i].end());
-// 							for(auto n: graph_connection[idx_j]){
-// 								graph_connection[idx_i].push_back(n);
-// 							}
-// 						}else if(idx_i_sub < graph_connection[idx_i].size()/2 && idx_j_sub >= graph_connection[idx_j].size()/2){
-// 							reverse(graph_connection[idx_i].begin(), graph_connection[idx_i].end());
-// 							reverse(graph_connection[idx_j].begin(), graph_connection[idx_j].end());
-// 							for(auto n: graph_connection[idx_j]){
-// 								graph_connection[idx_i].push_back(n);
-// 							}
-// 						}
-// 						graph_connection.erase(graph_connection.begin()+idx_j);
-// 						// connect_i.insert( connect_i.end(), connect_j.begin(), connect_j.end() );
-// 						// graph_connection.push_back(connect_i);
-// 						seen_node.insert(res.second.first);
-// 						seen_node.insert(res.second.second);
-//                         safe_break = 0;
-					
-//                     }
-// 				}
-
-// 			}
-// 		}
-//         for(int i = 0; i < len ; i++){
-//             for(int j = 0; j<len ; j++){
-//                 if(!seen[i][j]){
-//                     next = true;
 //                     break;
 //                 }
 //             }
+//             uint32_t best_2_total = 0;
+//             for(auto i : best_2){
+//                 best_2_total += i;
+//             }
+//             if(!valid){
+//                 scores.push_back(0);
+//             }else{
+//                 scores.push_back(best_2_total/idx_0);
+//             }
 //         }
-// 		printf("%d\n",seen_node.size());
-// 	}
-	
-
-// 	printf("Result:\n");
-//     ofstream outFileScaffoldResult;
-//     outFileScaffoldResult.open(string(output_directory)+string("/scaffold_result.txt"), ofstream::out | ofstream::trunc);
-// 	for(int i = 0; i < graph_connection.size(); i++){
-// 		vector<uint32_t> cur_set = graph_connection[i];
-// 		for(auto p:cur_set){
-//             outFileScaffoldResult << string(graph->seq[(*step.beg_node)[p]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[p]>>1].name))+string(", ");
-// 		}
-//         outFileScaffoldResult << endl;
-// 	}
-//     outFileScaffoldResult.close();
-
-//     step.results = (string*)calloc(step.beg_node->size(),sizeof(string));
-
-//     kt_for(n_threads, worker_for_single_step , &step, step.beg_node->size());
-
-//     ofstream outFile;
-//     outFile.open(string(output_directory)+string("/pred_haplotypes.fa"), ofstream::out | ofstream::trunc);
-//     for(int i = 0; i < step.beg_node->size(); i++){
-//         outFile << step.results[i];
+        
+//         uint32_t max_idx = 0;
+//         uint32_t max_score = 900;
+//         for(int i = 0; i < scores.size(); i++){
+//             if(max_score < scores[i]){
+//                 max_score = scores[i];
+//                 max_idx = i;
+//             }
+//         }
+//         if(max_idx!=900){
+//             cur_scaffold_result[max_idx].push_back(n);
+//             seen_node.insert(n);
+//         }
 //     }
-//     outFile.close();
-// }
+
+    // new_scaffold_result = cur_scaffold_result;
 
 
 
 
-
-vector<vector<uint32_t>> best_buddy_calculation(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len){
-    vector<vector<uint32_t>> graph_connection;
-
-	bool next = true;
-	set<uint32_t> seen_node;
-    uint32_t safe_break = 0;
-    uint32_t iteration = 0;
-	// while(next){
-	while(seen_node.size()<len && safe_break <= 5 && next){
-        next = false;
-        safe_break++;
-		// for(auto n: seen_node){
-		// 	printf("%d, ",n);
-		// }
-		// printf("\n");
-		vector<pair<float, pair<uint32_t,uint32_t>>> result;
-		// next = false;
-		update_best_buddy_haplo_general(seen, best_buddy,connect_num,len);
-        cout << "Update best buddy score." << endl;
-		for(int i = 0; i < len; i++){
-			for(int j = 0; j < len; j++){
-				if(best_buddy[i][j] > 0.999){
-                    if(connect_num[i][j]>300){
-                        next = true;
-                    }
-					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-				}
-			}
-		}
-		if(!next){
-            break;
-        }
-		sort(result.begin(), result.end(),
-		[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-			return r1.first > r2.first;
-		});
-        cout << "Get potential connections " << result.size() << "." << endl;
-
-        for(auto res:result){
-            if(!seen[res.second.first][res.second.second]){
-                // seen_node.insert((res.second.first));
-                // seen_node.insert((res.second.second));
-                safe_break = 0;
-                bool erase_connection = false;
-                bool found = false;
-                uint16_t idx_i = 65535;
-                uint16_t idx_j = 65535;
-                uint16_t idx_i_sub = 65535;
-                uint16_t idx_j_sub = 65535;
-                for(int i = 0; i < graph_connection.size(); i++){
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.first)){
-                                idx_i_sub = idx;
-                            }
-                        }
-                        idx_i = i;
-                        found = true;
-                    }
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.second)){
-                                idx_j_sub = idx;
-                            }
-                        }
-                        idx_j = i;
-                        found = true;
-                    }
-                }
-                if(found && idx_i == idx_j){
-                    erase_connection = true;
-                }else if(!found){
-                    if(connect_num[res.second.first][res.second.second] > 300){
-                        vector<uint32_t> buf;
-                        buf.push_back(res.second.first);
-                        buf.push_back(res.second.second);
-                        graph_connection.push_back(buf);
-                        seen_node.insert((res.second.first));
-                        seen_node.insert((res.second.second));
-                    }else{
-                        erase_connection = true;
-                    }
-                }else if(idx_j!=65535 && idx_i!=65535){
-
-                    // assert(idx_j_sub == 0);
-                    // assert(idx_i_sub == graph_connection[idx_i].size()-1);
-
-
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
-                    adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
-                    uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
-                    }
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
-                    }
-                    average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 300){
-                        erase_connection = true;
-                    }else{
-                        graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
-                        graph_connection.erase(graph_connection.begin()+idx_j);
-                    }
-                }else if(idx_j!=65535){
-                    // assert(idx_j_sub == 0);
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
-                    uint32_t average_connection = 0;
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
-                    }
-                    average_connection/=graph_connection[idx_j].size()-1;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 300){
-                        erase_connection = true;
-                    }else{
-                        graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first));
-                        seen_node.insert((res.second.first));
-                    }
-                }else if(idx_i!=65535){
-                    // assert(idx_i_sub == graph_connection[idx_i].size()-1);
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
-                    uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
-                    }
-                    average_connection/=graph_connection[idx_i].size()-1;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 300){
-                        erase_connection = true;
-                    }else{
-                        graph_connection[idx_i].push_back((res.second.second));
-                        seen_node.insert((res.second.second));
-                    }
-                }
-                
-                
-                if(!erase_connection){
-                    for(int q = 0; q < len; q++){
-                        seen[res.second.first][q] = true;
-                        seen[q][res.second.second] = true;
-                    }
-                }
-                seen[res.second.first][res.second.second] = true;
-                seen[res.second.second][res.second.first] = true;
-                
-            }
-        }
-        cout << "Insert connections." << endl;
-        cout << "Save graphs and scores." << endl;
-
-        uint32_t counting_left = 0;
-        for(int i = 0; i < len ; i++){
-            for(int j = 0; j < len ; j++){
-                if(!seen[i][j]){
-                    next = true;
-                    counting_left++;
-                }
-            }
-        }
-		cout << "Nodes in graph: " << seen_node.size() << "." << endl;
-		cout << "Left edges: " << counting_left << "." << endl;
-        iteration++;
-	}
-	for(int i = 0; i<len; i++){
-        if(seen_node.find(i)==seen_node.end()){
-            vector<uint32_t> to_insert;
-            to_insert.push_back(i);
-            graph_connection.push_back(to_insert);
-        }
-    }
-    cout << "Finish get scaffolds." << endl;
-    return graph_connection;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-void get_haplotype_path_dev(uint32_t** connect_num, map<string, uint32_t> contig_lengths, map<string, uint32_t> contig_id, map<uint32_t, string> id_contig, char* output_directory, int n_threads){
-    system((string("rm -r ")+string(output_directory)).c_str());
-    mkdir(output_directory, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-    
-    uint32_t long_threshold = 10000000;
-    uint32_t len = contig_lengths.size();
-	float **best_buddy;
-	bool **seen;
-	best_buddy = (float**)calloc(len*4,sizeof(float*));
-	seen = (bool**)calloc(len*4,sizeof(bool*));
-
-    set<string> exclude_contigs;
-
-exclude_contigs.insert(string("utg041097l_utg051380l"));
-exclude_contigs.insert(string("utg041097l_utg051380l"));
-exclude_contigs.insert(string("utg035642l_utg053909l"));
-exclude_contigs.insert(string("utg035642l_utg053909l"));
-exclude_contigs.insert(string("utg007277l_utg042965l"));
-exclude_contigs.insert(string("utg007277l_utg042965l"));
-exclude_contigs.insert(string("utg007277l_utg042965l"));
-exclude_contigs.insert(string("utg007277l_utg042965l"));
-exclude_contigs.insert(string("utg051707l_utg053268l"));
-exclude_contigs.insert(string("utg051707l_utg053268l"));
-exclude_contigs.insert(string("utg002230l_utg006153l"));
-exclude_contigs.insert(string("utg002230l_utg006153l"));
-exclude_contigs.insert(string("utg002704l_utg043145l"));
-exclude_contigs.insert(string("utg002704l_utg043145l"));
-exclude_contigs.insert(string("utg008671l_utg053981l"));
-exclude_contigs.insert(string("utg005506l_utg046692l"));
-exclude_contigs.insert(string("utg021338l_utg044416l"));
-exclude_contigs.insert(string("utg021338l_utg044416l"));
-exclude_contigs.insert(string("utg008808l_utg040440l"));
-exclude_contigs.insert(string("utg008808l_utg040440l"));
-exclude_contigs.insert(string("utg025421l_utg049181l"));
-exclude_contigs.insert(string("utg025421l_utg049181l"));
-exclude_contigs.insert(string("utg010574l_utg019836l"));
-exclude_contigs.insert(string("utg010574l_utg019836l"));
-exclude_contigs.insert(string("utg006997l_utg027435l"));
-exclude_contigs.insert(string("utg006997l_utg027435l"));
-exclude_contigs.insert(string("utg006997l_utg027435l"));
-exclude_contigs.insert(string("utg006997l_utg027435l"));
-exclude_contigs.insert(string("utg006997l_utg027435l"));
-exclude_contigs.insert(string("utg006997l_utg027435l"));
-exclude_contigs.insert(string("utg018221l_utg040016l"));
-exclude_contigs.insert(string("utg018221l_utg040016l"));
-exclude_contigs.insert(string("utg047829l_utg054451l"));
-exclude_contigs.insert(string("utg047829l_utg054451l"));
-exclude_contigs.insert(string("utg014709l_utg016152l"));
-exclude_contigs.insert(string("utg014709l_utg016152l"));
-exclude_contigs.insert(string("utg000145l_utg013840l"));
-exclude_contigs.insert(string("utg000145l_utg013840l"));
-exclude_contigs.insert(string("utg013813l_utg013878l"));
-exclude_contigs.insert(string("utg013813l_utg013878l"));
-exclude_contigs.insert(string("utg023262l_utg046186l"));
-exclude_contigs.insert(string("utg023262l_utg046186l"));
-exclude_contigs.insert(string("utg035538l_utg042273l"));
-exclude_contigs.insert(string("utg035538l_utg042273l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg040771l_utg002780l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg002780l_utg051984l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg000716l_utg041076l"));
-exclude_contigs.insert(string("utg003984l_utg044427l"));
-exclude_contigs.insert(string("utg003984l_utg044427l"));
-exclude_contigs.insert(string("utg003984l_utg044427l"));
-exclude_contigs.insert(string("utg003984l_utg044427l"));
-exclude_contigs.insert(string("utg003984l_utg044427l"));
-exclude_contigs.insert(string("utg003984l_utg044427l"));
-exclude_contigs.insert(string("utg036718l_utg046733l"));
-exclude_contigs.insert(string("utg036718l_utg046733l"));
-exclude_contigs.insert(string("utg039497l_utg051991l"));
-exclude_contigs.insert(string("utg039497l_utg051991l"));
-exclude_contigs.insert(string("utg002860l_utg014366l"));
-exclude_contigs.insert(string("utg002860l_utg014366l"));
-exclude_contigs.insert(string("utg044515l_utg048660l"));
-exclude_contigs.insert(string("utg044515l_utg048660l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg002780l_utg041076l"));
-exclude_contigs.insert(string("utg021518l_utg049098l"));
-exclude_contigs.insert(string("utg021518l_utg049098l"));
-exclude_contigs.insert(string("utg044760l_utg050550l"));
-exclude_contigs.insert(string("utg044760l_utg050550l"));
-exclude_contigs.insert(string("utg000766l_utg030385l"));
-exclude_contigs.insert(string("utg000766l_utg030385l"));
-exclude_contigs.insert(string("utg000766l_utg030385l"));
-exclude_contigs.insert(string("utg000766l_utg030385l"));
-exclude_contigs.insert(string("utg000766l_utg030385l"));
-exclude_contigs.insert(string("utg000766l_utg030385l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg036154l_utg006835l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg006835l_utg045680l"));
-exclude_contigs.insert(string("utg016898l_utg031065l"));
-exclude_contigs.insert(string("utg016898l_utg031065l"));
-exclude_contigs.insert(string("utg017789l_utg024400l"));
-exclude_contigs.insert(string("utg017789l_utg024400l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg030758l_utg002780l"));
-exclude_contigs.insert(string("utg041665l_utg036718l"));
-exclude_contigs.insert(string("utg041665l_utg036718l"));
-exclude_contigs.insert(string("utg000906l_utg023679l"));
-exclude_contigs.insert(string("utg000906l_utg023679l"));
-exclude_contigs.insert(string("utg004349l_utg030145l"));
-exclude_contigs.insert(string("utg004349l_utg030145l"));
-exclude_contigs.insert(string("utg004349l_utg030145l"));
-exclude_contigs.insert(string("utg004349l_utg030145l"));
-exclude_contigs.insert(string("utg004349l_utg030145l"));
-exclude_contigs.insert(string("utg004349l_utg030145l"));
-exclude_contigs.insert(string("utg004974l_utg044515l"));
-exclude_contigs.insert(string("utg004974l_utg044515l"));
-exclude_contigs.insert(string("utg020359l_utg036058l"));
-exclude_contigs.insert(string("utg020359l_utg036058l"));
-exclude_contigs.insert(string("utg003984l_utg021841l"));
-exclude_contigs.insert(string("utg003984l_utg021841l"));
-exclude_contigs.insert(string("utg003984l_utg021841l"));
-exclude_contigs.insert(string("utg003984l_utg021841l"));
-exclude_contigs.insert(string("utg003984l_utg021841l"));
-exclude_contigs.insert(string("utg003984l_utg021841l"));
-exclude_contigs.insert(string("utg013298l_utg016483l"));
-exclude_contigs.insert(string("utg013298l_utg016483l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg004086l_utg029347l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg006835l_utg028209l"));
-exclude_contigs.insert(string("utg003588l_utg005153l"));
-exclude_contigs.insert(string("utg003588l_utg005153l"));
-exclude_contigs.insert(string("utg004091l_utg044760l"));
-exclude_contigs.insert(string("utg004091l_utg044760l"));
-exclude_contigs.insert(string("utg003015l_utg034555l"));
-exclude_contigs.insert(string("utg003015l_utg034555l"));
-exclude_contigs.insert(string("utg003015l_utg034555l"));
-exclude_contigs.insert(string("utg003015l_utg034555l"));
-exclude_contigs.insert(string("utg003015l_utg034555l"));
-exclude_contigs.insert(string("utg003015l_utg034555l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg000692l_utg006607l"));
-exclude_contigs.insert(string("utg008445l_utg012617l"));
-exclude_contigs.insert(string("utg008445l_utg012617l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg024960l_utg004086l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg001107l_utg030385l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg020838l_utg001107l"));
-exclude_contigs.insert(string("utg002115l_utg044254l"));
-exclude_contigs.insert(string("utg002115l_utg044254l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004086l_utg012235l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg004761l_utg033132l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg000313l_utg004761l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg003268l_utg051152l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg043174l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg047074l_utg003268l"));
-exclude_contigs.insert(string("utg004523l_utg042649l"));
-exclude_contigs.insert(string("utg004523l_utg042649l"));
-exclude_contigs.insert(string("utg006997l_utg031423l"));
-exclude_contigs.insert(string("utg006997l_utg031423l"));
-exclude_contigs.insert(string("utg006997l_utg031423l"));
-exclude_contigs.insert(string("utg006997l_utg031423l"));
-exclude_contigs.insert(string("utg006997l_utg031423l"));
-exclude_contigs.insert(string("utg006997l_utg031423l"));
-exclude_contigs.insert(string("utg005321l_utg006858l"));
-exclude_contigs.insert(string("utg005321l_utg006858l"));
-exclude_contigs.insert(string("utg002262l_utg051814l"));
-exclude_contigs.insert(string("utg002262l_utg051814l"));
-exclude_contigs.insert(string("utg002262l_utg051814l"));
-exclude_contigs.insert(string("utg002262l_utg051814l"));
-exclude_contigs.insert(string("utg044381l_utg044707l"));
-exclude_contigs.insert(string("utg044381l_utg044707l"));
-exclude_contigs.insert(string("utg015037l_utg001037l"));
-exclude_contigs.insert(string("utg015037l_utg001037l"));
-exclude_contigs.insert(string("utg015037l_utg001037l"));
-exclude_contigs.insert(string("utg015037l_utg001037l"));
-exclude_contigs.insert(string("utg015037l_utg001037l"));
-exclude_contigs.insert(string("utg015037l_utg001037l"));
-exclude_contigs.insert(string("utg004314l_utg004508l"));
-exclude_contigs.insert(string("utg004314l_utg004508l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg000810l_utg040386l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg040105l_utg000810l"));
-exclude_contigs.insert(string("utg006596l_utg028656l"));
-exclude_contigs.insert(string("utg006596l_utg028656l"));
-exclude_contigs.insert(string("utg004880l_utg012360l"));
-exclude_contigs.insert(string("utg004880l_utg012360l"));
-exclude_contigs.insert(string("utg004880l_utg012360l"));
-exclude_contigs.insert(string("utg004880l_utg012360l"));
-exclude_contigs.insert(string("utg004880l_utg012360l"));
-exclude_contigs.insert(string("utg004880l_utg012360l"));
-exclude_contigs.insert(string("utg012360l_utg027900l"));
-exclude_contigs.insert(string("utg012360l_utg027900l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg004132l_utg024291l"));
-exclude_contigs.insert(string("utg037768l_utg038014l"));
-exclude_contigs.insert(string("utg037768l_utg038014l"));
-exclude_contigs.insert(string("utg000010l_utg048228l"));
-exclude_contigs.insert(string("utg000010l_utg048228l"));
-exclude_contigs.insert(string("utg000010l_utg048228l"));
-exclude_contigs.insert(string("utg000010l_utg048228l"));
-exclude_contigs.insert(string("utg000010l_utg048228l"));
-exclude_contigs.insert(string("utg000010l_utg048228l"));
-exclude_contigs.insert(string("utg034557l_utg046836l"));
-exclude_contigs.insert(string("utg034557l_utg046836l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg003500l_utg020523l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg000704l_utg004132l"));
-exclude_contigs.insert(string("utg001037l_utg020523l"));
-exclude_contigs.insert(string("utg001037l_utg020523l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg000318l_utg053847l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg003460l_utg052877l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg004467l_utg031328l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg002796l_utg004467l"));
-exclude_contigs.insert(string("utg004887l_utg013061l"));
-exclude_contigs.insert(string("utg004887l_utg013061l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg027902l_utg003460l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg000318l_utg040386l"));
-exclude_contigs.insert(string("utg008192l_utg004880l"));
-exclude_contigs.insert(string("utg008192l_utg004880l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg004467l_utg033157l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg015037l_utg003500l"));
-exclude_contigs.insert(string("utg001927l_utg025421l"));
-exclude_contigs.insert(string("utg001927l_utg025421l"));
-exclude_contigs.insert(string("utg014288l_utg043895l"));
-exclude_contigs.insert(string("utg014288l_utg043895l"));
-exclude_contigs.insert(string("utg004924l_utg029795l"));
-exclude_contigs.insert(string("utg004924l_utg029795l"));
-exclude_contigs.insert(string("utg003913l_utg005643l"));
-exclude_contigs.insert(string("utg003913l_utg005643l"));
-exclude_contigs.insert(string("utg002869l_utg049377l"));
-exclude_contigs.insert(string("utg005627l_utg014804l"));
-exclude_contigs.insert(string("utg005627l_utg014804l"));
-exclude_contigs.insert(string("utg002869l_utg049377l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg003268l_utg007744l"));
-exclude_contigs.insert(string("utg045447l_utg050609l"));
-exclude_contigs.insert(string("utg045447l_utg050609l"));
-exclude_contigs.insert(string("utg000867l_utg052831l"));
-exclude_contigs.insert(string("utg000867l_utg052831l"));
-exclude_contigs.insert(string("utg005042l_utg039313l"));
-exclude_contigs.insert(string("utg005042l_utg039313l"));
-exclude_contigs.insert(string("utg000696l_utg001385l"));
-exclude_contigs.insert(string("utg000696l_utg001385l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg018575l_utg003500l"));
-exclude_contigs.insert(string("utg004096l_utg007012l"));
-exclude_contigs.insert(string("utg004096l_utg007012l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg000810l_utg042631l"));
-exclude_contigs.insert(string("utg022579l_utg050964l"));
-exclude_contigs.insert(string("utg022579l_utg050964l"));
-exclude_contigs.insert(string("utg002876l_utg027758l"));
-exclude_contigs.insert(string("utg002876l_utg027758l"));
-exclude_contigs.insert(string("utg005006l_utg048022l"));
-exclude_contigs.insert(string("utg005006l_utg048022l"));
-exclude_contigs.insert(string("utg005006l_utg048022l"));
-exclude_contigs.insert(string("utg005006l_utg048022l"));
-exclude_contigs.insert(string("utg005006l_utg048022l"));
-exclude_contigs.insert(string("utg005006l_utg048022l"));
-exclude_contigs.insert(string("utg005006l_utg044427l"));
-exclude_contigs.insert(string("utg005006l_utg044427l"));
-exclude_contigs.insert(string("utg005006l_utg044427l"));
-exclude_contigs.insert(string("utg005006l_utg044427l"));
-exclude_contigs.insert(string("utg005006l_utg044427l"));
-exclude_contigs.insert(string("utg005006l_utg044427l"));
-exclude_contigs.insert(string("utg015152l_utg016059l"));
-exclude_contigs.insert(string("utg015152l_utg016059l"));
-exclude_contigs.insert(string("utg015152l_utg016059l"));
-exclude_contigs.insert(string("utg015152l_utg016059l"));
-exclude_contigs.insert(string("utg018649l_utg050964l"));
-exclude_contigs.insert(string("utg018649l_utg050964l"));
-exclude_contigs.insert(string("utg004132l_utg012669l"));
-exclude_contigs.insert(string("utg004132l_utg012669l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg000185l_utg037941l"));
-exclude_contigs.insert(string("utg026909l_utg051881l"));
-exclude_contigs.insert(string("utg026909l_utg051881l"));
-exclude_contigs.insert(string("utg035474l_utg051374l"));
-exclude_contigs.insert(string("utg035474l_utg051374l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg000185l_utg026748l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg017820l_utg000185l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg004594l_utg004860l"));
-exclude_contigs.insert(string("utg007446l_utg020714l"));
-exclude_contigs.insert(string("utg007446l_utg020714l"));
-exclude_contigs.insert(string("utg043806l_utg045447l"));
-exclude_contigs.insert(string("utg043806l_utg045447l"));
-exclude_contigs.insert(string("utg000105l_utg000224l"));
-exclude_contigs.insert(string("utg000105l_utg000224l"));
-exclude_contigs.insert(string("utg001055l_utg002860l"));
-exclude_contigs.insert(string("utg001055l_utg002860l"));
-exclude_contigs.insert(string("utg006086l_utg022897l"));
-exclude_contigs.insert(string("utg006086l_utg022897l"));
-exclude_contigs.insert(string("utg036926l_utg054252l"));
-exclude_contigs.insert(string("utg036926l_utg054252l"));
-exclude_contigs.insert(string("utg041076l_utg044477l"));
-exclude_contigs.insert(string("utg041076l_utg044477l"));
-exclude_contigs.insert(string("utg004976l_utg036704l"));
-exclude_contigs.insert(string("utg004976l_utg036704l"));
-exclude_contigs.insert(string("utg000429l_utg019293l"));
-exclude_contigs.insert(string("utg000429l_utg019293l"));
-exclude_contigs.insert(string("utg000429l_utg019293l"));
-exclude_contigs.insert(string("utg000429l_utg019293l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg008667l_utg043462l"));
-exclude_contigs.insert(string("utg005071l_utg016058l"));
-exclude_contigs.insert(string("utg005071l_utg016058l"));
-exclude_contigs.insert(string("utg005071l_utg016058l"));
-exclude_contigs.insert(string("utg005071l_utg016058l"));
-exclude_contigs.insert(string("utg005071l_utg016058l"));
-exclude_contigs.insert(string("utg005071l_utg016058l"));
-exclude_contigs.insert(string("utg001091l_utg044273l"));
-exclude_contigs.insert(string("utg001091l_utg044273l"));
-exclude_contigs.insert(string("utg008536l_utg017401l"));
-exclude_contigs.insert(string("utg008536l_utg017401l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg001146l_utg051878l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg030130l_utg001146l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg001146l_utg011603l"));
-exclude_contigs.insert(string("utg016490l_utg053506l"));
-exclude_contigs.insert(string("utg016490l_utg053506l"));
-exclude_contigs.insert(string("utg004291l_utg036737l"));
-exclude_contigs.insert(string("utg004291l_utg036737l"));
-exclude_contigs.insert(string("utg004291l_utg036737l"));
-exclude_contigs.insert(string("utg004291l_utg036737l"));
-exclude_contigs.insert(string("utg004291l_utg036737l"));
-exclude_contigs.insert(string("utg004291l_utg036737l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg003619l_utg010695l"));
-exclude_contigs.insert(string("utg002236l_utg005071l"));
-exclude_contigs.insert(string("utg002236l_utg005071l"));
-exclude_contigs.insert(string("utg002236l_utg005071l"));
-exclude_contigs.insert(string("utg002236l_utg005071l"));
-exclude_contigs.insert(string("utg002236l_utg005071l"));
-exclude_contigs.insert(string("utg002236l_utg005071l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg000613l_utg042273l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg001150l_utg053692l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg028894l_utg001150l"));
-exclude_contigs.insert(string("utg003460l_utg011278l"));
-exclude_contigs.insert(string("utg003460l_utg011278l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg007127l_utg003619l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg001150l_utg044124l"));
-exclude_contigs.insert(string("utg007126l_utg048573l"));
-exclude_contigs.insert(string("utg007126l_utg048573l"));
-exclude_contigs.insert(string("utg014695l_utg021199l"));
-exclude_contigs.insert(string("utg014695l_utg021199l"));
-exclude_contigs.insert(string("utg033243l_utg046360l"));
-exclude_contigs.insert(string("utg033243l_utg046360l"));
-exclude_contigs.insert(string("utg016930l_utg020411l"));
-exclude_contigs.insert(string("utg016930l_utg020411l"));
-exclude_contigs.insert(string("utg000766l_utg001176l"));
-exclude_contigs.insert(string("utg000766l_utg001176l"));
-exclude_contigs.insert(string("utg000311l_utg003927l"));
-exclude_contigs.insert(string("utg000311l_utg003927l"));
-exclude_contigs.insert(string("utg049752l_utg049752l"));
-exclude_contigs.insert(string("utg049752l_utg049752l"));
-exclude_contigs.insert(string("utg015848l_utg046360l"));
-exclude_contigs.insert(string("utg015848l_utg046360l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg008667l_utg019103l"));
-exclude_contigs.insert(string("utg002414l_utg002795l"));
-exclude_contigs.insert(string("utg002414l_utg002795l"));
-exclude_contigs.insert(string("utg003619l_utg013353l"));
-exclude_contigs.insert(string("utg003619l_utg013353l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011603l_utg047879l"));
-exclude_contigs.insert(string("utg011853l_utg052760l"));
-exclude_contigs.insert(string("utg011853l_utg052760l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg017736l_utg000828l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg000828l_utg050151l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg019202l_utg000828l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg000828l_utg041013l"));
-exclude_contigs.insert(string("utg017227l_utg034520l"));
-exclude_contigs.insert(string("utg017227l_utg034520l"));
-exclude_contigs.insert(string("utg000547l_utg003223l"));
-exclude_contigs.insert(string("utg000547l_utg003223l"));
-exclude_contigs.insert(string("utg042504l_utg048457l"));
-exclude_contigs.insert(string("utg042504l_utg048457l"));
-exclude_contigs.insert(string("utg004649l_utg014759l"));
-exclude_contigs.insert(string("utg004649l_utg014759l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg002779l_utg008667l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg000613l_utg005487l"));
-exclude_contigs.insert(string("utg003647l_utg042542l"));
-exclude_contigs.insert(string("utg003647l_utg042542l"));
-exclude_contigs.insert(string("utg001107l_utg007069l"));
-exclude_contigs.insert(string("utg001107l_utg007069l"));
-exclude_contigs.insert(string("utg001881l_utg052831l"));
-exclude_contigs.insert(string("utg001881l_utg052831l"));
-exclude_contigs.insert(string("utg006108l_utg013610l"));
-exclude_contigs.insert(string("utg006108l_utg013610l"));
-exclude_contigs.insert(string("utg013529l_utg039315l"));
-exclude_contigs.insert(string("utg013529l_utg039315l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg001453l_utg013376l"));
-exclude_contigs.insert(string("utg000790l_utg007999l"));
-exclude_contigs.insert(string("utg000790l_utg007999l"));
-exclude_contigs.insert(string("utg000010l_utg008026l"));
-exclude_contigs.insert(string("utg000010l_utg008026l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg001453l_utg027654l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg010458l_utg001453l"));
-exclude_contigs.insert(string("utg000427l_utg001727l"));
-exclude_contigs.insert(string("utg000427l_utg001727l"));
-exclude_contigs.insert(string("utg011550l_utg028280l"));
-exclude_contigs.insert(string("utg011550l_utg028280l"));
-exclude_contigs.insert(string("utg003633l_utg012474l"));
-exclude_contigs.insert(string("utg003633l_utg012474l"));
-exclude_contigs.insert(string("utg002779l_utg052760l"));
-exclude_contigs.insert(string("utg002779l_utg052760l"));
-exclude_contigs.insert(string("utg000320l_utg033562l"));
-exclude_contigs.insert(string("utg000320l_utg033562l"));
-exclude_contigs.insert(string("utg000320l_utg033562l"));
-exclude_contigs.insert(string("utg000320l_utg033562l"));
-exclude_contigs.insert(string("utg000320l_utg033562l"));
-exclude_contigs.insert(string("utg000320l_utg033562l"));
-exclude_contigs.insert(string("utg011530l_utg053347l"));
-exclude_contigs.insert(string("utg011530l_utg053347l"));
-exclude_contigs.insert(string("utg015243l_utg018199l"));
-exclude_contigs.insert(string("utg015243l_utg018199l"));
-exclude_contigs.insert(string("utg000232l_utg003121l"));
-exclude_contigs.insert(string("utg000232l_utg003121l"));
-exclude_contigs.insert(string("utg003500l_utg051621l"));
-exclude_contigs.insert(string("utg003500l_utg051621l"));
-exclude_contigs.insert(string("utg000320l_utg001342l"));
-exclude_contigs.insert(string("utg000320l_utg001342l"));
-exclude_contigs.insert(string("utg000320l_utg001342l"));
-exclude_contigs.insert(string("utg000320l_utg001342l"));
-exclude_contigs.insert(string("utg000320l_utg001342l"));
-exclude_contigs.insert(string("utg000320l_utg001342l"));
-exclude_contigs.insert(string("utg000823l_utg003800l"));
-exclude_contigs.insert(string("utg000823l_utg003800l"));
-exclude_contigs.insert(string("utg004390l_utg043041l"));
-exclude_contigs.insert(string("utg004390l_utg043041l"));
-exclude_contigs.insert(string("utg002719l_utg030443l"));
-exclude_contigs.insert(string("utg002719l_utg030443l"));
-exclude_contigs.insert(string("utg011782l_utg016873l"));
-exclude_contigs.insert(string("utg011782l_utg016873l"));
-exclude_contigs.insert(string("utg000475l_utg032421l"));
-exclude_contigs.insert(string("utg000475l_utg032421l"));
-exclude_contigs.insert(string("utg006163l_utg009648l"));
-exclude_contigs.insert(string("utg006163l_utg009648l"));
-exclude_contigs.insert(string("utg014917l_utg027632l"));
-exclude_contigs.insert(string("utg014917l_utg027632l"));
-exclude_contigs.insert(string("utg008032l_utg035538l"));
-exclude_contigs.insert(string("utg008032l_utg035538l"));
-exclude_contigs.insert(string("utg000373l_utg004761l"));
-exclude_contigs.insert(string("utg000373l_utg004761l"));
-exclude_contigs.insert(string("utg004291l_utg036718l"));
-exclude_contigs.insert(string("utg004291l_utg036718l"));
-exclude_contigs.insert(string("utg004444l_utg004444l"));
-exclude_contigs.insert(string("utg004444l_utg004444l"));
-exclude_contigs.insert(string("utg001727l_utg006758l"));
-exclude_contigs.insert(string("utg001727l_utg006758l"));
-exclude_contigs.insert(string("utg016630l_utg018781l"));
-exclude_contigs.insert(string("utg016630l_utg018781l"));
-exclude_contigs.insert(string("utg021134l_utg023735l"));
-exclude_contigs.insert(string("utg021134l_utg023735l"));
-exclude_contigs.insert(string("utg002860l_utg044995l"));
-exclude_contigs.insert(string("utg002860l_utg044995l"));
-exclude_contigs.insert(string("utg025788l_utg046186l"));
-exclude_contigs.insert(string("utg025788l_utg046186l"));
-exclude_contigs.insert(string("utg031384l_utg040398l"));
-exclude_contigs.insert(string("utg031384l_utg040398l"));
-exclude_contigs.insert(string("utg036988l_utg046331l"));
-exclude_contigs.insert(string("utg036988l_utg046331l"));
-exclude_contigs.insert(string("utg004995l_utg008153l"));
-exclude_contigs.insert(string("utg004995l_utg008153l"));
-exclude_contigs.insert(string("utg004995l_utg008153l"));
-exclude_contigs.insert(string("utg004995l_utg008153l"));
-exclude_contigs.insert(string("utg013037l_utg025739l"));
-exclude_contigs.insert(string("utg013037l_utg025739l"));
-exclude_contigs.insert(string("utg004586l_utg004586l"));
-exclude_contigs.insert(string("utg004586l_utg004586l"));
-exclude_contigs.insert(string("utg000341l_utg000421l"));
-exclude_contigs.insert(string("utg000341l_utg000421l"));
-exclude_contigs.insert(string("utg051991l_utg051991l"));
-exclude_contigs.insert(string("utg001077l_utg042279l"));
-exclude_contigs.insert(string("utg015147l_utg016112l"));
-exclude_contigs.insert(string("utg050060l_utg052760l"));
-exclude_contigs.insert(string("utg051991l_utg051991l"));
-exclude_contigs.insert(string("utg051991l_utg051991l"));
-
-	for(int i = 0; i < len*4; ++i){
-        best_buddy[i] = (float*)calloc(len*4, sizeof(float));
-        seen[i] = (bool*)calloc(len*4, sizeof(bool));
-	}
-	
-	for(int i = 0; i < len*4; i++){
-		for(int j = 0; j < len*4; j++){
-            uint32_t max_count = 0;
-            for(int i_s = 0; i_s<4; i_s++){
-                for(int j_s = 0; j_s<4; j_s++){
-                    max_count = max(max_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
-                }
-            }
-			if( exclude_contigs.find(id_contig[i>>2]) != exclude_contigs.end() || exclude_contigs.find(id_contig[j>>2]) != exclude_contigs.end()
-            || connect_num[i][j] ==0 || i == j || contig_lengths[id_contig[i>>2]] < long_threshold || contig_lengths[id_contig[j>>2]] < long_threshold || max_count > 10000){
-				seen[i][j] = true;
-			}
-            // if(connect_num[i][j] ==0 || i == j || max_count > 10000){
-			// 	seen[i][j] = true;
-			// }
-		}
-	}
-	vector<vector<uint32_t>> graph_connection;
-    // map<pair<uint32_t,uint32_t>, pair<uint32_t, uint32_t>> connection_relation;
-    map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation;
-	bool next = true;
-	set<uint32_t> seen_node;
-    uint32_t safe_break = 0;
-    uint32_t iteration = 0;
-	// while(next){
-	while(seen_node.size()<len && safe_break <= 5 && next){
-        next = false;
-        safe_break++;
-		// for(auto n: seen_node){
-		// 	printf("%d, ",n);
-		// }
-		// printf("\n");
-		vector<pair<float, pair<uint32_t,uint32_t>>> result;
-		// next = false;
-		update_best_buddy_haplo(seen, best_buddy,connect_num,len);
-        cout << "Update best buddy score." << endl;
-		for(int i = 0; i < len*4; i++){
-			for(int j = 0; j < len*4; j++){
-				if(best_buddy[i][j] > 0.999){
-                    if(connect_num[i][j]>300){
-                        next = true;
-                    }
-					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-				}
-			}
-		}
-		if(!next){
-            break;
-        }
-		sort(result.begin(), result.end(),
-		[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-			return r1.first > r2.first;
-		});
-        cout << "Get potential connections " << result.size() << "." << endl;
-
-        for(auto res:result){
-            if(!seen[res.second.first][res.second.second]){
-                safe_break = 0;
-                bool erase_connection = false;
-                bool found = false;
-                uint16_t idx_i = 65535;
-                uint16_t idx_j = 65535;
-                uint16_t idx_i_sub = 65535;
-                uint16_t idx_j_sub = 65535;
-                for(int i = 0; i < graph_connection.size(); i++){
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first>>2))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.first>>2)){
-                                idx_i_sub = idx;
-                            }
-                        }
-                        idx_i = i;
-                        found = true;
-                    }
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second>>2))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.second>>2)){
-                                idx_j_sub = idx;
-                            }
-                        }
-                        idx_j = i;
-                        found = true;
-                    }
-                }
-                if(found && idx_i == idx_j){
-                    erase_connection = true;
-                }else if(!found){
-                    if(connect_num[res.second.first][res.second.second] > 300){
-                        vector<uint32_t> buf;
-                        buf.push_back(res.second.first>>2);
-                        buf.push_back(res.second.second>>2);
-                        graph_connection.push_back(buf);
-                    }else{
-                        erase_connection = true;
-                    }
-                }else if(idx_j!=65535 && idx_i!=65535){
-
-                    assert(idx_j_sub == 0);
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
-
-
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
-                    adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
-                    uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
-                    if(average_connection*0.5>connect_num[res.second.first][res.second.second] || adj_connection < 300|| adj_connection < connect_num[res.second.first][res.second.second]*0.4){
-                        erase_connection = true;
-                    }else{
-                        graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
-                        graph_connection.erase(graph_connection.begin()+idx_j);
-                    }
-                }else if(idx_j!=65535){
-                    assert(idx_j_sub == 0);
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
-                    uint32_t average_connection = 0;
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    average_connection/=graph_connection[idx_j].size()-1;
-                    if(average_connection*0.5>connect_num[res.second.first][res.second.second] || adj_connection < 300|| adj_connection < connect_num[res.second.first][res.second.second]*0.4){
-                        erase_connection = true;
-                    }else{
-                        graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first>>2));
-                    }
-                }else if(idx_i!=65535){
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
-                    uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    average_connection/=graph_connection[idx_i].size()-1;
-                    if(average_connection*0.5>connect_num[res.second.first][res.second.second] || adj_connection < 300|| adj_connection < connect_num[res.second.first][res.second.second]*0.4){
-                        erase_connection = true;
-                    }else{
-                        graph_connection[idx_i].push_back((res.second.second>>2));
-                    }
-                }
-                
-                
-                if(!erase_connection){
-                    for(int q = 0; q < len*4; q++){
-                        for(int i_s = 0; i_s < 4; i_s++){
-                            for(int j_s = 0; j_s < 4; j_s++){
-                                seen[((res.second.first>>2)<<2)+i_s][q] = true;
-                                seen[q][((res.second.second>>2)<<2)+j_s] = true;
-                                seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
-                            }
-                        }
-                    }
-                    
-                    if(connection_relation.find(res.second.first>>2) == connection_relation.end()){
-                        connection_relation[res.second.first>>2] = map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>();
-                    }
-                    
-                    connection_relation[res.second.first>>2][res.second.second>>2] = res;
-                    seen_node.insert((res.second.first>>2));
-                    seen_node.insert((res.second.second>>2));
-                    
-                }else{
-                    for(int i_s = 0; i_s < 4; i_s++){
-                        for(int j_s = 0; j_s < 4; j_s++){
-                            seen[((res.second.first>>2)<<2)+i_s][((res.second.second>>2)<<2)+j_s] = true;
-                            seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
-                        }
-                    }
-                }
-            }
-        }
-        cout << "Insert connections." << endl;
-        cout << "Save graphs and scores." << endl;
-
-        uint32_t counting_left = 0;
-        for(int i = 0; i < len*4 ; i++){
-            for(int j = 0; j < len*4 ; j++){
-                if(!seen[i][j]){
-                    next = true;
-                    counting_left++;
-                }
-            }
-        }
-		cout << "Nodes in graph: " << seen_node.size() << "." << endl;
-		cout << "Left edges: " << counting_left << "." << endl;
-        iteration++;
-	}
-	
-    cout << "Finish get first scaffolds." << endl;
-
-
-
-
-
-    vector<vector<uint32_t>> cur_scaffold_result = graph_connection;
     uint32_t to_break_stable = 0;
     uint32_t iteration_num = 10;
-    while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=20 && to_break_stable>5 ) && iteration_num > 0){
-        iteration_num--;
-        uint32_t scaffold_len = cur_scaffold_result.size();
-        uint32_t** scaffold_connect_num;
-        float **scaffold_best_buddy;
-        bool **scaffold_seen;
-        scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
-        scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
-        scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-        for(int i = 0; i < scaffold_len; ++i){
-            scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
-            scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
-            scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
-        }
+    // while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=23 && to_break_stable>5 ) && iteration_num > 0){
+    //     iteration_num--;
+    //     uint32_t scaffold_len = cur_scaffold_result.size();
+    //     uint32_t** scaffold_connect_num;
+    //     float **scaffold_best_buddy;
+    //     bool **scaffold_seen;
+    //     scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
+    //     scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
+    //     scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
+    //     for(int i = 0; i < scaffold_len; ++i){
+    //         scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
+    //         scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
+    //         scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+    //     }
 
-        for(int i = 0; i < scaffold_len; i++){
-            for(int j = 0; j< scaffold_len; j++){
-                if(i==j){
-                    scaffold_seen[i][j] = true;
-                }else{
-                    for(auto n1: cur_scaffold_result[i]){
-                        for(auto n2: cur_scaffold_result[j]){
-                            scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
-                        }
-                    }
-                    scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-                    if(cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1){
-                        scaffold_connect_num[i][j]*=2;
-                    }
-                }
-            }
-        }
+    //     for(int i = 0; i < scaffold_len; i++){
+    //         for(int j = 0; j< scaffold_len; j++){
+    //             if(i==j){
+    //                 scaffold_seen[i][j] = true;
+    //             }else{
+    //                 for(auto n1: cur_scaffold_result[i]){
+    //                     for(auto n2: cur_scaffold_result[j]){
+    //                         scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
+    //                     }
+    //                 }
+    //                 scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+    //                 if(check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+    //                     scaffold_connect_num[i][j]*=4;
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        vector<uint32_t> inside_connections;
-        for(int i = 0; i < scaffold_len; i++){
-            uint32_t connection_counter = 0;
-            uint32_t total_connection = 0;
-            if(cur_scaffold_result[i].size()>1){
-                for(auto p : cur_scaffold_result[i]){
-                    for(auto q: cur_scaffold_result[i]){
-                        if(p!=q){
-                            uint32_t max_count = 0;
-                            for(int i_c = 0; i_c < 4; i_c++){
-                                for(int j_c = 0; j_c < 4; j_c++){
-                                    max_count = max(max_count, connect_num[(p<<2)+i_c][(q<<2)+j_c]);
-                                    max_count = max(max_count, connect_num[(q<<2)+i_c][(p<<2)+j_c]);
-                                }
-                            }
-                            total_connection+=max_count;
-                            connection_counter++;
-                        }
-                    }
-                }
-                inside_connections.push_back(total_connection/connection_counter);
-            }else{
-                inside_connections.push_back(300);
-            }
-        }
+    //     vector<uint32_t> inside_connections;
+    //     for(int i = 0; i < scaffold_len; i++){
+    //         uint32_t connection_counter = 0;
+    //         uint32_t total_connection = 0;
+    //         if(cur_scaffold_result[i].size()>1){
+    //             for(auto p : cur_scaffold_result[i]){
+    //                 for(auto q: cur_scaffold_result[i]){
+    //                     if(p!=q){
+    //                         uint32_t max_count = 0;
+    //                         for(int i_c = 0; i_c < 4; i_c++){
+    //                             for(int j_c = 0; j_c < 4; j_c++){
+    //                                 max_count = max(max_count, connect_num[(p<<2)+i_c][(q<<2)+j_c]);
+    //                                 max_count = max(max_count, connect_num[(q<<2)+i_c][(p<<2)+j_c]);
+    //                             }
+    //                         }
+    //                         total_connection+=max_count;
+    //                         connection_counter++;
+    //                     }
+    //                 }
+    //             }
+    //             inside_connections.push_back(total_connection/connection_counter);
+    //         }else{
+    //             inside_connections.push_back(300);
+    //         }
+    //     }
 
-        vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 20, inside_connections);
-        vector<vector<uint32_t>> new_scaffold_result;
-        set<uint32_t> seen_idx;
-        for(auto i : scaffold_graph){
-            vector<uint32_t> merged_graph;
-            for(auto j:i){
-                merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
-                seen_idx.insert(j);
-            }
-            new_scaffold_result.push_back(merged_graph);
-        }
-        for(int i = 0; i<cur_scaffold_result.size();i++){
-            if(seen_idx.find(i)==seen_idx.end()){
-                new_scaffold_result.push_back(cur_scaffold_result[i]);
-            }
-        }
+    //     vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections, check_identity);
+    //     vector<vector<uint32_t>> new_scaffold_result;
+    //     set<uint32_t> seen_idx;
+    //     for(auto i : scaffold_graph){
+    //         vector<uint32_t> merged_graph;
+    //         for(auto j:i){
+    //             merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+    //             seen_idx.insert(j);
+    //         }
+    //         new_scaffold_result.push_back(merged_graph);
+    //     }
+    //     for(int i = 0; i<cur_scaffold_result.size();i++){
+    //         if(seen_idx.find(i)==seen_idx.end()){
+    //             new_scaffold_result.push_back(cur_scaffold_result[i]);
+    //         }
+    //     }
 
-        for(int i = 0; i < scaffold_len; ++i){
-            free(scaffold_connect_num[i]);
-            free(scaffold_best_buddy[i]);
-            free(scaffold_seen[i]);
-        }
-        free(scaffold_connect_num);
-        free(scaffold_best_buddy);
-        free(scaffold_seen);
+    //     for(int i = 0; i < scaffold_len; ++i){
+    //         free(scaffold_connect_num[i]);
+    //         free(scaffold_best_buddy[i]);
+    //         free(scaffold_seen[i]);
+    //     }
+    //     free(scaffold_connect_num);
+    //     free(scaffold_best_buddy);
+    //     free(scaffold_seen);
 
-        vector<vector<uint32_t>> separated_connections;
-        for(auto i : new_scaffold_result){
-            vector<uint32_t> nodes = i;
-            uint32_t single_len = nodes.size();
-            uint32_t** single_connect_num;
-            float **single_best_buddy;
-            bool **single_seen;
-            single_connect_num = (uint32_t**)calloc(single_len,sizeof(uint32_t*));
-            single_best_buddy = (float**)calloc(single_len,sizeof(float*));
-            single_seen = (bool**)calloc(single_len,sizeof(bool*));
-            for(int i = 0; i < single_len; ++i){
-                single_connect_num[i] = (uint32_t*)calloc(single_len, sizeof(uint32_t));
-                single_best_buddy[i] = (float*)calloc(single_len, sizeof(float));
-                single_seen[i] = (bool*)calloc(single_len, sizeof(bool));
-            }
-            for(int i = 0; i < nodes.size(); i++){
-                for(int j = 0; j< nodes.size(); j++){
-                    if(i==j){
-                        single_seen[i][j] = true;
-                    }else{
-                        single_connect_num[i][j] = connect_num[nodes[i]<<2][nodes[j]<<2];
-                    }
-                }
-            }
+    //     vector<vector<uint32_t>> separated_connections;
+    //     for(auto i : new_scaffold_result){
+    //         vector<uint32_t> nodes = i;
+    //         uint32_t single_len = nodes.size();
+    //         uint32_t** single_connect_num;
+    //         float **single_best_buddy;
+    //         bool **single_seen;
+    //         single_connect_num = (uint32_t**)calloc(single_len,sizeof(uint32_t*));
+    //         single_best_buddy = (float**)calloc(single_len,sizeof(float*));
+    //         single_seen = (bool**)calloc(single_len,sizeof(bool*));
+    //         for(int i = 0; i < single_len; ++i){
+    //             single_connect_num[i] = (uint32_t*)calloc(single_len, sizeof(uint32_t));
+    //             single_best_buddy[i] = (float*)calloc(single_len, sizeof(float));
+    //             single_seen[i] = (bool*)calloc(single_len, sizeof(bool));
+    //         }
+    //         for(int i = 0; i < nodes.size(); i++){
+    //             for(int j = 0; j< nodes.size(); j++){
+    //                 if(i==j){
+    //                     single_seen[i][j] = true;
+    //                 }else{
+    //                     single_connect_num[i][j] = connect_num[nodes[i]<<2][nodes[j]<<2];
+    //                 }
+    //             }
+    //         }
 
-            vector<vector<uint32_t>> single_graph = best_buddy_separate(single_seen, single_best_buddy, single_connect_num, single_len);
-            for(int i = 0; i < single_graph.size(); i++){
-                for(int j = 0; j< single_graph[i].size(); j++){
-                    single_graph[i][j] = nodes[single_graph[i][j]];
-                }
-            }
-            separated_connections.insert(separated_connections.end(),single_graph.begin(), single_graph.end());
-            for(int i = 0; i < single_len; ++i){
-                free(single_connect_num[i]);
-                free(single_best_buddy[i]);
-                free(single_seen[i]);
-            }
-            free(single_connect_num);
-            free(single_best_buddy);
-            free(single_seen);
-        }
-        if(cur_scaffold_result.size() == separated_connections.size()){
-            to_break_stable++;
-        }else{
-            to_break_stable = 0;
-        }
-        cur_scaffold_result = separated_connections; 
-    }
+    //         vector<vector<uint32_t>> single_graph = best_buddy_separate(single_seen, single_best_buddy, single_connect_num, single_len);
+    //         for(int i = 0; i < single_graph.size(); i++){
+    //             for(int j = 0; j< single_graph[i].size(); j++){
+    //                 single_graph[i][j] = nodes[single_graph[i][j]];
+    //             }
+    //         }
+    //         separated_connections.insert(separated_connections.end(),single_graph.begin(), single_graph.end());
+    //         for(int i = 0; i < single_len; ++i){
+    //             free(single_connect_num[i]);
+    //             free(single_best_buddy[i]);
+    //             free(single_seen[i]);
+    //         }
+    //         free(single_connect_num);
+    //         free(single_best_buddy);
+    //         free(single_seen);
+    //     }
+    //     if(cur_scaffold_result.size() == separated_connections.size()){
+    //         to_break_stable++;
+    //     }else{
+    //         to_break_stable = 0;
+    //     }
+    //     cur_scaffold_result = separated_connections; 
+    // }
     
 
     // cout << "Start bringing back short contigs." << endl;
@@ -8465,8 +5736,8 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
 //                         }
 //                     }
 //                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-//                     if(cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1){
-//                         scaffold_connect_num[i][j]*=2;
+//                     if(check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+//                         scaffold_connect_num[i][j]*=4;
 //                     }
 //                 }
 //             }
@@ -8554,10 +5825,10 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     // }
 
 
-    cur_scaffold_result = graph_connection;
+    // cur_scaffold_result = graph_connection;
     to_break_stable = 0;
     iteration_num = 100;
-    while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=20 && to_break_stable>5 ) && iteration_num > 0){
+    while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=23 && to_break_stable>5 ) && iteration_num > 0){
         iteration_num--;
         uint32_t scaffold_len = cur_scaffold_result.size();
         uint32_t** scaffold_connect_num;
@@ -8577,14 +5848,31 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
                 if(i==j){
                     scaffold_seen[i][j] = true;
                 }else{
+                    vector<uint32_t> best_2(2,0);
                     for(auto n1: cur_scaffold_result[i]){
                         for(auto n2: cur_scaffold_result[j]){
-                            scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
+                            uint32_t this_max = 0;
+                            for(uint32_t n1_s = 0; n1_s < 4; n1_s++){
+                                for(uint32_t n2_s = 0; n2_s < 4; n2_s++){
+                                    this_max = max(this_max, connect_num[(n1<<2)+n1_s][(n2<<2)+n2_s]);
+                                }
+                            }
+                            scaffold_connect_num[i][j] += this_max;
+                            for(int i = 0; i<best_2.size(); i++){
+                                if(best_2[i]<this_max){
+                                    uint32_t buf = best_2[i];
+                                    best_2[i] = this_max;
+                                    this_max = buf;
+                                }
+                            }
                         }
                     }
                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-                    if(cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1){
-                        scaffold_connect_num[i][j]*=2;
+                    if(best_2[1]>0 && best_2[0]*0.2>best_2[1]){
+                        scaffold_connect_num[i][j] -= best_2[0]/(cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+                    }
+                    if(check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+                        scaffold_connect_num[i][j]*=4;
                     }
                 }
             }
@@ -8612,11 +5900,28 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
                 }
                 inside_connections.push_back(total_connection/connection_counter);
             }else{
-                inside_connections.push_back(300);
+                inside_connections.push_back(0);
             }
         }
+        uint32_t average_inside_connections = 0;
+        uint32_t valid_counter = 0;
+        
+        for(int i = 0; i < scaffold_len; i++){
+            if(inside_connections[i]>0){
+                average_inside_connections += inside_connections[i];
+                valid_counter++;
+            }
+        }
+        if(valid_counter > 0){
+            average_inside_connections/=valid_counter;
+        }
 
-        vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 20, inside_connections);
+        for(int i = 0; i < scaffold_len; i++){
+            if(inside_connections[i]==0){
+                inside_connections[i] = average_inside_connections;
+            }
+        }
+        vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections, check_identity);
         vector<vector<uint32_t>> new_scaffold_result;
         set<uint32_t> seen_idx;
         for(auto i : scaffold_graph){
@@ -8659,10 +5964,16 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
             }
             for(int i = 0; i < nodes.size(); i++){
                 for(int j = 0; j< nodes.size(); j++){
+                    uint32_t max_connect = 0;
+                    for(int i_s = 0; i_s < 4; i_s++){
+                        for(int j_s = 0; j_s < 4; j_s++){
+                            max_connect = max(max_connect, connect_num[i_s+(nodes[i]<<2)][j_s+(nodes[j]<<2)]);
+                        }
+                    }
                     if(i==j){
                         single_seen[i][j] = true;
                     }else{
-                        single_connect_num[i][j] = connect_num[nodes[i]<<2][nodes[j]<<2];
+                        single_connect_num[i][j] = max_connect;
                     }
                 }
             }
@@ -8690,9 +6001,8 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
         }
         cur_scaffold_result = separated_connections; 
     }
-    
     uint32_t max_iter = 100;
-    while(cur_scaffold_result.size()!=20 && max_iter > 0){
+    while(cur_scaffold_result.size()!=23 && max_iter > 0){
         max_iter--;
         uint32_t scaffold_len = cur_scaffold_result.size();
         uint32_t** scaffold_connect_num;
@@ -8712,15 +6022,32 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
                 if(i==j){
                     scaffold_seen[i][j] = true;
                 }else{
+                    vector<uint32_t> best_2(2,0);
                     for(auto n1: cur_scaffold_result[i]){
                         for(auto n2: cur_scaffold_result[j]){
-                            scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
+                            uint32_t this_max = 0;
+                            for(uint32_t n1_s = 0; n1_s < 4; n1_s++){
+                                for(uint32_t n2_s = 0; n2_s < 4; n2_s++){
+                                    this_max = max(this_max, connect_num[(n1<<2)+n1_s][(n2<<2)+n2_s]);
+                                }
+                            }
+                            scaffold_connect_num[i][j] += this_max;
+                            for(int i = 0; i<best_2.size(); i++){
+                                if(best_2[i]<this_max){
+                                    uint32_t buf = best_2[i];
+                                    best_2[i] = this_max;
+                                    this_max = buf;
+                                }
+                            }
                         }
                     }
                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-                    // if(cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1){
-                    //     scaffold_connect_num[i][j]*=2;
-                    // }
+                    if(best_2[1]>0 && best_2[0]*0.2>best_2[1]){
+                        scaffold_connect_num[i][j] -= best_2[0]/(cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+                    }
+                    if(check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+                        scaffold_connect_num[i][j]*=4;
+                    }
                 }
             }
         }
@@ -8739,25 +6066,42 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
                                     max_count = max(max_count, connect_num[(q<<2)+i_c][(p<<2)+j_c]);
                                 }
                             }
-                            total_connection+=max_count;
+                            // total_connection= max(total_connection,max_count);
+                            total_connection += max_count;
                             connection_counter++;
                         }
                     }
                 }
                 inside_connections.push_back(total_connection/connection_counter);
+                // inside_connections.push_back(total_connection);
             }else{
-                inside_connections.push_back(300);
+                inside_connections.push_back(0);
+            }
+        }
+        uint32_t average_inside_connections = 0;
+        uint32_t valid_counter = 0;
+        for(int i = 0; i < scaffold_len; i++){
+            if(inside_connections[i]>0){
+                average_inside_connections += inside_connections[i];
+                valid_counter++;
             }
         }
 
+        average_inside_connections/=valid_counter;
 
-        vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 20, inside_connections);
-        for(auto i: scaffold_graph){
-            for(auto j: i){
-                cout << j << ",\t";
+        for(int i = 0; i < scaffold_len; i++){
+            if(inside_connections[i]==0){
+                inside_connections[i] = average_inside_connections;
             }
-            cout << endl;
         }
+
+        vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections, check_identity);
+        // for(auto i: scaffold_graph){
+        //     for(auto j: i){
+        //         cout << j << ",\t";
+        //     }
+        //     cout << endl;
+        // }
         vector<vector<uint32_t>> new_scaffold_result;
         set<uint32_t> seen_idx;
         for(auto i : scaffold_graph){
@@ -8785,7 +6129,7 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
         cur_scaffold_result = new_scaffold_result;
     }
 
-
+    cout << seen_node.size() << endl;
     // uint32_t prev_size = 0;
     // while(prev_size != seen_node.size()){
     //     prev_size = seen_node.size();
@@ -9068,7 +6412,7 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     
 //     to_break_stable = 0;
 //     iteration_num = 10;
-//     while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=20 && to_break_stable>5 ) && iteration_num > 0){
+//     while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=23 && to_break_stable>5 ) && iteration_num > 0){
 //         iteration_num--;
 //         uint32_t scaffold_len = cur_scaffold_result.size();
 //         uint32_t** scaffold_connect_num;
@@ -9094,8 +6438,8 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
 //                         }
 //                     }
 //                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-//                     if(cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1){
-//                         scaffold_connect_num[i][j]*=2;
+//                     if(check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+//                         scaffold_connect_num[i][j]*=4;
 //                     }
 //                 }
 //             }
@@ -9203,8 +6547,8 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
 //                         }
 //                     }
 //                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-//                     if(cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1){
-//                         scaffold_connect_num[i][j]*=2;
+//                     if(check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+//                         scaffold_connect_num[i][j]*=4;
 //                     }
 //                 }
 //             }
@@ -9240,84 +6584,166 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
 //     cur_scaffold_result = new_scaffold_result;
 // }
 
-    vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
-    vector<uint32_t> nodes_to_insert;
+//     vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
+//     vector<uint32_t> nodes_to_insert;
 
     
-    for(int i = 0; i < len; i++){
-        if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 10000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
-            not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
-        }
-    }
-    sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
-    [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
-        return r1.second > r2.second;
-    });
+//     for(int i = 0; i < len; i++){
+//         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 10000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+//             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+//         }
+//     }
+//     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+//     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+//         return r1.second > r2.second;
+//     });
     
-    for(auto n: not_seen_nodes_len){
-        nodes_to_insert.push_back(n.first);
-    }
+//     for(auto n: not_seen_nodes_len){
+//         nodes_to_insert.push_back(n.first);
+//     }
 
-    vector<vector<uint32_t>> new_scaffold_result = cur_scaffold_result;
-    for(auto n : nodes_to_insert){
-        cout << id_contig[n] << endl;
-        vector<uint32_t> scores;
-        for(auto s: cur_scaffold_result){
-            vector<uint32_t> best_2(1,0);
-            for(auto sn : s){
-                uint32_t max_count = 0;
-                for(int i_s = 0; i_s<4; i_s++){
-                    for(int j_s = 0; j_s<4; j_s++){
-                        max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
-                        max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
-                    }
-                }
-                for(int i = 0; i < best_2.size(); i++){
-                    if(max_count > best_2[i]){
-                        uint32_t buf = max_count;
-                        max_count = best_2[i];
-                        best_2[i] = buf;
-                    }
-                }
-            }
-            bool valid = true;
-            uint32_t idx_0 = 1;
-            for(int i = 0; i < best_2.size()-1; i++){
-                if(best_2[i+1] > 0){
-                    idx_0++;
-                    if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
-                        valid = false;
-                        break;
-                    }
-                }else{
-                    break;
-                }
-            }
-            uint32_t best_2_total = 0;
-            for(auto i : best_2){
-                best_2_total += i;
-            }
-            if(!valid){
-                scores.push_back(0);
-            }else{
-                scores.push_back(best_2_total/idx_0);
-            }
-        }
+//     vector<vector<uint32_t>> new_scaffold_result = cur_scaffold_result;
+//     for(auto n : nodes_to_insert){
+//         cout << id_contig[n] << endl;
+//         vector<uint32_t> scores;
+//         for(auto s: cur_scaffold_result){
+//             vector<uint32_t> best_2(1,0);
+//             for(auto sn : s){
+//                 uint32_t max_count = 0;
+//                 for(int i_s = 0; i_s<4; i_s++){
+//                     for(int j_s = 0; j_s<4; j_s++){
+//                         max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+//                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
+//                     }
+//                 }
+//                 for(int i = 0; i < best_2.size(); i++){
+//                     if(max_count > best_2[i]){
+//                         uint32_t buf = max_count;
+//                         max_count = best_2[i];
+//                         best_2[i] = buf;
+//                     }
+//                 }
+//             }
+//             bool valid = true;
+//             uint32_t idx_0 = 1;
+//             for(int i = 0; i < best_2.size()-1; i++){
+//                 if(best_2[i+1] > 0){
+//                     idx_0++;
+//                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+//                         valid = false;
+//                         break;
+//                     }
+//                 }else{
+//                     break;
+//                 }
+//             }
+//             uint32_t best_2_total = 0;
+//             for(auto i : best_2){
+//                 best_2_total += i;
+//             }
+//             if(!valid){
+//                 scores.push_back(0);
+//             }else{
+//                 scores.push_back(best_2_total/idx_0);
+//             }
+//         }
         
-        uint32_t max_idx = 0;
-        uint32_t max_score = 900;
-        for(int i = 0; i < scores.size(); i++){
-            if(max_score < scores[i]){
-                max_score = scores[i];
-                max_idx = i;
-            }
-        }
-        if(max_idx!=900){
-            cur_scaffold_result[max_idx].push_back(n);
-            seen_node.insert(n);
-        }
-    }
-    // cur_scaffold_result = new_scaffold_result;
+//         uint32_t max_idx = 0;
+//         uint32_t max_score = 900;
+//         for(int i = 0; i < scores.size(); i++){
+//             if(max_score < scores[i]){
+//                 max_score = scores[i];
+//                 max_idx = i;
+//             }
+//         }
+//         if(max_idx!=900){
+//             cur_scaffold_result[max_idx].push_back(n);
+//             seen_node.insert(n);
+//         }
+//     }
+//     cur_scaffold_result = new_scaffold_result;
+
+// //    vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
+// //     vector<uint32_t> nodes_to_insert;
+//     not_seen_nodes_len = vector<pair<uint32_t,uint32_t>>();
+//     nodes_to_insert = vector<uint32_t>();
+
+    
+//     for(int i = 0; i < len; i++){
+//         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+//             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+//         }
+//     }
+//     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+//     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+//         return r1.second > r2.second;
+//     });
+    
+//     for(auto n: not_seen_nodes_len){
+//         nodes_to_insert.push_back(n.first);
+//     }
+
+//     new_scaffold_result = cur_scaffold_result;
+//     for(auto n : nodes_to_insert){
+//         cout << id_contig[n] << endl;
+//         vector<uint32_t> scores;
+//         for(auto s: cur_scaffold_result){
+//             vector<uint32_t> best_2(1,0);
+//             for(auto sn : s){
+//                 uint32_t max_count = 0;
+//                 for(int i_s = 0; i_s<4; i_s++){
+//                     for(int j_s = 0; j_s<4; j_s++){
+//                         max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+//                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
+//                     }
+//                 }
+//                 for(int i = 0; i < best_2.size(); i++){
+//                     if(max_count > best_2[i]){
+//                         uint32_t buf = max_count;
+//                         max_count = best_2[i];
+//                         best_2[i] = buf;
+//                     }
+//                 }
+//             }
+//             bool valid = true;
+//             uint32_t idx_0 = 1;
+//             for(int i = 0; i < best_2.size()-1; i++){
+//                 if(best_2[i+1] > 0){
+//                     idx_0++;
+//                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+//                         // valid = false;
+//                         break;
+//                     }
+//                 }else{
+//                     break;
+//                 }
+//             }
+//             uint32_t best_2_total = 0;
+//             for(auto i : best_2){
+//                 best_2_total += i;
+//             }
+//             if(!valid){
+//                 scores.push_back(0);
+//             }else{
+//                 scores.push_back(best_2_total/idx_0);
+//             }
+//         }
+        
+//         uint32_t max_idx = 0;
+//         uint32_t max_score = 900;
+//         for(int i = 0; i < scores.size(); i++){
+//             if(max_score < scores[i]){
+//                 max_score = scores[i];
+//                 max_idx = i;
+//             }
+//         }
+//         if(max_idx!=900){
+//             cur_scaffold_result[max_idx].push_back(n);
+//             seen_node.insert(n);
+//         }
+//     }
+//     cur_scaffold_result = new_scaffold_result;
+
 
     // Correct the orientation and ordering.
     ofstream outFileIterationResult;
@@ -9426,83 +6852,83 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     // cur_scaffold_result = new_scaffold_result;
 
 
-    not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
-    nodes_to_insert = vector<uint32_t>();
+    // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
+    // nodes_to_insert = vector<uint32_t>();
 
     
-    for(int i = 0; i < len; i++){
-        if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
-            not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
-        }
-    }
-    sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
-    [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
-        return r1.second > r2.second;
-    });
+    // for(int i = 0; i < len; i++){
+    //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+    //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+    //     }
+    // }
+    // sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+    // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+    //     return r1.second > r2.second;
+    // });
     
-    for(auto n: not_seen_nodes_len){
-        nodes_to_insert.push_back(n.first);
-    }
+    // for(auto n: not_seen_nodes_len){
+    //     nodes_to_insert.push_back(n.first);
+    // }
 
-    // new_scaffold_result = cur_scaffold_result;
-    for(auto n : nodes_to_insert){
-        cout << id_contig[n] << endl;
-        vector<uint32_t> scores;
-        for(auto s: cur_scaffold_result){
-            vector<uint32_t> best_2(1,0);
-            for(auto sn : s){
-                uint32_t max_count = 0;
-                for(int i_s = 0; i_s<4; i_s++){
-                    for(int j_s = 0; j_s<4; j_s++){
-                        max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
-                        max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
-                    }
-                }
-                for(int i = 0; i < best_2.size(); i++){
-                    if(max_count > best_2[i]){
-                        uint32_t buf = max_count;
-                        max_count = best_2[i];
-                        best_2[i] = buf;
-                    }
-                }
-            }
-            bool valid = true;
-            uint32_t idx_0 = 1;
-            for(int i = 0; i < best_2.size()-1; i++){
-                if(best_2[i+1] > 0){
-                    idx_0++;
-                    if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
-                        valid = false;
-                        break;
-                    }
-                }else{
-                    break;
-                }
-            }
-            uint32_t best_2_total = 0;
-            for(auto i : best_2){
-                best_2_total += i;
-            }
-            if(!valid){
-                scores.push_back(0);
-            }else{
-                scores.push_back(best_2_total/idx_0);
-            }
-        }
+    // // new_scaffold_result = cur_scaffold_result;
+    // for(auto n : nodes_to_insert){
+    //     cout << id_contig[n] << endl;
+    //     vector<uint32_t> scores;
+    //     for(auto s: cur_scaffold_result){
+    //         vector<uint32_t> best_2(1,0);
+    //         for(auto sn : s){
+    //             uint32_t max_count = 0;
+    //             for(int i_s = 0; i_s<4; i_s++){
+    //                 for(int j_s = 0; j_s<4; j_s++){
+    //                     max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+    //                     max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
+    //                 }
+    //             }
+    //             for(int i = 0; i < best_2.size(); i++){
+    //                 if(max_count > best_2[i]){
+    //                     uint32_t buf = max_count;
+    //                     max_count = best_2[i];
+    //                     best_2[i] = buf;
+    //                 }
+    //             }
+    //         }
+    //         bool valid = true;
+    //         uint32_t idx_0 = 1;
+    //         for(int i = 0; i < best_2.size()-1; i++){
+    //             if(best_2[i+1] > 0){
+    //                 idx_0++;
+    //                 if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+    //                     valid = false;
+    //                     break;
+    //                 }
+    //             }else{
+    //                 break;
+    //             }
+    //         }
+    //         uint32_t best_2_total = 0;
+    //         for(auto i : best_2){
+    //             best_2_total += i;
+    //         }
+    //         if(!valid){
+    //             scores.push_back(0);
+    //         }else{
+    //             scores.push_back(best_2_total/idx_0);
+    //         }
+    //     }
         
-        uint32_t max_idx = 900;
-        uint32_t max_score = 0;
-        for(int i = 0; i < scores.size(); i++){
-            if(max_score < scores[i]){
-                max_score = scores[i];
-                max_idx = i;
-            }
-        }
-        if(max_idx!=900){
-            cur_scaffold_result[max_idx].push_back(n);
-            seen_node.insert(n);
-        }
-    }
+    //     uint32_t max_idx = 900;
+    //     uint32_t max_score = 0;
+    //     for(int i = 0; i < scores.size(); i++){
+    //         if(max_score < scores[i]){
+    //             max_score = scores[i];
+    //             max_idx = i;
+    //         }
+    //     }
+    //     if(max_idx!=900){
+    //         cur_scaffold_result[max_idx].push_back(n);
+    //         seen_node.insert(n);
+    //     }
+    // }
 
 
     // new_scaffold_result = vector<vector<uint32_t>>();
@@ -9554,405 +6980,12 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     // }
     // cur_scaffold_result = new_scaffold_result;
     
-
-    not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
-    nodes_to_insert = vector<uint32_t>();
-    
-    for(int i = 0; i < len; i++){
-        if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 4000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
-            not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
-        }
-    }
-    sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
-    [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
-        return r1.second > r2.second;
-    });
-    
-    for(auto n: not_seen_nodes_len){
-        nodes_to_insert.push_back(n.first);
-    }
-
-    new_scaffold_result = cur_scaffold_result;
-    for(auto n : nodes_to_insert){
-        cout << id_contig[n] << endl;
-        vector<uint32_t> scores;
-        vector<uint32_t> poses;
-        for(int idx = 0; idx < cur_scaffold_result.size(); idx++){
-            if(cur_scaffold_result[idx].size()!=1){
-                vector<uint32_t> s = cur_scaffold_result[idx];
-                uint32_t orientation = 0;
-                uint32_t max_score_pos = 0;
-                uint32_t max_pos_score = 0;
-                for(int p = 0; p < s.size()+1; p++){
-                    vector<uint32_t> best_2_forward_connected(2,0);
-                    vector<uint32_t> best_2_forward_connecting(2,0);
-                    vector<uint32_t> best_2_backward_connected(2,0);
-                    vector<uint32_t> best_2_backward_connecting(2,0);
-                    vector<uint32_t> best_2(2,0);
-                    uint32_t valid_counter = 0;
-                    if(p<2){
-                        best_2_forward_connecting[0] = connect_num[(n<<2)][(s[p]<<2)+(orientation>>(p))%2];
-                        best_2_forward_connecting[1] = connect_num[(n<<2)][(s[p+1]<<2)+(orientation>>(p+1))%2];
-                        best_2_backward_connecting[0] = connect_num[(n<<2)+1][(s[p]<<2)+(orientation>>(p))%2];
-                        best_2_backward_connecting[1] = connect_num[(n<<2)+1][(s[p+1]<<2)+(orientation>>(p+1))%2];
-                        valid_counter = 1;
-                    }else if(p>=s.size()-1){
-                        best_2_forward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)];
-                        best_2_forward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)];
-                        best_2_backward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)+1];
-                        best_2_backward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)+1];
-                        valid_counter = 1;
-                    }else{
-                        best_2_forward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)];
-                        best_2_forward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)];
-                        best_2_forward_connecting[0] = connect_num[(n<<2)][(s[p]<<2)+(orientation>>(p))%2];
-                        best_2_forward_connecting[1] = connect_num[(n<<2)][(s[p+1]<<2)+(orientation>>(p+1))%2];
-                        best_2_backward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)+1];
-                        best_2_backward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)+1];
-                        best_2_backward_connecting[0] = connect_num[(n<<2)+1][(s[p]<<2)+(orientation>>(p))%2];
-                        best_2_backward_connecting[1] = connect_num[(n<<2)+1][(s[p+1]<<2)+(orientation>>(p+1))%2];
-                        valid_counter = 2;
-                    }
-                    
-                    uint32_t max_count_forward = 0;
-                    uint32_t max_count_backward = 0;
-
-                    max_count_backward += best_2_backward_connected[0]+best_2_backward_connected[1];
-                    max_count_backward += best_2_backward_connecting[0]+best_2_backward_connecting[1];
-                    max_count_forward += best_2_forward_connected[0]+best_2_forward_connected[1];
-                    max_count_forward += best_2_forward_connecting[0]+best_2_forward_connecting[1];
-                    if(max_count_forward > max_count_backward){
-                        best_2[0] += best_2_forward_connected[0];
-                        best_2[0] += best_2_forward_connecting[0];
-                        best_2[1] += best_2_forward_connecting[1];
-                        best_2[1] += best_2_forward_connecting[1];
-                    }else{
-                        best_2[0] += best_2_backward_connected[0];
-                        best_2[0] += best_2_backward_connecting[0];
-                        best_2[1] += best_2_backward_connecting[1];
-                        best_2[1] += best_2_backward_connecting[1];
-                    }
-                    best_2[0]/=valid_counter;
-                    best_2[1]/=valid_counter;
-
-
-                    bool valid = true;
-                    uint32_t idx_0 = 1;
-                    for(int i = 0; i < best_2.size()-1; i++){
-                        if(best_2[i+1] > 0){
-                            idx_0++;
-                            if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
-                                // valid = false;
-                                break;
-                            }
-                        }else{
-                            break;
-                        }
-                    }
-                    uint32_t best_2_total = 0;
-                    for(auto i : best_2){
-                        best_2_total += i;
-                    }
-                    if(valid && best_2_total/idx_0 > max_pos_score){
-                        max_pos_score = best_2_total/idx_0;
-                        max_score_pos = p;
-                    }
-                }
-                scores.push_back(max_pos_score);
-                poses.push_back(max_score_pos);
-            }else{
-                uint32_t max_count = 0;
-                uint32_t sn = cur_scaffold_result[idx][0];
-                for(int i_s = 0; i_s<4; i_s++){
-                    for(int j_s = 0; j_s<4; j_s++){
-                        max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
-                        max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
-                    }
-                }
-                scores.push_back(max_count*3);
-                poses.push_back(1);
-            }
-        }
-        
-        uint32_t max_idx = 900;
-        uint32_t max_score = 0;
-        for(int i = 0; i < scores.size(); i++){
-            if(max_score < scores[i]){
-                max_score = scores[i];
-                max_idx = i;
-            }
-        }
-        if(max_idx!=900 ){
-            new_scaffold_result[max_idx].insert(new_scaffold_result[max_idx].begin()+poses[max_idx],n);
-            seen_node.insert(n);
-        }
-    }
-    cur_scaffold_result = new_scaffold_result;
-
-
-
-
-
-
-    // new_scaffold_result = vector<vector<uint32_t>>();
-    // scaffold_orientation = vector<uint32_t>();
-    // for(auto res: cur_scaffold_result){
-    //     if(res.size()>1){
-    //         vector<uint32_t> nodes = res;
-    //         sort(nodes.begin(), nodes.end());
-    //         vector<uint32_t> best_perm = nodes;
-    //         uint32_t best_perm_score = 0;
-    //         uint32_t single_len = nodes.size();
-    //         uint32_t best_orientation = 0;
-    //         do {
-    //             // for(auto i : nodes){
-    //             //     cout << id_contig[i] << ", ";
-    //             // }
-    //             // cout << endl;
-    //             uint32_t ids = 1<<nodes.size();
-    //             uint32_t cur_max_score = 0;
-    //             uint32_t cur_best_orientation = 0;
-    //             for(uint32_t order = 0; order < ids; order++){
-    //                 uint32_t orders = order;
-    //                 uint32_t current_score = 0;
-    //                 for(int i = 0; i < single_len-1; i++){
-    //                     current_score += connect_num[(nodes[i]<<2)+((orders>>i)%2)][(nodes[i+1]<<2)+((orders>>(i+1))%2)];
-    //                     // if(i!=single_len-2){
-    //                     //     current_score += connect_num[(nodes[i]<<2)+((orders>>i)%2)][(nodes[i+2]<<2)+((orders>>(i+2))%2)];
-    //                     // }
-    //                 }
-    //                 if(current_score>cur_max_score){
-    //                     cur_max_score = current_score;
-    //                     cur_best_orientation = orders;
-    //                 }
-    //             }
-                
-    //             if(cur_max_score > best_perm_score){
-    //                 best_orientation = cur_best_orientation;
-    //                 best_perm_score = cur_max_score;
-    //                 best_perm = nodes;
-
-    //             }
-    //         } while (std::next_permutation(nodes.begin(), nodes.end()));
-    //         new_scaffold_result.push_back(best_perm);
-    //         scaffold_orientation.push_back(best_orientation);
-    //     }else{
-    //         new_scaffold_result.push_back(res);
-    //         scaffold_orientation.push_back(0);
-    //     }
-    //     counter++;
-    // }
-    // cur_scaffold_result = new_scaffold_result;
-
-
-
-
-
-    not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
-    nodes_to_insert = vector<uint32_t>();
-    
-    for(int i = 0; i < len; i++){
-        if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 2000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
-            not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
-        }
-    }
-    sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
-    [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
-        return r1.second > r2.second;
-    });
-    
-    for(auto n: not_seen_nodes_len){
-        nodes_to_insert.push_back(n.first);
-    }
-
-    new_scaffold_result = cur_scaffold_result;
-    for(auto n : nodes_to_insert){
-        cout << id_contig[n] << endl;
-        vector<uint32_t> scores;
-        vector<uint32_t> poses;
-        for(int idx = 0; idx < cur_scaffold_result.size(); idx++){
-            if(cur_scaffold_result[idx].size()!=1){
-                vector<uint32_t> s = cur_scaffold_result[idx];
-                uint32_t orientation = 0;
-                uint32_t max_score_pos = 0;
-                uint32_t max_pos_score = 0;
-                for(int p = 0; p < s.size()+1; p++){
-                    vector<uint32_t> best_2_forward_connected(2,0);
-                    vector<uint32_t> best_2_forward_connecting(2,0);
-                    vector<uint32_t> best_2_backward_connected(2,0);
-                    vector<uint32_t> best_2_backward_connecting(2,0);
-                    vector<uint32_t> best_2(2,0);
-                    uint32_t valid_counter = 0;
-                    if(p<2){
-                        best_2_forward_connecting[0] = connect_num[(n<<2)][(s[p]<<2)+(orientation>>(p))%2];
-                        best_2_forward_connecting[1] = connect_num[(n<<2)][(s[p+1]<<2)+(orientation>>(p+1))%2];
-                        best_2_backward_connecting[0] = connect_num[(n<<2)+1][(s[p]<<2)+(orientation>>(p))%2];
-                        best_2_backward_connecting[1] = connect_num[(n<<2)+1][(s[p+1]<<2)+(orientation>>(p+1))%2];
-                        valid_counter = 1;
-                    }else if(p>=s.size()-1){
-                        best_2_forward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)];
-                        best_2_forward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)];
-                        best_2_backward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)+1];
-                        best_2_backward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)+1];
-                        valid_counter = 1;
-                    }else{
-                        best_2_forward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)];
-                        best_2_forward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)];
-                        best_2_forward_connecting[0] = connect_num[(n<<2)][(s[p]<<2)+(orientation>>(p))%2];
-                        best_2_forward_connecting[1] = connect_num[(n<<2)][(s[p+1]<<2)+(orientation>>(p+1))%2];
-                        best_2_backward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)+1];
-                        best_2_backward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)+1];
-                        best_2_backward_connecting[0] = connect_num[(n<<2)+1][(s[p]<<2)+(orientation>>(p))%2];
-                        best_2_backward_connecting[1] = connect_num[(n<<2)+1][(s[p+1]<<2)+(orientation>>(p+1))%2];
-                        valid_counter = 2;
-                    }
-                    
-                    uint32_t max_count_forward = 0;
-                    uint32_t max_count_backward = 0;
-
-                    max_count_backward += best_2_backward_connected[0]+best_2_backward_connected[1];
-                    max_count_backward += best_2_backward_connecting[0]+best_2_backward_connecting[1];
-                    max_count_forward += best_2_forward_connected[0]+best_2_forward_connected[1];
-                    max_count_forward += best_2_forward_connecting[0]+best_2_forward_connecting[1];
-                    if(max_count_forward > max_count_backward){
-                        best_2[0] += best_2_forward_connected[0];
-                        best_2[0] += best_2_forward_connecting[0];
-                        best_2[1] += best_2_forward_connecting[1];
-                        best_2[1] += best_2_forward_connecting[1];
-                    }else{
-                        best_2[0] += best_2_backward_connected[0];
-                        best_2[0] += best_2_backward_connecting[0];
-                        best_2[1] += best_2_backward_connecting[1];
-                        best_2[1] += best_2_backward_connecting[1];
-                    }
-                    best_2[0]/=valid_counter;
-                    best_2[1]/=valid_counter;
-
-
-                    bool valid = true;
-                    uint32_t idx_0 = 1;
-                    for(int i = 0; i < best_2.size()-1; i++){
-                        if(best_2[i+1] > 0){
-                            idx_0++;
-                            if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
-                                // valid = false;
-                                break;
-                            }
-                        }else{
-                            break;
-                        }
-                    }
-                    uint32_t best_2_total = 0;
-                    for(auto i : best_2){
-                        best_2_total += i;
-                    }
-                    if(valid && best_2_total/idx_0 > max_pos_score){
-                        max_pos_score = best_2_total/idx_0;
-                        max_score_pos = p;
-                    }
-                }
-                scores.push_back(max_pos_score);
-                poses.push_back(max_score_pos);
-            }else{
-                uint32_t max_count = 0;
-                uint32_t sn = cur_scaffold_result[idx][0];
-                for(int i_s = 0; i_s<4; i_s++){
-                    for(int j_s = 0; j_s<4; j_s++){
-                        max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
-                        max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
-                    }
-                }
-                scores.push_back(max_count*3);
-                poses.push_back(1);
-            }
-        }
-        
-        uint32_t max_idx = 900;
-        uint32_t max_score = 0;
-        for(int i = 0; i < scores.size(); i++){
-            if(max_score < scores[i]){
-                max_score = scores[i];
-                max_idx = i;
-            }
-        }
-        if(max_idx!=900 ){
-            new_scaffold_result[max_idx].insert(new_scaffold_result[max_idx].begin()+poses[max_idx],n);
-            seen_node.insert(n);
-        }
-    }
-    cur_scaffold_result = new_scaffold_result;
-
-
-
-
-
-
-
-
-
-
-    // new_scaffold_result = vector<vector<uint32_t>>();
-    // vector<uint32_t> scaffold_orientation = vector<uint32_t>();
-    // for(auto res: cur_scaffold_result){
-    //     if(res.size()>1){
-    //         vector<uint32_t> nodes = res;
-    //         sort(nodes.begin(), nodes.end());
-    //         vector<uint32_t> best_perm = nodes;
-    //         uint32_t best_perm_score = 0;
-    //         uint32_t single_len = nodes.size();
-    //         uint32_t best_orientation = 0;
-    //         do {
-    //             // for(auto i : nodes){
-    //             //     cout << id_contig[i] << ", ";
-    //             // }
-    //             // cout << endl;
-    //             uint32_t ids = 1<<nodes.size();
-    //             uint32_t cur_max_score = 0;
-    //             uint32_t cur_best_orientation = 0;
-    //             for(uint32_t order = 0; order < ids; order++){
-    //                 uint32_t orders = order;
-    //                 uint32_t current_score = 0;
-    //                 for(int i = 0; i < single_len-1; i++){
-    //                     current_score += connect_num[(nodes[i]<<2)+((orders>>i)%2)][(nodes[i+1]<<2)+((orders>>(i+1))%2)];
-    //                     // if(i!=single_len-2){
-    //                     //     current_score += connect_num[(nodes[i]<<2)+((orders>>i)%2)][(nodes[i+2]<<2)+((orders>>(i+2))%2)];
-    //                     // }
-    //                 }
-    //                 if(current_score>cur_max_score){
-    //                     cur_max_score = current_score;
-    //                     cur_best_orientation = orders;
-    //                 }
-    //             }
-                
-    //             if(cur_max_score > best_perm_score){
-    //                 best_orientation = cur_best_orientation;
-    //                 best_perm_score = cur_max_score;
-    //                 best_perm = nodes;
-
-    //             }
-    //         } while (std::next_permutation(nodes.begin(), nodes.end()));
-    //         new_scaffold_result.push_back(best_perm);
-    //         scaffold_orientation.push_back(best_orientation);
-    //     }else{
-    //         new_scaffold_result.push_back(res);
-    //         scaffold_orientation.push_back(0);
-    //     }
-    // }
-    // cur_scaffold_result = new_scaffold_result;
-
-
-
-
-
-
-
-
 
     // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
     // nodes_to_insert = vector<uint32_t>();
     
     // for(int i = 0; i < len; i++){
-    //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 2000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+    //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 4000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
     //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
     //     }
     // }
@@ -10081,9 +7114,66 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     //     }
     // }
     // cur_scaffold_result = new_scaffold_result;
-    
-    
-    
+
+
+
+
+
+
+    // // new_scaffold_result = vector<vector<uint32_t>>();
+    // // scaffold_orientation = vector<uint32_t>();
+    // // for(auto res: cur_scaffold_result){
+    // //     if(res.size()>1){
+    // //         vector<uint32_t> nodes = res;
+    // //         sort(nodes.begin(), nodes.end());
+    // //         vector<uint32_t> best_perm = nodes;
+    // //         uint32_t best_perm_score = 0;
+    // //         uint32_t single_len = nodes.size();
+    // //         uint32_t best_orientation = 0;
+    // //         do {
+    // //             // for(auto i : nodes){
+    // //             //     cout << id_contig[i] << ", ";
+    // //             // }
+    // //             // cout << endl;
+    // //             uint32_t ids = 1<<nodes.size();
+    // //             uint32_t cur_max_score = 0;
+    // //             uint32_t cur_best_orientation = 0;
+    // //             for(uint32_t order = 0; order < ids; order++){
+    // //                 uint32_t orders = order;
+    // //                 uint32_t current_score = 0;
+    // //                 for(int i = 0; i < single_len-1; i++){
+    // //                     current_score += connect_num[(nodes[i]<<2)+((orders>>i)%2)][(nodes[i+1]<<2)+((orders>>(i+1))%2)];
+    // //                     // if(i!=single_len-2){
+    // //                     //     current_score += connect_num[(nodes[i]<<2)+((orders>>i)%2)][(nodes[i+2]<<2)+((orders>>(i+2))%2)];
+    // //                     // }
+    // //                 }
+    // //                 if(current_score>cur_max_score){
+    // //                     cur_max_score = current_score;
+    // //                     cur_best_orientation = orders;
+    // //                 }
+    // //             }
+                
+    // //             if(cur_max_score > best_perm_score){
+    // //                 best_orientation = cur_best_orientation;
+    // //                 best_perm_score = cur_max_score;
+    // //                 best_perm = nodes;
+
+    // //             }
+    // //         } while (std::next_permutation(nodes.begin(), nodes.end()));
+    // //         new_scaffold_result.push_back(best_perm);
+    // //         scaffold_orientation.push_back(best_orientation);
+    // //     }else{
+    // //         new_scaffold_result.push_back(res);
+    // //         scaffold_orientation.push_back(0);
+    // //     }
+    // //     counter++;
+    // // }
+    // // cur_scaffold_result = new_scaffold_result;
+
+
+
+
+
     // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
     // nodes_to_insert = vector<uint32_t>();
     
@@ -10217,9 +7307,415 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     //     }
     // }
     // cur_scaffold_result = new_scaffold_result;
+
+
+
+
+
+
+
+
+
+
+    // new_scaffold_result = vector<vector<uint32_t>>();
+    // vector<uint32_t> scaffold_orientation = vector<uint32_t>();
+    // for(auto res: cur_scaffold_result){
+    //     if(res.size()>1){
+    //         vector<uint32_t> nodes = res;
+    //         sort(nodes.begin(), nodes.end());
+    //         vector<uint32_t> best_perm = nodes;
+    //         uint32_t best_perm_score = 0;
+    //         uint32_t single_len = nodes.size();
+    //         uint32_t best_orientation = 0;
+    //         do {
+    //             // for(auto i : nodes){
+    //             //     cout << id_contig[i] << ", ";
+    //             // }
+    //             // cout << endl;
+    //             uint32_t ids = 1<<nodes.size();
+    //             uint32_t cur_max_score = 0;
+    //             uint32_t cur_best_orientation = 0;
+    //             for(uint32_t order = 0; order < ids; order++){
+    //                 uint32_t orders = order;
+    //                 uint32_t current_score = 0;
+    //                 for(int i = 0; i < single_len-1; i++){
+    //                     current_score += connect_num[(nodes[i]<<2)+((orders>>i)%2)][(nodes[i+1]<<2)+((orders>>(i+1))%2)];
+    //                     // if(i!=single_len-2){
+    //                     //     current_score += connect_num[(nodes[i]<<2)+((orders>>i)%2)][(nodes[i+2]<<2)+((orders>>(i+2))%2)];
+    //                     // }
+    //                 }
+    //                 if(current_score>cur_max_score){
+    //                     cur_max_score = current_score;
+    //                     cur_best_orientation = orders;
+    //                 }
+    //             }
+                
+    //             if(cur_max_score > best_perm_score){
+    //                 best_orientation = cur_best_orientation;
+    //                 best_perm_score = cur_max_score;
+    //                 best_perm = nodes;
+
+    //             }
+    //         } while (std::next_permutation(nodes.begin(), nodes.end()));
+    //         new_scaffold_result.push_back(best_perm);
+    //         scaffold_orientation.push_back(best_orientation);
+    //     }else{
+    //         new_scaffold_result.push_back(res);
+    //         scaffold_orientation.push_back(0);
+    //     }
+    // }
+    // cur_scaffold_result = new_scaffold_result;
+
+
+
+
+
+
+
+
+
+    // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
+    // nodes_to_insert = vector<uint32_t>();
+    
+    // for(int i = 0; i < len; i++){
+    //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 2300000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+    //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+    //     }
+    // }
+    // sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+    // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+    //     return r1.second > r2.second;
+    // });
+    
+    // for(auto n: not_seen_nodes_len){
+    //     nodes_to_insert.push_back(n.first);
+    // }
+
+    // new_scaffold_result = cur_scaffold_result;
+    // for(auto n : nodes_to_insert){
+    //     cout << id_contig[n] << endl;
+    //     vector<uint32_t> scores;
+    //     vector<uint32_t> poses;
+    //     for(int idx = 0; idx < cur_scaffold_result.size(); idx++){
+    //         if(cur_scaffold_result[idx].size()!=1){
+    //             vector<uint32_t> s = cur_scaffold_result[idx];
+    //             uint32_t orientation = 0;
+    //             uint32_t max_score_pos = 0;
+    //             uint32_t max_pos_score = 0;
+    //             for(int p = 0; p < s.size()+1; p++){
+    //                 vector<uint32_t> best_2_forward_connected(2,0);
+    //                 vector<uint32_t> best_2_forward_connecting(2,0);
+    //                 vector<uint32_t> best_2_backward_connected(2,0);
+    //                 vector<uint32_t> best_2_backward_connecting(2,0);
+    //                 vector<uint32_t> best_2(2,0);
+    //                 uint32_t valid_counter = 0;
+    //                 if(p<2){
+    //                     best_2_forward_connecting[0] = connect_num[(n<<2)][(s[p]<<2)+(orientation>>(p))%2];
+    //                     best_2_forward_connecting[1] = connect_num[(n<<2)][(s[p+1]<<2)+(orientation>>(p+1))%2];
+    //                     best_2_backward_connecting[0] = connect_num[(n<<2)+1][(s[p]<<2)+(orientation>>(p))%2];
+    //                     best_2_backward_connecting[1] = connect_num[(n<<2)+1][(s[p+1]<<2)+(orientation>>(p+1))%2];
+    //                     valid_counter = 1;
+    //                 }else if(p>=s.size()-1){
+    //                     best_2_forward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)];
+    //                     best_2_forward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)];
+    //                     best_2_backward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)+1];
+    //                     best_2_backward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)+1];
+    //                     valid_counter = 1;
+    //                 }else{
+    //                     best_2_forward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)];
+    //                     best_2_forward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)];
+    //                     best_2_forward_connecting[0] = connect_num[(n<<2)][(s[p]<<2)+(orientation>>(p))%2];
+    //                     best_2_forward_connecting[1] = connect_num[(n<<2)][(s[p+1]<<2)+(orientation>>(p+1))%2];
+    //                     best_2_backward_connected[0] = connect_num[(s[p-1]<<2)+(orientation>>(p-1))%2][(n<<2)+1];
+    //                     best_2_backward_connected[1] = connect_num[(s[p-2]<<2)+(orientation>>(p-2))%2][(n<<2)+1];
+    //                     best_2_backward_connecting[0] = connect_num[(n<<2)+1][(s[p]<<2)+(orientation>>(p))%2];
+    //                     best_2_backward_connecting[1] = connect_num[(n<<2)+1][(s[p+1]<<2)+(orientation>>(p+1))%2];
+    //                     valid_counter = 2;
+    //                 }
+                    
+    //                 uint32_t max_count_forward = 0;
+    //                 uint32_t max_count_backward = 0;
+
+    //                 max_count_backward += best_2_backward_connected[0]+best_2_backward_connected[1];
+    //                 max_count_backward += best_2_backward_connecting[0]+best_2_backward_connecting[1];
+    //                 max_count_forward += best_2_forward_connected[0]+best_2_forward_connected[1];
+    //                 max_count_forward += best_2_forward_connecting[0]+best_2_forward_connecting[1];
+    //                 if(max_count_forward > max_count_backward){
+    //                     best_2[0] += best_2_forward_connected[0];
+    //                     best_2[0] += best_2_forward_connecting[0];
+    //                     best_2[1] += best_2_forward_connecting[1];
+    //                     best_2[1] += best_2_forward_connecting[1];
+    //                 }else{
+    //                     best_2[0] += best_2_backward_connected[0];
+    //                     best_2[0] += best_2_backward_connecting[0];
+    //                     best_2[1] += best_2_backward_connecting[1];
+    //                     best_2[1] += best_2_backward_connecting[1];
+    //                 }
+    //                 best_2[0]/=valid_counter;
+    //                 best_2[1]/=valid_counter;
+
+
+    //                 bool valid = true;
+    //                 uint32_t idx_0 = 1;
+    //                 for(int i = 0; i < best_2.size()-1; i++){
+    //                     if(best_2[i+1] > 0){
+    //                         idx_0++;
+    //                         if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+    //                             // valid = false;
+    //                             break;
+    //                         }
+    //                     }else{
+    //                         break;
+    //                     }
+    //                 }
+    //                 uint32_t best_2_total = 0;
+    //                 for(auto i : best_2){
+    //                     best_2_total += i;
+    //                 }
+    //                 if(valid && best_2_total/idx_0 > max_pos_score){
+    //                     max_pos_score = best_2_total/idx_0;
+    //                     max_score_pos = p;
+    //                 }
+    //             }
+    //             scores.push_back(max_pos_score);
+    //             poses.push_back(max_score_pos);
+    //         }else{
+    //             uint32_t max_count = 0;
+    //             uint32_t sn = cur_scaffold_result[idx][0];
+    //             for(int i_s = 0; i_s<4; i_s++){
+    //                 for(int j_s = 0; j_s<4; j_s++){
+    //                     max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+    //                     max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
+    //                 }
+    //             }
+    //             scores.push_back(max_count*3);
+    //             poses.push_back(1);
+    //         }
+    //     }
+        
+    //     uint32_t max_idx = 900;
+    //     uint32_t max_score = 0;
+    //     for(int i = 0; i < scores.size(); i++){
+    //         if(max_score < scores[i]){
+    //             max_score = scores[i];
+    //             max_idx = i;
+    //         }
+    //     }
+    //     if(max_idx!=900 ){
+    //         new_scaffold_result[max_idx].insert(new_scaffold_result[max_idx].begin()+poses[max_idx],n);
+    //         seen_node.insert(n);
+    //     }
+    // }
+    // cur_scaffold_result = new_scaffold_result;
+    new_scaffold_result = vector<vector<uint32_t>>();
+    vector<uint32_t> scaffold_orientation = vector<uint32_t>();
+    vector<uint32_t> prev_best_scores;
+    // for(auto res: cur_scaffold_result){
+    //     if(res.size()>1){
+    //         vector<uint32_t> nodes = res;
+    //         sort(nodes.begin(), nodes.end());
+    //         vector<uint32_t> best_perm = nodes;
+    //         uint32_t best_perm_score = 0;
+    //         uint32_t single_len = nodes.size();
+    //         uint32_t best_orientation = 0;
+    //         if(res.size()<10){
+    //         do {
+    //             // for(auto i : nodes){
+    //             //     cout << id_contig[i] << ", ";
+    //             // }
+    //             // cout << endl;
+    //             uint32_t ids = 1<<nodes.size();
+    //             uint32_t cur_max_score = 0;
+    //             uint32_t cur_best_orientation = 0;
+    //             for(uint32_t orientation = 0; orientation < ids; orientation++){
+    //                 uint32_t orientations = orientation;
+    //                 uint32_t current_score = 0;
+    //                 for(int i = 0; i < single_len-1; i++){
+    //                     current_score += max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)]);
+    //                     // if(i!=single_len-2){
+    //                     //     current_score += connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)];
+    //                     // }
+    //                 }
+    //                 if(current_score>cur_max_score){
+    //                     cur_max_score = current_score;
+    //                     cur_best_orientation = orientations;
+    //                 }
+    //             }
+                
+    //             if(cur_max_score > best_perm_score){
+    //                 best_orientation = cur_best_orientation;
+    //                 best_perm_score = cur_max_score;
+    //                 best_perm = nodes;
+
+    //             }
+    //         } while (std::next_permutation(nodes.begin(), nodes.end()));
+    //         }
+    //         new_scaffold_result.push_back(best_perm);
+    //         scaffold_orientation.push_back(best_orientation);
+    //         prev_best_scores.push_back(best_perm_score);
+    //     }else{
+    //         new_scaffold_result.push_back(res);
+    //         scaffold_orientation.push_back(0);
+    //         prev_best_scores.push_back(0);
+    //     }
+    // }
+    // cur_scaffold_result = new_scaffold_result;
+    
+    
+    // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
+    // nodes_to_insert = vector<uint32_t>();
+    
+    // for(int i = 0; i < len; i++){
+    //     if(seen_node.find(i) == seen_node.end() && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+    //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+    //     }
+    // }
+    // sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+    // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+    //     return r1.second > r2.second;
+    // });
+    
+    // for(auto n: not_seen_nodes_len){
+    //     nodes_to_insert.push_back(n.first);
+    // }
+
+    // new_scaffold_result = cur_scaffold_result;
+    // for(auto n : nodes_to_insert){
+    //     vector<uint32_t> scores;
+    //     cout << "Insert " << id_contig[n] << endl;
+    //     for(uint32_t q = 0; q <cur_scaffold_result.size(); ++q){
+    //         vector<uint32_t> nodes = cur_scaffold_result[q];
+    //         nodes.push_back(n);
+    //         sort(nodes.begin(), nodes.end());
+    //         vector<uint32_t> best_perm = nodes;
+    //         uint32_t best_perm_score = 0;
+    //         uint32_t single_len = nodes.size();
+    //         uint32_t best_orientation = 0;
+    //         if(nodes.size()<10){
+    //         do {
+    //             // for(auto i : nodes){
+    //             //     cout << id_contig[i] << ", ";
+    //             // }
+    //             // cout << endl;
+    //             uint32_t ids = 1<<nodes.size();
+    //             uint32_t cur_max_score = 0;
+    //             uint32_t cur_best_orientation = 0;
+    //             for(uint32_t orientation = 0; orientation < ids; orientation++){
+    //                 uint32_t orientations = orientation;
+    //                 uint32_t current_score = 0;
+    //                 for(int i = 0; i < single_len-1; i++){
+    //                     current_score += max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)]);
+    //                     // if(i!=single_len-2){
+    //                     //     current_score += connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)];
+    //                     // }
+    //                 }
+    //                 if(current_score>cur_max_score){
+    //                     cur_max_score = current_score;
+    //                     cur_best_orientation = orientations;
+    //                 }
+    //             }
+                
+    //             if(cur_max_score > best_perm_score){
+    //                 best_orientation = cur_best_orientation;
+    //                 best_perm_score = cur_max_score;
+    //                 best_perm = nodes;
+
+    //             }
+    //         } while (std::next_permutation(nodes.begin(), nodes.end()));
+    //         }
+    //         scores.push_back(best_perm_score-prev_best_scores[q]);
+    //     }
+    //     uint32_t max_score = 0;
+    //     uint32_t max_idx = 0;
+    //     for(int i = 0; i < scores.size(); i++){
+    //         if(scores[i] > max_score){
+    //             max_score = scores[i];
+    //             max_idx = i;
+    //         }
+    //     }
+    //     cout << max_score << endl;
+    //     if(cur_scaffold_result[max_idx].size() > 1){
+    //         if(max_score > (prev_best_scores[max_idx]/(cur_scaffold_result[max_idx].size()-1))*2){
+    //             new_scaffold_result[max_idx].push_back(n);
+    //             seen_node.insert(n);
+    //         }
+    //     }else{
+    //         new_scaffold_result[max_idx].push_back(n);
+    //         seen_node.insert(n);
+    //     }
+    // }
+    // cur_scaffold_result = new_scaffold_result;
+        
+
+    // new_scaffold_result = vector<vector<uint32_t>>();
+    // prev_best_scores = vector<uint32_t>();
+    // for(auto res: cur_scaffold_result){
+    //     if(res.size()>1){
+    //         vector<uint32_t> nodes = res;
+    //         sort(nodes.begin(), nodes.end());
+    //         vector<uint32_t> best_perm = nodes;
+    //         uint32_t best_perm_score = 0;
+    //         uint32_t single_len = nodes.size();
+    //         uint32_t best_orientation = 0;
+    //         if(res.size()<10){
+    //         do {
+    //             // for(auto i : nodes){
+    //             //     cout << id_contig[i] << ", ";
+    //             // }
+    //             // cout << endl;
+    //             uint32_t ids = 1<<nodes.size();
+    //             uint32_t cur_max_score = 0;
+    //             uint32_t cur_best_orientation = 0;
+    //             for(uint32_t orientation = 0; orientation < ids; orientation++){
+    //                 uint32_t orientations = orientation;
+    //                 uint32_t current_score = 0;
+    //                 for(int i = 0; i < single_len-1; i++){
+    //                     current_score += max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)]);
+    //                     // if(i!=single_len-2){
+    //                     //     current_score += connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)];
+    //                     // }
+    //                 }
+    //                 if(current_score>cur_max_score){
+    //                     cur_max_score = current_score;
+    //                     cur_best_orientation = orientations;
+    //                 }
+    //             }
+                
+    //             if(cur_max_score > best_perm_score){
+    //                 best_orientation = cur_best_orientation;
+    //                 best_perm_score = cur_max_score;
+    //                 best_perm = nodes;
+
+    //             }
+    //         } while (std::next_permutation(nodes.begin(), nodes.end()));
+    //         }
+    //         new_scaffold_result.push_back(best_perm);
+    //         scaffold_orientation.push_back(best_orientation);
+    //         prev_best_scores.push_back(best_perm_score);
+    //     }else{
+    //         new_scaffold_result.push_back(res);
+    //         scaffold_orientation.push_back(0);
+    //         prev_best_scores.push_back(0);
+    //     }
+    // }
+    // cur_scaffold_result = new_scaffold_result;
+    //     uint32_t max_idx = 900;
+    //     uint32_t max_score = 0;
+    //     for(int i = 0; i < scores.size(); i++){
+    //         if(max_score < scores[i]){
+    //             max_score = scores[i];
+    //             max_idx = i;
+    //         }
+    //     }
+    //     if(max_idx!=900 && max_score > 230){
+    //         new_scaffold_result[max_idx].insert(new_scaffold_result[max_idx].begin()+poses[max_idx],n);
+    //         seen_node.insert(n);
+    //     }
+    // }
+    // cur_scaffold_result = new_scaffold_result;
     // to_break_stable = 0;
     // iteration_num = 100;
-    // while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=20 && to_break_stable>5 ) && iteration_num > 0){
+    // while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=23 && to_break_stable>5 ) && iteration_num > 0){
     //     iteration_num--;
     //     uint32_t scaffold_len = cur_scaffold_result.size();
     //     uint32_t** scaffold_connect_num;
@@ -10245,8 +7741,8 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     //                     }
     //                 }
     //                 scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-    //                 if(cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1){
-    //                     scaffold_connect_num[i][j]*=2;
+    //                 if(check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+    //                     scaffold_connect_num[i][j]*=4;
     //                 }
     //             }
     //         }
@@ -10278,7 +7774,7 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     //         }
     //     }
 
-    //     vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 20, inside_connections);
+    //     vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections, check_identity);
     //     vector<vector<uint32_t>> new_scaffold_result;
     //     set<uint32_t> seen_idx;
     //     for(auto i : scaffold_graph){
@@ -10354,7 +7850,7 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     // }
     
     // max_iter = 100;
-    // while(cur_scaffold_result.size()!=20 && max_iter > 0){
+    // while(cur_scaffold_result.size()!=23 && max_iter > 0){
     //     max_iter--;
     //     uint32_t scaffold_len = cur_scaffold_result.size();
     //     uint32_t** scaffold_connect_num;
@@ -10380,8 +7876,8 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     //                     }
     //                 }
     //                 scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-    //                 // if(cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1){
-    //                 //     scaffold_connect_num[i][j]*=2;
+    //                 // if(check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+    //                 //     scaffold_connect_num[i][j]*=4;
     //                 // }
     //             }
     //         }
@@ -10413,7 +7909,7 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     //     }
 
 
-    //     vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 20, inside_connections);
+    //     vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections, check_identity);
     //     for(auto i: scaffold_graph){
     //         for(auto j: i){
     //             cout << j << ",\t";
@@ -10447,8 +7943,272 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
     //     cur_scaffold_result = new_scaffold_result;
     // }
 
+        // cur_scaffold_result = new_scaffold_result;
+    
+    
+    // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
+    // nodes_to_insert = vector<uint32_t>();
+    
+    // for(int i = 0; i < len; i++){
+    //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000){
+    //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+    //     }
+    // }
+    // sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+    // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+    //     return r1.second > r2.second;
+    // });
+    
+    // for(auto n: not_seen_nodes_len){
+    //     nodes_to_insert.push_back(n.first);
+    // }
+    
+
+    // new_scaffold_result = cur_scaffold_result;
+    // for(auto n : nodes_to_insert){
+    //     vector<uint32_t> scores;
+    //     bool black_listed = false;
+    //     uint32_t max_connections = 0;
+
+    //     for(auto sn: seen_node){
+    //         for(int i_s = 0; i_s < 4; i_s++){
+    //             for(int j_s = 0; j_s < 4; j_s++){
+    //                 max_connections = max(max_connections, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+    //                 max_connections = max(max_connections, connect_num[(n<<2)+i_s][(sn<<2)+j_s]);
+    //             }
+    //         }
+    //     }
+    //     for(auto sn: nodes_to_insert){
+    //         for(int i_s = 0; i_s < 4; i_s++){
+    //             for(int j_s = 0; j_s < 4; j_s++){
+    //                 max_connections = max(max_connections, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+    //                 max_connections = max(max_connections, connect_num[(n<<2)+i_s][(sn<<2)+j_s]);
+    //             }
+    //         }
+    //     }
+    //     if(max_connections>10000){
+    //         continue;
+    //     }
+    //     cout << "Insert " << id_contig[n] << endl;
+    //     for(uint32_t q = 0; q <cur_scaffold_result.size(); ++q){
+    //         vector<uint32_t> nodes = cur_scaffold_result[q];
+    //         nodes.push_back(n);
+    //         sort(nodes.begin(), nodes.end());
+    //         vector<uint32_t> best_perm = nodes;
+    //         uint32_t best_perm_score = 0;
+    //         uint32_t single_len = nodes.size();
+    //         uint32_t best_orientation = 0;
+    //         if(nodes.size()<10){
+    //         do {
+    //             // for(auto i : nodes){
+    //             //     cout << id_contig[i] << ", ";
+    //             // }
+    //             // cout << endl;
+    //             uint32_t ids = 1<<nodes.size();
+    //             uint32_t cur_max_score = 0;
+    //             uint32_t cur_best_orientation = 0;
+    //             for(uint32_t orientation = 0; orientation < ids; orientation++){
+    //                 uint32_t orientations = orientation;
+    //                 uint32_t current_score = 0;
+    //                 for(int i = 0; i < single_len-1; i++){
+    //                     if(max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)])>10000){
+    //                         current_score = 0;
+    //                         black_listed = true;
+    //                         break;
+    //                     }
+    //                     current_score += max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)]);
+    //                     // if(i!=single_len-2){
+    //                     //     current_score += connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)];
+    //                     // }
+    //                 }
+    //                 if(current_score>cur_max_score){
+    //                     cur_max_score = current_score;
+    //                     cur_best_orientation = orientations;
+    //                 }
+    //             }
+                
+    //             if(cur_max_score > best_perm_score){
+    //                 best_orientation = cur_best_orientation;
+    //                 best_perm_score = cur_max_score;
+    //                 best_perm = nodes;
+
+    //             }
+    //         } while (std::next_permutation(nodes.begin(), nodes.end()));
+    //         scores.push_back(best_perm_score-prev_best_scores[q]);
+    //         }else{
+    //             scores.push_back(0);
+    //         }
+    //     }
+    //     uint32_t max_score = 0;
+    //     uint32_t max_idx = 0;
+    //     for(int i = 0; i < scores.size(); i++){
+    //         if(scores[i] > max_score){
+    //             max_score = scores[i];
+    //             max_idx = i;
+    //         }
+    //     }
+    //     cout << max_score << endl;
+    //     if(contig_lengths[id_contig[n]] > 10000000 && max_score < (prev_best_scores[max_idx]/(cur_scaffold_result[max_idx].size()-1))*2){
+    //         vector<uint32_t> buf;
+    //         buf.push_back(n);
+    //         new_scaffold_result.push_back(buf);
+    //         cur_scaffold_result.push_back(buf);
+    //         prev_best_scores.push_back(0);
+    //     }else if(max_score > (prev_best_scores[max_idx]/(cur_scaffold_result[max_idx].size()-1))*2 ){
+    //         new_scaffold_result[max_idx].push_back(n);
+    //     }
+    //     // }else{
+    //     //     vector<uint32_t> buf;
+    //     //     buf.push_back(n);
+    //     //     new_scaffold_result.push_back(buf);
+    //     // }
+    // }
+    // cur_scaffold_result = new_scaffold_result;
+
+    
+    max_iter = 100;
+    while(cur_scaffold_result.size()!=23 && max_iter > 0){
+        max_iter--;
+        uint32_t scaffold_len = cur_scaffold_result.size();
+        uint32_t** scaffold_connect_num;
+        float **scaffold_best_buddy;
+        bool **scaffold_seen;
+        scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
+        scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
+        scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
+        for(int i = 0; i < scaffold_len; ++i){
+            scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
+            scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
+            scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+        }
+
+        for(int i = 0; i < scaffold_len; i++){
+            for(int j = 0; j< scaffold_len; j++){
+                if(i==j){
+                    scaffold_seen[i][j] = true;
+                }else{
+                    vector<uint32_t> best_2(2,0);
+                    for(auto n1: cur_scaffold_result[i]){
+                        for(auto n2: cur_scaffold_result[j]){
+                            uint32_t this_max = 0;
+                            for(uint32_t n1_s = 0; n1_s < 4; n1_s++){
+                                for(uint32_t n2_s = 0; n2_s < 4; n2_s++){
+                                    this_max = max(this_max, connect_num[(n1<<2)+n1_s][(n2<<2)+n2_s]);
+                                }
+                            }
+                            scaffold_connect_num[i][j] += this_max;
+                            for(int i = 0; i<best_2.size(); i++){
+                                if(best_2[i]<this_max){
+                                    uint32_t buf = best_2[i];
+                                    best_2[i] = this_max;
+                                    this_max = buf;
+                                }
+                            }
+                        }
+                    }
+                    scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+                    if(best_2[1]>0 && best_2[0]*0.2>best_2[1]){
+                        scaffold_connect_num[i][j] -= best_2[0]/(cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+                    }
+                    if(check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+                        scaffold_connect_num[i][j]*=4;
+                    }
+                }
+            }
+        }
+        vector<uint32_t> inside_connections;
+        for(int i = 0; i < scaffold_len; i++){
+            uint32_t connection_counter = 0;
+            uint32_t total_connection = 0;
+            if(cur_scaffold_result[i].size()>1){
+                for(auto p : cur_scaffold_result[i]){
+                    for(auto q: cur_scaffold_result[i]){
+                        if(p!=q){
+                            uint32_t max_count = 0;
+                            for(int i_c = 0; i_c < 4; i_c++){
+                                for(int j_c = 0; j_c < 4; j_c++){
+                                    max_count = max(max_count, connect_num[(p<<2)+i_c][(q<<2)+j_c]);
+                                    max_count = max(max_count, connect_num[(q<<2)+i_c][(p<<2)+j_c]);
+                                }
+                            }
+                            // total_connection= max(total_connection,max_count);
+                            total_connection += max_count;
+                            connection_counter++;
+                        }
+                    }
+                }
+                inside_connections.push_back(total_connection/connection_counter);
+                // inside_connections.push_back(total_connection);
+            }else{
+                inside_connections.push_back(0);
+            }
+        }
+
+        uint32_t average_inside_connections = 0;
+        uint32_t valid_counter = 0;
+        for(int i = 0; i < scaffold_len; i++){
+            if(inside_connections[i]>0){
+                average_inside_connections += inside_connections[i];
+                valid_counter++;
+            }
+        }
+
+        average_inside_connections/=valid_counter;
+
+        for(int i = 0; i < scaffold_len; i++){
+            if(inside_connections[i]==0){
+                inside_connections[i] = average_inside_connections;
+            }
+        }
+
+
+        vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections, check_identity);
+        // for(auto i: scaffold_graph){
+        //     for(auto j: i){
+        //         cout << j << ",\t";
+        //     }
+        //     cout << endl;
+        // }
+        vector<vector<uint32_t>> new_scaffold_result;
+        set<uint32_t> seen_idx;
+        for(auto i : scaffold_graph){
+            vector<uint32_t> merged_graph;
+            for(auto j:i){
+                merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+                seen_idx.insert(j);
+            }
+            new_scaffold_result.push_back(merged_graph);
+        }
+        for(int i = 0; i<cur_scaffold_result.size();i++){
+            if(seen_idx.find(i)==seen_idx.end()){
+                new_scaffold_result.push_back(cur_scaffold_result[i]);
+            }
+        }
+
+        for(int i = 0; i < scaffold_len; ++i){
+            free(scaffold_connect_num[i]);
+            free(scaffold_best_buddy[i]);
+            free(scaffold_seen[i]);
+        }
+        free(scaffold_connect_num);
+        free(scaffold_best_buddy);
+        free(scaffold_seen);
+        cur_scaffold_result = new_scaffold_result;
+    }
+ 
     new_scaffold_result = vector<vector<uint32_t>>();
-    vector<uint32_t> scaffold_orientation = vector<uint32_t>();
+    for(auto i : cur_scaffold_result){
+        if(i.size() != 1){
+            new_scaffold_result.push_back(i);
+        }else{
+            seen_node.erase(seen_node.find(i[0]));
+        }
+    }
+    cur_scaffold_result = new_scaffold_result;
+
+    new_scaffold_result = vector<vector<uint32_t>>();
+    scaffold_orientation = vector<uint32_t>();
+    vector<uint32_t> scaffold_haps = vector<uint32_t>();
     for(auto res: cur_scaffold_result){
         if(res.size()>1){
             vector<uint32_t> nodes = res;
@@ -10457,62 +8217,317 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
             uint32_t best_perm_score = 0;
             uint32_t single_len = nodes.size();
             uint32_t best_orientation = 0;
-            if(res.size()<12){
-            do {
-                // for(auto i : nodes){
-                //     cout << id_contig[i] << ", ";
-                // }
-                // cout << endl;
-                uint32_t ids = 1<<nodes.size();
-                uint32_t cur_max_score = 0;
-                uint32_t cur_best_orientation = 0;
-                for(uint32_t orientation = 0; orientation < ids; orientation++){
-                    uint32_t orientations = orientation;
-                    uint32_t current_score = 0;
-                    for(int i = 0; i < single_len-1; i++){
-                        current_score += connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)];
-                        // if(i!=single_len-2){
-                        //     current_score += connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)];
-                        // }
+            if(res.size() < 16){
+                do {
+                    // for(auto i : nodes){
+                    //     cout << id_contig[i] << ", ";
+                    // }
+                    // cout << endl;
+                    uint32_t ids = 1<<nodes.size();
+                    uint32_t cur_max_score = 0;
+                    uint32_t cur_best_orientation = 0;
+                    for(uint32_t orientation = 0; orientation < ids; orientation++){
+                        uint32_t orientations = orientation;
+                        uint32_t current_score = 0;
+                        for(int i = 0; i < single_len-1; i++){
+                            current_score += max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)]);
+                            if(i!=single_len-2){
+                                // current_score +=  0.5*max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)]);
+                            }
+                        }
+                        if(current_score>cur_max_score){
+                            cur_max_score = current_score;
+                            cur_best_orientation = orientations;
+                        }
                     }
-                    if(current_score>cur_max_score){
-                        cur_max_score = current_score;
-                        cur_best_orientation = orientations;
-                    }
-                }
-                
-                if(cur_max_score > best_perm_score){
-                    best_orientation = cur_best_orientation;
-                    best_perm_score = cur_max_score;
-                    best_perm = nodes;
+                    
+                    if(cur_max_score > best_perm_score){
+                        best_orientation = cur_best_orientation;
+                        best_perm_score = cur_max_score;
+                        best_perm = nodes;
 
-                }
-            } while (std::next_permutation(nodes.begin(), nodes.end()));
+                    }
+                } while (std::next_permutation(nodes.begin(), nodes.end()));
             }
             new_scaffold_result.push_back(best_perm);
             scaffold_orientation.push_back(best_orientation);
+            int current_hap_score = 0;
+            uint32_t haps = 0;
+            for(int p = 0; p < best_perm.size()-1; p++){
+                bool pre_hap2 = (haps >> p) % 2 == 1;
+                bool this_switch = connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)+2] > connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)];
+                uint32_t num = (this_switch ^ pre_hap2)?1:0;
+                haps |= (num<<(p+1));
+            }
+            scaffold_haps.push_back(haps);
         }else{
             new_scaffold_result.push_back(res);
             scaffold_orientation.push_back(0);
+            scaffold_haps.push_back(0);
         }
     }
     cur_scaffold_result = new_scaffold_result;
     ofstream outFileReorderedResult;
     outFileReorderedResult.open(string(output_directory)+string("/scaffold_result_reordered.txt"), ofstream::out | ofstream::trunc);
+    vector<string> hap1s;
+    vector<string> hap2s;
+    vector<set<uint32_t>> hap1_nodes;
+    vector<set<uint32_t>> hap2_nodes;
+    for(int i = 0; i< cur_scaffold_result.size(); i++){
+        uint32_t cur_length_hap1 = 0;
+        uint32_t cur_length_hap2 = 0;
+        set<uint32_t> hap1_node;
+        set<uint32_t> hap2_node;
+        stringstream result_hap1;
+        stringstream result_hap2;
+        for(int j = 0; j < cur_scaffold_result[i].size(); j++){
+            outFileReorderedResult << id_contig[cur_scaffold_result[i][j]] << "_hap" << ((scaffold_haps[i]>>j)%2==0 ? "1" : "2") << ((scaffold_orientation[i]>>j)%2==0 ? "+" : "-") << ", ";
+            
+            string cur_hap1 = contig_hap1s[id_contig[cur_scaffold_result[i][j]]];
+            string cur_hap2 = contig_hap2s[id_contig[cur_scaffold_result[i][j]]];
 
-    for(auto i : cur_scaffold_result){
-        for(auto j: i){
-            outFileReorderedResult << id_contig[j] << "_hap1+" << ", ";
+            if((scaffold_haps[i]>>j)%2!=0){
+                string buf = cur_hap1;
+                cur_hap1 = cur_hap2;
+                cur_hap2 = buf;
+                vector<uint32_t> path = (step.haplo_pathes)[(cur_scaffold_result[i][j]<<1)+1];
+                hap1_node.insert(path.begin(),path.end());
+                path = (step.haplo_pathes)[cur_scaffold_result[i][j]<<1];
+                hap2_node.insert(path.begin(),path.end());
+            }else{
+                vector<uint32_t> path = (step.haplo_pathes)[cur_scaffold_result[i][j]<<1];
+                hap1_node.insert(path.begin(),path.end());
+                path = (step.haplo_pathes)[(cur_scaffold_result[i][j]<<1)+1];
+                hap2_node.insert(path.begin(),path.end());
+            }
+
+            if((scaffold_orientation[i]>>j)%2==0){
+                cur_hap1 = complement(cur_hap1);
+                cur_hap2 = complement(cur_hap2);
+            }
+
+            result_hap1 << cur_hap1 << string(100, 'N');
+            result_hap2 << cur_hap2 << string(100, 'N');
+            cur_length_hap1 += cur_hap1.size() + 100;
+            cur_length_hap2 += cur_hap2.size() + 100;
         }
-        outFileReorderedResult << ": 123: 123" << endl;
+
+        hap1_nodes.push_back(hap1_node);
+        hap2_nodes.push_back(hap2_node);
+
+        hap1s.push_back(result_hap1.str());
+        hap2s.push_back(result_hap2.str());
+        outFileReorderedResult << ": " << cur_length_hap1 << ": " << cur_length_hap2 << endl;
     }
     outFileReorderedResult.close();
+
+    map<string, string> hap1s_remain;
+    map<string, string> hap2s_remain;
+
+    for(int i = 0; i < len; i++){
+        if(seen_node.find(i) == seen_node.end()){
+            hap1s_remain[id_contig[i]] = contig_hap1s[id_contig[i]];
+            hap2s_remain[id_contig[i]] = contig_hap2s[id_contig[i]];
+        }
+    }
+
 
     // set<set<uint32_t>> to_merge = before_merged_graph_connections;
     
     // for(auto i: to_merge){
 
     // }
+
+
+    // ofstream outFileScaffoldResult;
+    // outFileScaffoldResult.open(string(output_directory)+string("/scaffold_result.txt"), ofstream::out | ofstream::trunc);
+
+    // for(auto path: graph_connection){
+    //     stringstream result_hap1;
+    //     stringstream result_hap2;
+    //     vector<bool> reverse;
+    //     vector<bool> hap2;
+    //     for(int i = 1; i < path.size(); i++){
+    //         pair<float, pair<uint32_t, uint32_t>> cur_edge = connection_relation[path[i-1]][path[i]];
+    //         uint32_t cur_node = cur_edge.second.first;
+    //         uint32_t next_node = cur_edge.second.second;
+    //         if(i == 1){
+    //             reverse.push_back((cur_node&1)>0);
+    //             hap2.push_back((cur_node&2)>0);
+    //             reverse.push_back((next_node&1)>0);
+    //             hap2.push_back((next_node&2)>0);
+    //         }else{
+    //             reverse.push_back((reverse[reverse.size()-1] ^ ((cur_node&1)>0)) ^ ((next_node&1)>0));
+    //             hap2.push_back((hap2[hap2.size()-1] ^ ((cur_node&2)>0)) ^ ((next_node&2)>0));
+    //         }
+    //     }
+        
+    //     for(int i = 0; i < path.size(); i++){
+    //         string cur_hap1 = cstep.haplo_sequences[path[i]<<1];
+    //         string cur_hap2 = cstep.haplo_sequences[(path[i]<<1)+1];
+
+    //         outFileScaffoldResult << string(graph->seq[(*step.beg_node)[path[i]]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[path[i]]>>1].name));
+    //         if(hap2[i]){
+    //             outFileScaffoldResult << "_hap2";
+    //         }else{
+    //             outFileScaffoldResult << "_hap1";
+    //         }
+    //         if(reverse[i]){
+    //             outFileScaffoldResult << "-";
+    //         }else{
+    //             outFileScaffoldResult << "+";
+    //         }
+    //         outFileScaffoldResult << ", ";
+    //         if(reverse[i]){
+    //             cur_hap1 = complement(cur_hap1);
+    //             cur_hap2 = complement(cur_hap2);
+    //         }
+    //         if(hap2[i]){
+    //             result_hap1 << cur_hap2 << string(100, 'N');
+    //             result_hap2 << cur_hap1 << string(100, 'N');
+    //         }else{
+    //             result_hap1 << cur_hap1 << string(100, 'N');
+    //             result_hap2 << cur_hap2 << string(100, 'N');
+    //         }
+    //     }
+    //     hap1s.push_back(result_hap1.str());
+    //     hap2s.push_back(result_hap2.str());
+    //     outFileScaffoldResult << ": " << hap1s[hap1s.size()-1].length();
+    //     outFileScaffoldResult << ": " << hap2s[hap2s.size()-1].length();
+    //     outFileScaffoldResult << endl;
+    // }
+
+    // outFileScaffoldResult << endl << endl;
+
+    // for(auto path: graph_connection_buf){
+    //     stringstream result_hap1;
+    //     stringstream result_hap2;
+    //     for(int i = 0; i<path.size(); i++){
+    //         outFileScaffoldResult << string(graph->seq[(*step.beg_node)[path[i]]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[path[i]]>>1].name)) << "_hap1+, ";
+    //         if(seen_node.find(path[i])==seen_node.end()){
+    //             result_hap1 << cstep.haplo_sequences[path[i]<<1];
+    //             result_hap2 << cstep.haplo_sequences[(path[i]<<1)+1];
+    //         }
+    //     }
+    //     hap1s.push_back(result_hap1.str());
+    //     hap2s.push_back(result_hap2.str());
+    //     outFileScaffoldResult << " : 123: 123 " << endl;
+    // }
+
+    // outFileScaffoldResult.close();
+
+	// printf("Result:\n");
+    // ofstream outFileScaffoldResult;
+    // outFileScaffoldResult.open(string(output_directory)+string("/scaffold_result.txt"), ofstream::out | ofstream::trunc);
+	// for(int i = 0; i < graph_connection.size(); i++){
+	// 	vector<uint32_t> cur_set = graph_connection[i];
+	// 	for(auto p:cur_set){
+    //         outFileScaffoldResult << string(graph->seq[(*step.beg_node)[p]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[p]>>1].name))+string(", ");
+	// 	}
+    //     outFileScaffoldResult << endl;
+	// }
+    // outFileScaffoldResult.close();
+
+
+
+    vector<pair<string,uint64_t>> scaffold_result_length;
+	for(int i = 0; i < hap1s.size(); i++){
+        stringstream name;
+        name <<"scaffold" << i << "l";
+        scaffold_result_length.push_back(make_pair(name.str(),hap1s[i].size()));
+    }
+    for(auto i : hap1s_remain){
+        scaffold_result_length.push_back(make_pair(i.first,i.second.size()));
+    }
+    
+    sort(scaffold_result_length.begin(), scaffold_result_length.end(),
+    [](const pair<string,uint64_t>& r1, const pair<string,uint64_t>& r2){
+        return r1.second > r2.second;
+    });
+    
+    ofstream outFileHap1Length;
+    outFileHap1Length.open(string(output_directory)+string("/pred_hap1_length.txt"), ofstream::out | ofstream::trunc);
+    for(auto i : scaffold_result_length){
+        outFileHap1Length << i.first << endl << i.second << endl;
+    }
+    outFileHap1Length.close();
+
+    ofstream outFileHap1;
+    outFileHap1.open(string(output_directory)+string("/pred_hap1.fa"), ofstream::out | ofstream::trunc);
+	for(int i = 0; i < hap1s.size(); i++){
+        outFileHap1 << ">scaffold" << i << "l_hap1" << endl;
+        outFileHap1 << hap1s[i] << endl;
+	}
+    for(auto i : hap1s_remain){
+        outFileHap1 << ">" << i.first << "_hap1" << endl;
+        outFileHap1 << i.second << endl;
+    }
+    outFileHap1.close();
+    
+
+    ofstream outFileHap2;
+    outFileHap2.open(string(output_directory)+string("/pred_hap2.fa"), ofstream::out | ofstream::trunc);
+	for(int i = 0; i < hap2s.size(); i++){
+        outFileHap2 << ">scaffold" << i << "l_hap2" << endl;
+        outFileHap2 << hap2s[i] << endl;
+	}
+    for(auto i : hap2s_remain){
+        outFileHap2 << ">" << i.first << "_hap2" << endl;
+        outFileHap2 << i.second << endl;
+    }
+    outFileHap2.close();
+
+
+    ofstream outFileHap1Nodes;
+    outFileHap1Nodes.open(string(output_directory)+string("/pred_hap1_nodes.txt"), ofstream::out | ofstream::trunc);
+	for(auto ns: hap1_nodes){
+        for(auto n:ns){
+            outFileHap1Nodes <<graph->seq[n>>1].name << ",";
+        }
+        outFileHap1Nodes << endl;
+    }
+    outFileHap1Nodes.close();
+
+    ofstream outFileHap2Nodes;
+    outFileHap2Nodes.open(string(output_directory)+string("/pred_hap2_nodes.txt"), ofstream::out | ofstream::trunc);
+	for(auto ns: hap2_nodes){
+        for(auto n:ns){
+            outFileHap2Nodes <<graph->seq[n>>1].name << ",";
+        }
+        outFileHap2Nodes << endl;
+    }
+    outFileHap2Nodes.close();
+
+
+    ofstream outFileHap1Broken;
+    outFileHap1Broken.open(string(output_directory)+string("/pred_hap1_broken.fa"), ofstream::out | ofstream::trunc);
+	for(int i = 0; i < hap1s.size(); i++){
+        for (unsigned j = 0; j < hap1s[i].length(); j += 3000000) {
+            outFileHap1Broken << ">scaffold" << i << "l_hap1" << "_" << to_string(j) << endl;
+            outFileHap1Broken << hap1s[i].substr(j, 3000000) << endl;
+        }
+	}
+    for(auto i : hap1s_remain){
+        outFileHap1Broken << ">" << i.first << "_hap1" << endl;
+        outFileHap1Broken << i.second << endl;
+    }
+    outFileHap1Broken.close();
+
+    ofstream outFileHap2Broken;
+    outFileHap2Broken.open(string(output_directory)+string("/pred_hap2_broken.fa"), ofstream::out | ofstream::trunc);
+	for(int i = 0; i < hap2s.size(); i++){
+        for (unsigned j = 0; j < hap2s[i].length(); j += 3000000) {
+            outFileHap2Broken << ">scaffold" << i << "l_hap2" << "_" << to_string(j) << endl;
+            outFileHap2Broken << hap2s[i].substr(j, 3000000) << endl;
+        }
+	}
+    for(auto i : hap2s_remain){
+        outFileHap2Broken << ">" << i.first  << "_hap2" << endl;
+        outFileHap2Broken << i.second << endl;
+    }
+    outFileHap2Broken.close();
+
+
 }
 
 
@@ -10523,14 +8538,31 @@ exclude_contigs.insert(string("utg051991l_utg051991l"));
 
 
 
-vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections){
+
+
+
+vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections, bool check_identity){
     vector<vector<uint32_t>> graph_connection;
     cout << "Merge Started" << endl;
+    cout << len << endl;
 	bool next = true;
 	set<uint32_t> seen_node;
     uint32_t safe_break = 0;
     uint32_t iteration = 0;
 	// while(next){
+    uint32_t low_connect = 0;
+    vector<uint32_t> all_connect;
+    for(int i = 0; i < len; i++){
+        for(int j = 0; j < len; j++){
+            low_connect+= connect_num[i][j];
+            all_connect.push_back(connect_num[i][j]);
+        }
+    }
+    sort(all_connect.begin(), all_connect.end());
+    if(len > target){
+        low_connect = all_connect[all_connect.size() - (len - target) ];
+        cout << "Low connect:" << low_connect << endl;
+    }
 	while(seen_node.size()<len && safe_break <= 5 && next && len - seen_node.size() + graph_connection.size() > target){
         next = false;
         safe_break++;
@@ -10545,7 +8577,7 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
 		for(int i = 0; i < len; i++){
 			for(int j = 0; j < len; j++){
 				if(best_buddy[i][j] > 0.999){
-                    if(connect_num[i][j]>300){
+                    if(connect_num[i][j]>low_connect){
                         next = true;
                     }
 					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
@@ -10563,16 +8595,23 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
 
         for(auto res:result){
             if(!seen[res.second.first][res.second.second]){
-                if((inside_connections[res.second.first] + inside_connections[res.second.second])/6 > connect_num[res.second.first][res.second.second]){
+                bool erase_connection = false;
+                // if((inside_connections[res.second.first] + inside_connections[res.second.second])/10 > connect_num[res.second.first][res.second.second]){
+                //     seen[res.second.first][res.second.second] = true;
+                //     seen[res.second.second][res.second.first] = true;
+                //     continue;
+                // }
+                if(inside_connections[res.second.first]/3 > connect_num[res.second.first][res.second.second]
+                && inside_connections[res.second.second]/3 > connect_num[res.second.first][res.second.second] && !check_identity){
                     seen[res.second.first][res.second.second] = true;
                     seen[res.second.second][res.second.first] = true;
                     continue;
                 }
+                if(connect_num[res.second.first][res.second.second] < low_connect){
+                    erase_connection = true;
+                }
                 cout << res.second.first << "\t"<< res.second.second << "\t" << res.first << endl;
-                seen_node.insert((res.second.first));
-                seen_node.insert((res.second.second));
                 safe_break = 0;
-                bool erase_connection = false;
                 bool found = false;
                 uint16_t idx_i = 65535;
                 uint16_t idx_j = 65535;
@@ -10598,21 +8637,19 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                         found = true;
                     }
                 }
-                if(found && idx_i == idx_j){
+                if(erase_connection){
+                
+                }else if(found && idx_i == idx_j){
                     erase_connection = true;
                 }else if(!found){
-                    if(connect_num[res.second.first][res.second.second] > 250){
-                        vector<uint32_t> buf;
-                        buf.push_back(res.second.first);
-                        buf.push_back(res.second.second);
-                        graph_connection.push_back(buf);
-                    }else{
-                        erase_connection = true;
-                    }
+                    vector<uint32_t> buf;
+                    buf.push_back(res.second.first);
+                    buf.push_back(res.second.second);
+                    graph_connection.push_back(buf);
                 }else if(idx_j!=65535 && idx_i!=65535){
                     // erase_connection = true;
-                    assert(idx_j_sub == 0);
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
+                    // assert(idx_j_sub == 0);
+                    // assert(idx_i_sub == graph_connection[idx_i].size()-1);
 
 
                     uint32_t adj_connection = 65335;
@@ -10626,14 +8663,15 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                         average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                     }
                     average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 300|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                    // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 300|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                    if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
                         erase_connection = true;
                     }else{
                         graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
                         graph_connection.erase(graph_connection.begin()+idx_j);
                     }
                 }else if(idx_j!=65535){
-                    assert(idx_j_sub == 0);
+                    // assert(idx_j_sub == 0);
                     uint32_t adj_connection = 65335;
                     adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
                     uint32_t average_connection = 0;
@@ -10641,13 +8679,13 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                         average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                     }
                     average_connection/=graph_connection[idx_j].size()-1;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 300 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                        erase_connection = true;
-                    }else{
+                    // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 300 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                        // erase_connection = true;
+                    // }else{
                         graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first));
-                    }
+                    // }
                 }else if(idx_i!=65535){
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
+                    // assert(idx_i_sub == graph_connection[idx_i].size()-1);
                     uint32_t adj_connection = 65335;
                     adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
                     uint32_t average_connection = 0;
@@ -10655,11 +8693,11 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                         average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
                     }
                     average_connection/=graph_connection[idx_i].size()-1;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 300 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                        erase_connection = true;
-                    }else{
+                    // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 300 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                        // erase_connection = true;
+                    // }else{
                         graph_connection[idx_i].push_back((res.second.second));
-                    }
+                    // }
                 }
                 seen_node.clear();
                 for(auto i:graph_connection){
@@ -10678,6 +8716,9 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                     }
                     
                 }else{
+                    seen_node.insert((res.second.first));
+                    seen_node.insert((res.second.second));
+
                     seen[res.second.first][res.second.second] = true;
                     seen[res.second.second][res.second.first] = true;
                 }
@@ -10718,7 +8759,24 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
 	set<uint32_t> seen_node;
     uint32_t safe_break = 0;
     uint32_t iteration = 0;
+    uint32_t low_connect = 0;
 	// while(next){
+    vector<uint32_t> all_connections;
+    for(int i = 0; i < len; i++){
+        for(int j = 0; j < len; j++){
+            all_connections.push_back(connect_num[i][j]);
+        }
+    }
+    sort(all_connections.begin(), all_connections.end());
+
+    if(len > 2){
+        low_connect = all_connections[all_connections.size() - len];
+    }else{
+        low_connect = 0;
+    }
+    // low_connect = all_connections[all_connections.size() - len*2];
+    cout << "Low connect in separate:" << low_connect << endl;
+
 	while(seen_node.size()<len && safe_break <= 5 && next){
         next = false;
         safe_break++;
@@ -10733,7 +8791,7 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
 		for(int i = 0; i < len; i++){
 			for(int j = 0; j < len; j++){
 				if(best_buddy[i][j] > 0.999){
-                    if(connect_num[i][j]>300){
+                    if(connect_num[i][j]>low_connect){
                         next = true;
                     }
 					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
@@ -10751,10 +8809,11 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
 
         for(auto res:result){
             if(!seen[res.second.first][res.second.second]){
-                seen_node.insert((res.second.first));
-                seen_node.insert((res.second.second));
-                safe_break = 0;
                 bool erase_connection = false;
+                if(connect_num[res.second.first][res.second.second] < low_connect){
+                    erase_connection = true;
+                }
+                safe_break = 0;
                 bool found = false;
                 uint16_t idx_i = 65535;
                 uint16_t idx_j = 65535;
@@ -10780,10 +8839,12 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                         found = true;
                     }
                 }
-                if(found && idx_i == idx_j){
+                if(erase_connection){
+
+                }else if(found && idx_i == idx_j){
                     erase_connection = true;
                 }else if(!found){
-                    if(connect_num[res.second.first][res.second.second] > 1000){
+                    if(connect_num[res.second.first][res.second.second] > low_connect){
                         vector<uint32_t> buf;
                         buf.push_back(res.second.first);
                         buf.push_back(res.second.second);
@@ -10808,7 +8869,8 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                         average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                     }
                     average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 1000|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                    // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 1000|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                    if(average_connection*0.4>connect_num[res.second.first][res.second.second] ){
                         erase_connection = true;
                     }else{
                         graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
@@ -10823,7 +8885,8 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                         average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                     }
                     average_connection/=graph_connection[idx_j].size()-1;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 1000 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                    // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 1000 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                    if(average_connection*0.4>connect_num[res.second.first][res.second.second] ){
                         erase_connection = true;
                     }else{
                         graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first));
@@ -10837,7 +8900,8 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                         average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
                     }
                     average_connection/=graph_connection[idx_i].size()-1;
-                    if(average_connection*0.7>connect_num[res.second.first][res.second.second] || adj_connection < 1000 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                    // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 1000 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                    if(average_connection*0.4>connect_num[res.second.first][res.second.second]){
                         erase_connection = true;
                     }else{
                         graph_connection[idx_i].push_back((res.second.second));
@@ -10850,7 +8914,8 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                         seen[q][res.second.second] = true;
                         seen[res.second.second][res.second.first] = true;
                     }
-                    
+                    seen_node.insert((res.second.first));
+                    seen_node.insert((res.second.second));
                 }else{
                     seen[res.second.first][res.second.second] = true;
                     seen[res.second.second][res.second.first] = true;
@@ -10890,191 +8955,3 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
     return graph_connection;
 }
 
-
-
-
-vector<vector<uint32_t>> best_buddy_order_orientation(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len){
-    vector<vector<uint32_t>> graph_connection;
-    // map<pair<uint32_t,uint32_t>, pair<uint32_t, uint32_t>> connection_relation;
-    map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation;
-	bool next = true;
-	set<uint32_t> seen_node;
-    uint32_t safe_break = 0;
-    uint32_t iteration = 0;
-	// while(next){
-	while((seen_node.size()<len || graph_connection.size() != 1) && safe_break <= 5 && next){
-        next = false;
-        safe_break++;
-		// for(auto n: seen_node){
-		// 	printf("%d, ",n);
-		// }
-		// printf("\n");
-		vector<pair<float, pair<uint32_t,uint32_t>>> result;
-		// next = false;
-		update_best_buddy_haplo(seen, best_buddy,connect_num,len);
-        cout << "Update best buddy score." << endl;
-		for(int i = 0; i < len*4; i++){
-			for(int j = 0; j < len*4; j++){
-				if(best_buddy[i][j] > 0.999){
-                    if(connect_num[i][j]>300){
-                        next = true;
-                    }
-					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-				}
-			}
-		}
-		// if(!next){
-        //     break;
-        // }
-		sort(result.begin(), result.end(),
-		[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-			return r1.first > r2.first;
-		});
-        cout << "Get potential connections " << result.size() << "." << endl;
-
-        for(auto res:result){
-            if(!seen[res.second.first][res.second.second]){
-                cout << res.second.first << "\t" << res.second.second << endl;
-                safe_break = 0;
-                bool erase_connection = false;
-                bool found = false;
-                uint16_t idx_i = 65535;
-                uint16_t idx_j = 65535;
-                uint16_t idx_i_sub = 65535;
-                uint16_t idx_j_sub = 65535;
-                for(int i = 0; i < graph_connection.size(); i++){
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first>>2))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.first>>2)){
-                                idx_i_sub = idx;
-                            }
-                        }
-                        idx_i = i;
-                        found = true;
-                    }
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second>>2))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.second>>2)){
-                                idx_j_sub = idx;
-                            }
-                        }
-                        idx_j = i;
-                        found = true;
-                    }
-                }
-                if(found && idx_i == idx_j){
-                    erase_connection = true;
-                }else if(!found){
-                    // if(connect_num[res.second.first][res.second.second] > 300){
-                        vector<uint32_t> buf;
-                        buf.push_back(res.second.first>>2);
-                        buf.push_back(res.second.second>>2);
-                        graph_connection.push_back(buf);
-                    // }else{
-                        // erase_connection = true;
-                    // }
-                }else if(idx_j!=65535 && idx_i!=65535){
-
-                    assert(idx_j_sub == 0);
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
-
-
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
-                    adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
-                    uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
-                    // if(average_connection*0.5>connect_num[res.second.first][res.second.second] || adj_connection < 300|| adj_connection < connect_num[res.second.first][res.second.second]*0.4){
-                        // erase_connection = true;
-                    // }else{
-                        graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
-                        graph_connection.erase(graph_connection.begin()+idx_j);
-                    // }
-                }else if(idx_j!=65535){
-                    assert(idx_j_sub == 0);
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
-                    uint32_t average_connection = 0;
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    average_connection/=graph_connection[idx_j].size()-1;
-                    // if(average_connection*0.5>connect_num[res.second.first][res.second.second] || adj_connection < 300|| adj_connection < connect_num[res.second.first][res.second.second]*0.4){
-                        // erase_connection = true;
-                    // }else{
-                        graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first>>2));
-                    // }
-                }else if(idx_i!=65535){
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
-                    uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
-                    uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
-                        average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                    }
-                    average_connection/=graph_connection[idx_i].size()-1;
-                    // if(average_connection*0.5>connect_num[res.second.first][res.second.second] || adj_connection < 300|| adj_connection < connect_num[res.second.first][res.second.second]*0.4){
-                        // erase_connection = true;
-                    // }else{
-                        graph_connection[idx_i].push_back((res.second.second>>2));
-                    // }
-                }
-                
-                
-                if(!erase_connection){
-                    for(int q = 0; q < len*4; q++){
-                        for(int i_s = 0; i_s < 4; i_s++){
-                            for(int j_s = 0; j_s < 4; j_s++){
-                                seen[((res.second.first>>2)<<2)+i_s][q] = true;
-                                seen[q][((res.second.second>>2)<<2)+j_s] = true;
-                                seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
-                            }
-                        }
-                    }
-                    
-                    if(connection_relation.find(res.second.first>>2) == connection_relation.end()){
-                        connection_relation[res.second.first>>2] = map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>();
-                    }
-                    
-                    connection_relation[res.second.first>>2][res.second.second>>2] = res;
-                    seen_node.insert((res.second.first>>2));
-                    seen_node.insert((res.second.second>>2));
-                    
-                }else{
-                    for(int i_s = 0; i_s < 4; i_s++){
-                        for(int j_s = 0; j_s < 4; j_s++){
-                            seen[((res.second.first>>2)<<2)+i_s][((res.second.second>>2)<<2)+j_s] = true;
-                            seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
-                        }
-                    }
-                }
-            }
-        }
-        cout << "Insert connections." << endl;
-        cout << "Save graphs and scores." << endl;
-
-        uint32_t counting_left = 0;
-        for(int i = 0; i < len*4 ; i++){
-            for(int j = 0; j < len*4 ; j++){
-                if(!seen[i][j]){
-                    next = true;
-                    counting_left++;
-                }
-            }
-        }
-		cout << "Nodes in graph: " << seen_node.size() << "." << endl;
-		cout << "Left edges: " << counting_left << "." << endl;
-        iteration++;
-	}
-    return graph_connection;
-}
