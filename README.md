@@ -1,23 +1,27 @@
-# pstools: Toolkit for full phased sequences of diploid genomes 
+# pstools: Toolkit for fully phased sequences of diploid genomes 
 
 Routine production of phased sequences (haplotypes) of genomes are important to study variation occurring in complex cancer and healthy samples. A combination of long accurate reads (HiFi) and chromosome-scale sequencing (Hi-C) technologies are creating enormous opportunities for the routine production of fully phased sequences. However, standard computational approaches have limited capability to produce phased sequences that are end-to-end chromosomes in less than a day without any collapse in haplotypes. Here, we propose a fast and accurate graph-based method (pstools) that jointly leverage phasing and sequencing information from HiFi and Hi-C to produce high-quality phased sequences. We benchmarked this method on the normal sample (HG002) to produce sequence continuity N50 >130 Mb, base quality >Q50, and completeness of 3Gb of each haplotype, by comparing against GIAB ground truth. 
 
 ## Installation
-```
+```sh
+(requiring g++ and zlib)
 git clone https://github.com/shilpagarg/pstools.git
-make
+cd pstools && make
 ```
 
 ## Execution
 Once you compiled the repo, you will see binary file `pstools` in the same directory.
 Now you are ready to go to produce fully phased sequences.
 
-```
-Usage: 
-pstools hic_mapping -t32 -o map.out <hifiasm_r_utg.fa> hic.R1.fastq.gz hic.R2.fastq.gz, where hifiasm_r_utg.fa is output fasta file of hifiasm r_utg gfa, hic.R1.fastq.gz hic.R2.fastq.gz are hic paired-end data.
+```sh
+# Usage: 
+# Use Hi-C data and node sequences of hifiasm graph (awk '/^S/{print ">"$2;print $3}' hifiasm_r_utg.gfa > hifiasm_r_utg.fa)
+pstools hic_mapping -t32 -o map.out <hifiasm_r_utg.fa> hic.R1.fastq.gz hic.R2.fastq.gz
 
-pstools resolve_haplotypes -t32 -i true map.out hifiasm_r_utg.gfa out, where map.out is the file from above process, hifiasm_r_utg.gfa is the hifiasm r_utg graph and out is the output directory name.
-This command produce fully phased sequences in pred_hap1.fa and pred_hap2.fa.  
+# Use Hi-C mapped reads through hifiasm graph to produce fully phased sequences
+pstools resolve_haplotypes -t32 -i true map.out hifiasm_r_utg.gfa out
+# where `map.out` is the file from above process, `hifiasm_r_utg.gfa` is the hifiasm r_utg graph and `out` is the output directory name.
+This command produce fully phased sequences in `pred_hap1.fa` and `pred_hap2.fa`.  
 ```
  
 
