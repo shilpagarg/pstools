@@ -24,12 +24,13 @@ pstools resolve_haplotypes -t32 -i true <map.out> <hifiasm_r_utg.gfa> <out>
 This command produce fully phased sequences in `pred_hap1.fa` and `pred_hap2.fa`.  
 ```
 
-### Results on HG002
+### Results
 Table shows the benchmarking results of HG002 using OmniC or Arima genomics data: 
 
-|<sub>Dataset<sub>|<sub>Size<sub>|<sub>CPU time<sub>|<sub> N50<sub>|<sub> QV<sub>|
+|<sub>Hi-C dataset<sub>|<sub>Size<sub>|<sub>CPU time<sub>|<sub> N50<sub>|<sub> QV<sub>|
 |:---------------|-----:|--------------------:|:----------|-------:|
 |<sub>[HG002][HG002-data]</sub>|<sub>~3.1Gb</sub> |<sub>2-3h</sub> |<sub>~136G</sub>|<sub>~Q50</sub>|
+
 
 [HG0002-data]: http://dovetail-omnic.s3-website-us-west-2.amazonaws.com/ or https://www.biorxiv.org/content/10.1101/810341v1
 
