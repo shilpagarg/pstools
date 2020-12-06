@@ -10,11 +10,17 @@
 #include <vector>
 #include <set>
 #include <string>
+#include <sstream>
+#include <algorithm>
 #include <iostream>
 #include "kseq.h" // FASTA/Q parser
 
+using namespace std;
+
 KSEQ_INIT(gzFile, gzread)
 #define CHUNK_SIZE 200000000
+
+
 
 typedef struct {
 	int n, m;
@@ -135,9 +141,11 @@ static void *worker_pipeline(void *data, int step, void *in) // callback for kt_
 				REALLOC(s->len, s->m);
 				REALLOC(s->seq, s->m);
 			}
-			p->names->push_back(strdup(p->ks->name.s));
 			MALLOC(s->seq[s->n], l);
 			memcpy(s->seq[s->n], p->ks->seq.s, l);
+
+			p->names->push_back(strdup(p->ks->name.s));
+			
 			s->len[s->n++] = l;
 			s->sum_len += l;
 			s->nk += l - p->opt->k + 1;
@@ -204,7 +212,7 @@ pldat_t *yak_count_multi_new(const char *fn, const yak_copt_t *opt, yak_ch_t *h0
 		pl->h = yak_ch_init(opt->k, opt->pre, opt->bf_n_hash, opt->bf_shift);
 	}
 	pl->names = new std::vector<char*>();
-
+	
 	kt_pipeline(3, worker_pipeline, pl, 3);
 	kseq_destroy(pl->ks);
 	gzclose(fp);
@@ -412,12 +420,6 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 	}
 	uint32_t coverage[pl->global_counter];
 	memset(coverage, 0, sizeof(uint32_t)*pl->global_counter);
-	// uint16_t forward[pl->global_counter];
-	// memset(coverage, 0, sizeof(uint16_t)*pl->global_counter);
-	// uint16_t backward[pl->global_counter];
-	// memset(coverage, 0, sizeof(uint16_t)*pl->global_counter);
-	// printf("connections size: %ld;\n", sizeof(uint16_t)*pl->global_counter*pl->global_counter);
-	// printf("coverage size: %ld;\n",sizeof(uint16_t)*pl->global_counter);
 	std::vector<uint64_t> failed_matches;
 	const uint16_t max_count = -1;
 	for(uint64_t j = 0; j < std::min(map1->size(), map2->size()); j++){
@@ -435,13 +437,13 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 		// 		backward[(*map2)[j].unit_id]++;
 		// 	}
 		// }
-		if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535 && (*map1)[j].unit_id != (*map2)[j].unit_id){
+		if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535 ){
+			// printf("%s and %s\n", (*pl->names)[(*map1)[j].unit_id].c_str(),(*pl->names)[(*map2)[j].unit_id].c_str());
+			// printf("%s and %s, %s\n", (*map1)[j].name.c_str(),(*map2)[j].name.c_str(), !((*map1)[j].forward ^ (*map2)[j].forward)?"forward":"backward");
 			// printf("%s and %s\n", (*pl->names)[(*map1)[j].unit_id],(*pl->names)[(*map2)[j].unit_id]);
-			// printf("%s and %s\n", (*map1)[j].name,(*map2)[j].name);
-			// printf("%s and %s\n", (*pl->names)[(*map1)[j].unit_id],(*pl->names)[(*map2)[j].unit_id]);
-			if(strcmp((*map1)[j].name,(*map2)[j].name)!=0){
-				failed_matches.push_back(j);
-			}
+			// if(strcmp((*map1)[j].name,(*map2)[j].name)!=0){
+			// 	failed_matches.push_back(j);
+			// }
 			success_counter_result++;
 			// if(max_count ^ coverage[(*map1)[j].unit_id] !=0){
 				coverage[(*map1)[j].unit_id]++;
@@ -464,31 +466,6 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 	printf("Not matched due to Wrong names: %ld\n" , failed_matches.size());
 
 
-	// {
-	// 	FILE* fp = fopen ("coverage_report.output","w");
-	// 	uint16_t total_no_coverage = 0;
-	// 	uint16_t total_have_coverage = 0;
-	// 	for(int i = 0; i < pl->global_counter; i++){
-	// 		if(coverage[i]==0){
-	// 			total_no_coverage++;
-	// 		}else{
-	// 			total_have_coverage++;
-	// 		}
-	// 	}
-	// 	fprintf(fp, "Total No Coverage: %d\n", total_no_coverage);
-	// 	for(int i = 0; i < pl->global_counter; i++){
-	// 		if(coverage[i]==0){
-	// 			fprintf(fp, "%s\n",(*pl->names)[i]);
-	// 		}
-	// 	}
-	// 	fprintf(fp, "Total Have Coverage: %d\n",total_have_coverage);
-	// 	for(int i = 0; i < pl->global_counter; i++){
-	// 		if(coverage[i]!=0){
-	// 			fprintf(fp, "%s, %d\n",(*pl->names)[i],coverage[i]);
-	// 		}
-	// 	}
-	// 	fclose(fp);
-	// }
 
 	if(out_fn){
 		FILE* fp = fopen (out_fn,"w");
@@ -569,9 +546,9 @@ int main_hic_map(int argc, char *argv[])
 		exit(1);
 	}
 
-
 	h = yak_count_multi_new(argv[o.ind], &opt, 0);
 
+	
 	do_mapping(h, hic_fn1, hic_fn2, fn_out);
 
 

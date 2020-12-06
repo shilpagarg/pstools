@@ -16,13 +16,17 @@ Now you are ready to go to produce fully phased sequences.
 ```sh
 # Usage: 
 # Use Hi-C data and node sequences of hifiasm graph (awk '/^S/{print ">"$2;print $3}' hifiasm_r_utg.gfa > hifiasm_r_utg.fa)
-pstools hic_mapping -t32 -o map.out <hifiasm_r_utg.fa> hic.R1.fastq.gz hic.R2.fastq.gz
+pstools hic_mapping -t32 -o <map.out> <hifiasm_r_utg.fa> <hic.R1.fastq.gz> <hic.R2.fastq.gz>
 
 # Use Hi-C mapped reads through hifiasm graph to produce fully phased sequences
-pstools resolve_haplotypes -t32 -i true map.out hifiasm_r_utg.gfa out
+pstools resolve_haplotypes -t32 -i true <map.out> <hifiasm_r_utg.gfa> <out>
 # where `map.out` is the file from above process, `hifiasm_r_utg.gfa` is the hifiasm r_utg graph and `out` is the output directory name.
 This command produce fully phased sequences in `pred_hap1.fa` and `pred_hap2.fa`.  
 ```
+
+### Limitations
+1. At the current stage, the fully phased sequences don't contain centromeres.
+2. The UL nanopore data is not used.
  
 
 
