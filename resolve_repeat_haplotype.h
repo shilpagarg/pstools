@@ -4843,10 +4843,10 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
         if(identityFile.size()==0){
             stringstream minimap2_cmd;
             minimap2_cmd << "minimap2 -I40G -x asm20 -Y -a --eqx -t" << n_threads << " " << string(output_directory)+string("/pred_haplotypes.fa") << " "<< string(output_directory)+string("/pred_haplotypes.fa"); 
-            minimap2_cmd << " | samtools view -F 4 -u - | samtools sort - > haplotype_identity.bam";
+            minimap2_cmd << " | samtools view -F 4 -u - | samtools sort - >" << string(output_directory) <<"/haplotype_identity.bam";
             system(minimap2_cmd.str().c_str());
             stringstream py_cmd;
-            py_cmd << "python ./samIdentity.py --header haplotype_identity.bam | awk '$1 != $5' > " << string(output_directory) << "/output.tbl";
+            py_cmd << "python ./samIdentity.py --header" << string(output_directory) << "/haplotype_identity.bam | awk '$1 != $5' > " << string(output_directory) << "/output.tbl";
             system(py_cmd.str().c_str());
             identityFile = string(output_directory) + string("/output.tbl");
         }
