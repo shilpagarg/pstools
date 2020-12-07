@@ -14,7 +14,6 @@ Once you compiled the repo, you will see binary file `pstools` in the same direc
 Now you are ready to go to produce fully phased sequences.
 
 ```sh
-# Usage: 
 # Use Hi-C data and node sequences of hifiasm graph (awk '/^S/{print ">"$2;print $3}' hifiasm_r_utg.gfa > hifiasm_r_utg.fa)
 pstools hic_mapping -t32 -o <map.out> <hifiasm_r_utg.fa> <hic.R1.fastq.gz> <hic.R2.fastq.gz>
 
@@ -29,13 +28,13 @@ Table shows the benchmarking results of HG002 using OmniC or Arima genomics data
 
 |<sub>Hi-C dataset<sub>|<sub>Size<sub>|<sub>CPU time<sub>|<sub> N50<sub>|<sub> QV<sub>|
 |:---------------|-----:|--------------------:|:----------|-------:|
-|<sub>[HG002][HG002-data]</sub>|<sub>~3.1Gb</sub> |<sub>2-3h</sub> |<sub>~136G</sub>|<sub>~Q50</sub>|
+|<sub>[HG002][HG002-data]</sub>|<sub>~3.1Gb</sub> |<sub>2-3h</sub> |<sub>~130G</sub>|<sub>~Q50</sub>|
 
 
 [HG0002-data]: http://dovetail-omnic.s3-website-us-west-2.amazonaws.com/ or https://www.biorxiv.org/content/10.1101/810341v1, and the resultant phased sequences are available at: s3://pstools/
 
 ### Limitations
-1. At the current stage, the fully phased sequences don't contain centromeres.
+1. At the current stage, the phased sequences don't contain centromeric regions.
 2. The UL nanopore data is not used.
 3. Need to be tested on trio-hifiasm graph
  
