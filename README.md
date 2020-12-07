@@ -39,5 +39,5 @@ Table shows the benchmarking results of HG002 using OmniC or Arima genomics data
 2. The UL nanopore data is not used.
 3. Need to be tested on trio-hifiasm graph
  
-Remember that pstools is under active development. For any issues or suggestions, please create an issue or a pull request. 
+# Note that pstools is under active development. For any issues or suggestions, please create an issue or a pull request. 
 
