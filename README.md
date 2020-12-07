@@ -21,7 +21,7 @@ pstools hic_mapping -t32 -o <map.out> <hifiasm_r_utg.fa> <hic.R1.fastq.gz> <hic.
 # Use Hi-C mapped reads through hifiasm graph to produce fully phased sequences
 pstools resolve_haplotypes -t32 -i true <map.out> <hifiasm_r_utg.gfa> <out>
 # where `map.out` is the file from above process, `hifiasm_r_utg.gfa` is the hifiasm r_utg graph and `out` is the output directory name.
-This command produce fully phased sequences in `pred_hap1.fa` and `pred_hap2.fa`.  
+This command produces fully phased sequences in `pred_hap1.fa` and `pred_hap2.fa`.  
 ```
 
 ### Results
@@ -33,6 +33,7 @@ Table shows the benchmarking results of HG002 using OmniC or Arima genomics data
 
 
 [HG0002-data]: http://dovetail-omnic.s3-website-us-west-2.amazonaws.com/ or https://www.biorxiv.org/content/10.1101/810341v1
+The resultant phased sequences are available at: s3://pstools/
 
 ### Limitations
 1. At the current stage, the fully phased sequences don't contain centromeres.
