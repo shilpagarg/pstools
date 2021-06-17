@@ -31,8 +31,6 @@ Table shows the benchmarking results of HG002 using OmniC or Arima genomics data
 |<sub>[HG002]</sub>|<sub>~6.1Gb</sub> |<sub>~5h</sub> |<sub>~132 Mb</sub>|<sub>~Q50</sub>|
 
 
-[HG0002-data]: http://dovetail-omnic.s3-website-us-west-2.amazonaws.com/ or https://www.biorxiv.org/content/10.1101/810341v1, and the resultant phased sequences are available at: s3://pstools/
- 
  ```sh
  For further experiments, please run `experiments.sh`.
 ```
