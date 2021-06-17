@@ -32,7 +32,11 @@ Table shows the benchmarking results of HG002 using OmniC or Arima genomics data
 
 
 [HG0002-data]: http://dovetail-omnic.s3-website-us-west-2.amazonaws.com/ or https://www.biorxiv.org/content/10.1101/810341v1, and the resultant phased sequences are available at: s3://pstools/
-
+ 
+ ```sh
+ For further experiments, please run `experiments.sh`.
+```
+ 
 ### Limitations
 1. At the current stage, the phased sequences don't contain centromeric regions.
 2. The UL nanopore data is not used.
