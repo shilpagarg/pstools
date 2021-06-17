@@ -1,6 +1,6 @@
-# pstools: Toolkit for fully phased sequences of diploid genomes 
+# pstools: Toolkit for fully phased sequences
 
-Routine production of phased sequences (haplotypes) of genomes are important to study variation occurring in complex cancer and healthy samples. A combination of long accurate reads (HiFi) and chromosome-scale sequencing (Hi-C) technologies are creating enormous opportunities for the routine production of fully phased sequences. However, standard computational approaches have limited capability to produce phased sequences that are end-to-end chromosomes in less than a day without any collapse in haplotypes. Here, we propose a fast and accurate graph-based method (pstools) that jointly leverage phasing and sequencing information from HiFi and Hi-C to produce high-quality phased sequences. We benchmarked this method on the normal sample (HG002) to produce sequence continuity N50 >130 Mb, base quality >Q50, and completeness of 3Gb of each haplotype, by comparing against GIAB ground truth. 
+Routine production of phased sequences (haplotypes) of genomes are important to study variation occurring in complex cancer and healthy samples. We developed a novel graph-based algorithm to integrate HiFi and Hi-C data types to produce haplotypes at the base-level resolution for routine clinical research. When benchmarking our method on healthy human genomes, we produced significantly high-quality genomes with a sequence continuity NG50 >130 Mb, switch/hamming error rates <1.5% and a completeness of >6.0 Gb, and an order of magnitude faster process (only <12 hours). This simple approach will facilitate improvement in understanding of the mechanisms of clinical diseases.
 
 ## Installation
 ```sh
@@ -26,9 +26,9 @@ This command produces fully phased sequences in `pred_hap1.fa` and `pred_hap2.fa
 ### Results
 Table shows the benchmarking results of HG002 using OmniC or Arima genomics data: 
 
-|<sub>Hi-C dataset<sub>|<sub>Size<sub>|<sub>CPU time<sub>|<sub> N50<sub>|<sub> QV<sub>|
+|<sub>Hi-C dataset<sub>|<sub>Size<sub>|<sub>CPU time<sub>|<sub> NG50<sub>|<sub> QV<sub>|
 |:---------------|-----:|--------------------:|:----------|-------:|
-|<sub>[HG002][HG002-data]</sub>|<sub>~3.1Gb</sub> |<sub>2-3h</sub> |<sub>~130G</sub>|<sub>~Q50</sub>|
+|<sub>[HG002]</sub>|<sub>~6.1Gb</sub> |<sub>~5h</sub> |<sub>~132 Mb</sub>|<sub>~Q50</sub>|
 
 
 [HG0002-data]: http://dovetail-omnic.s3-website-us-west-2.amazonaws.com/ or https://www.biorxiv.org/content/10.1101/810341v1, and the resultant phased sequences are available at: s3://pstools/
