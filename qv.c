@@ -200,7 +200,7 @@ static void *yak_qv_cb(void *shared, int step, void *_data)
 void yak_qv(const yak_qopt_t *opt, const char *fn, const yak_ch_t *ch, int64_t *cnt)
 {
 	qv_shared_t qs;
-	int i, j, n_cnt = 1<<YAK_COUNTER_BITS;
+	int i, j, n_cnt = 1<<YAK_COUNTER_BITS_QV;
 	memset(&qs, 0, sizeof(qv_shared_t));
 	qs.k = ch->k;
 	qs.opt = opt;

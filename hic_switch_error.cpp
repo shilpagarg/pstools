@@ -15,6 +15,7 @@
 #include "kseq.h" // FASTA/Q parser
 #include <tuple>
 #include <inttypes.h>
+#include <fstream>
 
 using namespace std;
 KSEQ_INIT(gzFile, gzread)
@@ -24,11 +25,11 @@ typedef struct {
 	int n, m;
 	uint64_t n_ins;
 	uint64_t *a;
-	uint16_t *r;
+	uint32_t *r;
 	uint32_t *pos;
 } ch_buf_t;
 
-static inline void ch_insert_buf(ch_buf_t *buf, int p, uint64_t y, uint16_t seq_id, uint32_t pos) // insert a k-mer $y to a linear buffer
+static inline void ch_insert_buf(ch_buf_t *buf, int p, uint64_t y, uint32_t seq_id, uint32_t pos) // insert a k-mer $y to a linear buffer
 {
 	int pre = y & ((1<<p) - 1);
 	ch_buf_t *b = &buf[pre];
@@ -43,7 +44,7 @@ static inline void ch_insert_buf(ch_buf_t *buf, int p, uint64_t y, uint16_t seq_
 	b->r[b->n++] = seq_id;
 }
 
-static void count_seq_buf(ch_buf_t *buf, int k, int p, int len, const char *seq, uint16_t seq_id) // insert k-mers in $seq to linear buffer $buf
+static void count_seq_buf(ch_buf_t *buf, int k, int p, int len, const char *seq, uint32_t seq_id) // insert k-mers in $seq to linear buffer $buf
 {
 	int i, l;
 	uint64_t x[2], mask = (1ULL<<k*2) - 1, shift = (k - 1) * 2;
@@ -60,7 +61,7 @@ static void count_seq_buf(ch_buf_t *buf, int k, int p, int len, const char *seq,
 	}
 }
 
-static void count_seq_buf_long(ch_buf_t *buf, int k, int p, int len, const char *seq, uint16_t seq_id) // insert k-mers in $seq to linear buffer $buf
+static void count_seq_buf_long(ch_buf_t *buf, int k, int p, int len, const char *seq, uint32_t seq_id) // insert k-mers in $seq to linear buffer $buf
 {
 	int i, l;
 	uint64_t x[4], mask = (1ULL<<k) - 1, shift = k - 1;
@@ -82,7 +83,7 @@ typedef struct { // global data structure for kt_pipeline()
 	int create_new;
 	kseq_t *ks;
 	yak_ch_t *h;
-	yak_ch_t *h_pos;
+	yak_ch_pos_t *h_pos;
 	uint64_t global_counter;
 	uint64_t hap1_final_id;
 	int seg_n;
@@ -104,7 +105,7 @@ static void worker_for(void *data, long i, int tid) // callback for kt_for()
 {
 	stepdat_t *s = (stepdat_t*)data;
 	yak_ch_t *h = s->p->h;
-	yak_ch_t *h_pos = s->p->h_pos;
+	yak_ch_pos_t *h_pos = s->p->h_pos;
 	ch_buf_t *b = &s->buf[i];
 	b->n_ins += yak_ch_insert_list_kmer_pos(h, h_pos, s->p->create_new, b->n, b->a, b->r, b->pos, i);
 }
@@ -183,7 +184,7 @@ static void *worker_pipeline(void *data, int step, void *in) // callback for kt_
 	return 0;
 }
 
-pldat_t *yak_counting_switch_error(const char *fn1, const char *fn2, const yak_copt_t *opt)
+pldat_t *yak_counting_switch_error(string fn1, string fn2, const yak_copt_t *opt)
 {
 	pldat_t* pl;
 	CALLOC(pl,1);
@@ -193,14 +194,14 @@ pldat_t *yak_counting_switch_error(const char *fn1, const char *fn2, const yak_c
 	pl->opt = opt;
 	pl->create_new = 1;
 	pl->h = yak_ch_init(opt->k, opt->pre, opt->bf_n_hash, opt->bf_shift);
-	pl->h_pos = yak_ch_init(opt->k, 30, opt->bf_n_hash, opt->bf_shift);
-	if ((fp = gzopen(fn1, "r")) == 0) return 0;
+	pl->h_pos = yak_ch_pos_init(opt->k, YAK_COUNTER_BITS_LONG, opt->bf_n_hash, opt->bf_shift);
+	if ((fp = gzopen(fn1.c_str(), "r")) == 0) return 0;
 	pl->ks = kseq_init(fp);
 	kt_pipeline(3, worker_pipeline, pl, 3);
 	kseq_destroy(pl->ks);
 	gzclose(fp);
 	pl->hap1_final_id = pl->global_counter;
-	if ((fp = gzopen(fn2, "r")) == 0) return 0;
+	if ((fp = gzopen(fn2.c_str(), "r")) == 0) return 0;
 	pl->ks = kseq_init(fp);
 	kt_pipeline(3, worker_pipeline, pl, 3);
 	kseq_destroy(pl->ks);
@@ -226,7 +227,7 @@ typedef struct {
 } tb_buf_t;
 
 typedef struct {
-	uint16_t unit_id;
+	uint32_t unit_id;
 	uint64_t pos;
 } mapping_res_t;
 
@@ -235,7 +236,7 @@ typedef struct {
 	double ratio_thres;
 	bseq_file_t *fp;
 	yak_ch_t *ch;
-	yak_ch_t *ch_pos;
+	yak_ch_pos_t *ch_pos;
 	tb_buf_t *buf;
 	std::vector<mapping_res_t>* mappings;
 	int record_num;
@@ -245,13 +246,12 @@ typedef struct {
 	int n_seq;
 	tb_shared_t *aux;
 	bseq1_t *seq;
-	uint16_t *mappings;
+	uint32_t *mappings;
 	uint32_t *map_pos;
 } tb_step_t;
 
 static void tb_worker(void *_data, long k, int tid)
 {
-	uint64_t max_64 = -1;
 	tb_step_t *t = (tb_step_t*)_data;
 	tb_shared_t *aux = t->aux;
 	bseq1_t *s = &t->seq[k];
@@ -259,7 +259,7 @@ static void tb_worker(void *_data, long k, int tid)
 	uint64_t x[4], mask;
 	int i, l, shift;
 	uint32_t s_pos;
-	std::map<uint16_t,int> counts;
+	std::map<uint32_t,int> counts;
 	std::map<uint32_t,int> pos;
 	if (aux->ch->k < 32) {
 		mask = (1ULL<<2*aux->ch->k) - 1;
@@ -293,15 +293,16 @@ static void tb_worker(void *_data, long k, int tid)
 					y = yak_hash64(x[0] < x[1]? x[0] : x[1], mask);
 				else
 					y = yak_hash_long(x);
-				uint16_t res = yak_ch_get_pos(aux->ch, aux->ch_pos, y, &s_pos);
-				if(res != 65535){
+				uint32_t res = yak_ch_get_pos(aux->ch, aux->ch_pos, y, &s_pos);
+				if(res != -1){
 					counts[res]++;
 					pos[res] = s_pos;
+					// printf("%d\t%d\t%ld\n",res,s_pos,k);
 				}
 			}
 		} else l = 0, x[0] = x[1] = x[2] = x[3] = 0;
 	}
-	uint16_t max_idx = -1;
+	uint32_t max_idx = -1;
 	int max_val = 0;
 	for(auto idx: counts) {
 		if(max_val < idx.second){
@@ -311,6 +312,7 @@ static void tb_worker(void *_data, long k, int tid)
 	}
 	t->mappings[k] = max_idx;
 	t->map_pos[k] = pos[max_idx];
+	// printf("%d\t%d\t%ld\n",max_idx,pos[max_idx],k);
 }
 
 static void *tb_pipeline(void *shared, int step, void *_data)
@@ -322,7 +324,7 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 		s->seq = bseq_read(aux->fp, CHUNK_SIZE, 0, &s->n_seq);
 		s->aux = aux;
 		if (s->n_seq) {
-			s->mappings = (uint16_t*)calloc(s->n_seq, sizeof(uint16_t));
+			s->mappings = (uint32_t*)calloc(s->n_seq, sizeof(uint32_t));
 			s->map_pos = (uint32_t*)calloc(s->n_seq, sizeof(uint32_t));
 			// fprintf(stderr, "[M::%s] read %d sequences\n", __func__, s->n_seq);
 			return s;
@@ -347,8 +349,6 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 
 void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, std::map<std::string,std::string> contig2_1_map)
 {
-
-
 
 	std::vector<std::string> names = *pl->names;
 	std::vector<uint64_t> lengths = *pl->lengths;
@@ -393,37 +393,46 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 	}
 	free(aux.buf);
 
-	// map<uint16_t, int> unid_id;
-	// map<int, string> id_names;
-	// map<int, uint64_t> id_lengths;
-	// int ids = 0;
-	// for(auto i: contig2_1_map){
-	// 	for(int idx = 0; idx < names.size()/2; idx++){
-	// 		if(names[idx]==i.first){
-	// 			unid_id[idx] = ids;
-	// 			id_names[ids] = names[idx];
-	// 			id_lengths[ids] = lengths[idx];
-	// 			break;
-	// 		}
-	// 	}
-	// 	for(int idx = names.size()/2; idx < names.size(); idx++){
-	// 		if(names[idx]==i.second){
-	// 			unid_id[idx] = ids+1;
-	// 			id_names[ids+1] = names[idx];
-	// 			id_lengths[ids+1] = lengths[idx];
-	// 			break;
-	// 		}
-	// 	}
-	// 	ids+=2;
+	map<uint32_t, int> unid_id;
+	map<int, string> id_names;
+	map<int, uint64_t> id_lengths;
+	int ids = 0;
+	for(auto i: contig2_1_map){
+		for(int idx = 0; idx < names.size()/2; idx++){
+			if(names[idx]==i.first){
+				unid_id[idx] = ids;
+				id_names[ids] = names[idx];
+				id_lengths[ids] = lengths[idx];
+				break;
+			}
+		}
+		for(int idx = names.size()/2; idx < names.size(); idx++){
+			if(names[idx]==i.second){
+				unid_id[idx] = ids+1;
+				id_names[ids+1] = names[idx];
+				id_lengths[ids+1] = lengths[idx];
+				break;
+			}
+		}
+		ids+=2;
+	}
+	// for(auto i : unid_id){
+	// 	printf("%d\t%d\n",i.first,i.second);
+	// 	printf("%d\t%s\n",i.first,id_names[i.second].c_str());
+	// 	printf("%d\t%d\n",i.first,id_lengths[i.second]);
+
 	// }
 	uint64_t overall_total_length = pl->tot_len;
-	uint64_t support_count[aux.record_num] = {0};
+	// uint64_t support_count[unid_id.size()] = {0};
 	// memset(support_count,0,sizeof(support_count));
-	uint64_t unsupport_count[aux.record_num] = {0};
+	// uint64_t unsupport_count[unid_id.size()] = {0};
 	// memset(unsupport_count,0,sizeof(unsupport_count));
 	std::map<uint32_t, std::vector<uint32_t>> unsupported_position;
 	std::map<uint32_t, std::vector<uint32_t>> supported_position;
 
+
+    ofstream outFileConnections;
+	outFileConnections.open(string("./") + string("hic_connection_in_haps.txt"), ofstream::out | ofstream::trunc);
 	for(uint64_t j = 0; j < std::min(map1->size(), map2->size()); j++){
 		
 
@@ -437,28 +446,32 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 		// 		support_count[unid_id[(*map1)[j].unit_id]]++;
 		// }
 		
-		// if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535 && unid_id.find((*map1)[j].unit_id)!=unid_id.end() && unid_id.find((*map2)[j].unit_id)!=unid_id.end()){
-		if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535){
+		
+		if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535 && unid_id.find((*map1)[j].unit_id)!=unid_id.end() && unid_id.find((*map2)[j].unit_id)!=unid_id.end()
+		&& (unid_id[(*map1)[j].unit_id]>>1) == (unid_id[(*map2)[j].unit_id]>>1) ){
+		// if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535){
 		// printf("%d, %d\n", (*map1)[j].unit_id, (*map2)[j].unit_id);
 		// printf("%d, %d\n", (*map1)[j].pos, (*map2)[j].pos);
-			bool same_hap = !(((*map1)[j].unit_id<=pl->hap1_final_id) ^ ((*map2)[j].unit_id<=pl->hap1_final_id));
-			if(same_hap){
+			outFileConnections << id_names[unid_id[(*map1)[j].unit_id]] << "\t" << (*map1)[j].pos << "\t";
+			outFileConnections << id_names[unid_id[(*map2)[j].unit_id]] << "\t" << (*map2)[j].pos << "\n";
+			if(unid_id[(*map1)[j].unit_id] == unid_id[(*map2)[j].unit_id]){
 				// if((*map1)[j].unit_id >= aux.record_num/2){
 					// support_count[(*map1)[j].unit_id - aux.record_num/2]++;
 				// }else{
-				support_count[(*map1)[j].unit_id]++;
-				support_count[(*map2)[j].unit_id]++;
+				// support_count[unid_id[(*map1)[j].unit_id]]++;
+				// support_count[unid_id[(*map2)[j].unit_id]]++;
 				// }
-				supported_position[(*map1)[j].unit_id].push_back((*map1)[j].pos);
-				supported_position[(*map2)[j].unit_id].push_back((*map2)[j].pos);
+				supported_position[unid_id[(*map1)[j].unit_id]].push_back((*map1)[j].pos);
+				supported_position[unid_id[(*map2)[j].unit_id]].push_back((*map2)[j].pos);
 			}else{
-				unsupport_count[(*map1)[j].unit_id]++;
-				unsupport_count[(*map2)[j].unit_id]++;
-				unsupported_position[(*map1)[j].unit_id].push_back((*map1)[j].pos);
-				unsupported_position[(*map2)[j].unit_id].push_back((*map2)[j].pos);
+				// unsupport_count[unid_id[(*map1)[j].unit_id]]++;
+				// unsupport_count[unid_id[(*map2)[j].unit_id]]++;
+				unsupported_position[unid_id[(*map1)[j].unit_id]].push_back((*map1)[j].pos);
+				unsupported_position[unid_id[(*map2)[j].unit_id]].push_back((*map2)[j].pos);
 			}
 		}
 	}
+	outFileConnections.close();
 	
 	// uint32_t switch_error_count = 0;
 	// uint64_t switch_error_length = 0;
@@ -467,18 +480,21 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 	uint32_t overall_total_vars = 0;
 	uint32_t overall_hamming_distance = 0;
 	uint32_t overall_switch_error_count = 0;
-	uint64_t overall_switch_error_length = 0;
+	// uint64_t overall_switch_error_length = 0;
 	uint32_t overall_potiential_switch_count = 0;
 
-	for(auto i: supported_position){
-		string name = names[i.first];
-		uint64_t total_length = lengths[i.first];
+	for(auto i: id_names){
+		string name = i.second;
+		uint64_t total_length = id_lengths[i.first];
 		uint32_t total_vars = 0;
 		uint32_t switch_error_count = 0;
-		uint64_t switch_error_length = 0;
+		// uint64_t switch_error_length = 0;
 		uint32_t hamming_distance = 0;
 		uint32_t potiential_switch_count = 1;
-		vector<uint32_t> sup_pos = i.second;
+		vector<uint32_t> sup_pos;
+		if(supported_position.find(i.first)!=supported_position.end()){
+			sup_pos = supported_position[i.first];
+		}
 		vector<uint32_t> unsup_pos;
 		if(unsupported_position.find(i.first)!=unsupported_position.end()){
 			unsup_pos = unsupported_position[i.first];
@@ -531,45 +547,79 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 				init = false;
 			}
 		}
-		total_vars = condensed_counting.size() - 1;
-		vector<uint32_t> switch_pos_vec;
-		for(int p = 0; p < condensed_counting.size()-1; p++){
-			if(condensed_counting[p].second > 0){
-				printf("Switch at %"PRIu64"\n", condensed_counting[p].first);
-				hamming_distance += 1;
-			}else{
-				printf("Unswitch at %"PRIu64"\n", condensed_counting[p].first);
-			}
-			if( (condensed_counting[p].second>0) ^ (condensed_counting[p+1].second>0)){
-				switch_error_count += 1;
-				switch_pos_vec.push_back(condensed_counting[p+1].first);
-			}
-		// printf("%d\n", condensed_counting[p].first);
+		if(condensed_counting.size() > 0){
+			total_vars = condensed_counting.size() - 1;
 		}
-		if(condensed_counting.size()>0){
-			if(condensed_counting[condensed_counting.size()-1].second > 0){
-				hamming_distance += 1;
+		// vector<uint32_t> switch_pos_vec;
+		idx = 0;
+		while(idx < condensed_counting.size()){
+			if(condensed_counting[idx].second>0){
+				uint32_t first_start = idx;
+				uint32_t cur_start = idx;
+				while(idx < condensed_counting.size() && cur_start >= idx-5){
+					if(condensed_counting[idx].second>=0){
+						cur_start = idx;
+					}
+					idx++;
+				}
+				if(first_start < cur_start-1){
+					for(int i = first_start; i <= cur_start; i++){
+						condensed_counting[i].second = 1;
+					}
+				}else{
+					for(int i = first_start; i <= cur_start; i++){
+						condensed_counting[i].second = -1;
+					}
+				}
+			}else{
+				idx++;
 			}
+		}
+
+		if(condensed_counting.size()>0){
+			for(int p = 0; p < condensed_counting.size()-1; p++){
+				if(condensed_counting[p].second > 0){
+					// printf("Switch at %"PRIu64", %d\n", condensed_counting[p].first, condensed_counting[p].second);
+					hamming_distance += 1;
+				}else{
+					// printf("Unswitch at %"PRIu64", %d\n", condensed_counting[p].first, condensed_counting[p].second);
+				}
+				if( (condensed_counting[p].second>0) ^ (condensed_counting[p+1].second>0)){
+					if( condensed_counting[p].first){
+						switch_error_count += 1;
+					}
+					// switch_pos_vec.push_back(condensed_counting[p+1].first);
+				}
+			// printf("%d\n", condensed_counting[p].first);
+			}
+				if(condensed_counting[condensed_counting.size()-1].second > 0){
+					// printf("Switch at %"PRIu64", %d\n", condensed_counting[condensed_counting.size()-1].first, condensed_counting[condensed_counting.size()-1].second);
+					hamming_distance += 1;
+				}else{
+					// printf("Unswitch at %"PRIu64", %d\n", condensed_counting[condensed_counting.size()-1].first, condensed_counting[condensed_counting.size()-1].second);
+				}
 		}
 		// printf("%d\n", condensed_counting[condensed_counting.size()-1].first);
-		// for(auto i:switch_pos_vec){
-			// printf("%u\n", i);
+		// for(auto i:condensed_counting){
+		// 	if(i.second>0){
+		// 		printf("%"PRIu64"\n", i.first);
+		// 	}
 		// }
-		if(switch_pos_vec.size()>=2){
-			for(int p = 0; p < switch_pos_vec.size()-1; p+=2){
-				switch_error_length+=switch_pos_vec[p+1] - switch_pos_vec[p];	
-			}
-		}
-		printf("\n%s\n",name.c_str());
-		printf("Unswitched: %"PRIu64"\n", total_vars - hamming_distance);
-		printf("Switched: %"PRIu64"\n", hamming_distance);
-		printf("Hamming distance rate: %.4f%%\n", ((double) hamming_distance)/ (total_vars) * 100);
-		printf("Switch error number: %"PRIu64", rate: %.4f%%\n", switch_error_count, ((double) switch_error_count)/ (condensed_counting.size()-1) * 100);
+		// if(switch_pos_vec.size()>=2){
+		// 	for(int p = 0; p < switch_pos_vec.size()-1; p+=2){
+		// 		switch_error_length+=switch_pos_vec[p+1] - switch_pos_vec[p];	
+		// 	}
+		// }
+		// printf("\n%s\t%d\n",name.c_str(), id_lengths[i.first]);
+		// printf("Unswitched: %"PRIu64"\n", total_vars - hamming_distance);
+		// printf("Switched: %"PRIu64"\n", hamming_distance);
+		// printf("Hamming distance rate: %.4f%%\n", ((double) hamming_distance)/ (total_vars) * 100);
+		// printf("Switch error number: %"PRIu64", rate: %.4f%%\n", switch_error_count, ((double) switch_error_count)/ (condensed_counting.size()-1) * 100);
 		// printf("Switch error length: %"PRIu64", rate: %.4f%%\n", switch_error_length, ((double) switch_error_length)/ total_length * 100);
 		overall_total_vars += total_vars;
 		overall_hamming_distance += hamming_distance;
 		overall_switch_error_count += switch_error_count;
-		overall_switch_error_length += switch_error_length;
+		// overall_switch_error_length += switch_error_length;
 		overall_potiential_switch_count += (condensed_counting.size()-1);
 		// if(unsup_pos_len.size()>0){
 		// 	vector<pair<uint32_t,uint32_t>> merged;
@@ -592,11 +642,14 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 		// 	}
 		// }
 	}
-	printf("Overall total length: %"PRIu64"\n",overall_total_length);
-	printf("\nOverall Unswitched: %"PRIu64"\n", overall_total_vars - overall_hamming_distance);
-	printf("Overall Switched: %"PRIu64"\n", overall_hamming_distance);
-	printf("Overall Hamming distance rate: %.4f%%\n", ((double) overall_hamming_distance)/ (overall_total_vars) * 100);
-	printf("Overall Switch error number: %"PRIu64", rate: %.4f%%\n", overall_switch_error_count, ((double) overall_switch_error_count)/ overall_potiential_switch_count * 100);
+	// printf("Overall total length: %"PRIu64"\n",overall_total_length);
+	fprintf(stderr, "[M::Result]\n");
+	printf("%s\t%s\n","Hamming Distance", "Switch Error Rate");
+	printf("%.4f%%\t%.4f%%\n", ((double) overall_hamming_distance)/ (overall_total_vars) * 100, ((double) overall_switch_error_count)/ overall_potiential_switch_count * 100);
+	// printf("\nOverall Unswitched: %"PRIu64"\n", overall_total_vars - overall_hamming_distance);
+	// printf("Overall Switched: %"PRIu64"\n", overall_hamming_distance);
+	// printf("Overall Hamming distance rate: %.4f%%\n", ((double) overall_hamming_distance)/ (overall_total_vars) * 100);
+	// printf("Overall Switch error number: %"PRIu64", rate: %.4f%%\n", overall_switch_error_count, ((double) overall_switch_error_count)/ overall_potiential_switch_count * 100);
 	// printf("Overall Switch error length: %"PRIu64", rate: %.4f%%\n", overall_switch_error_length, ((double) overall_switch_error_length)/ overall_total_length * 100);
 	// for(int i = 0; i < ids; i++){
 	// 	printf("%s : sup: %"PRIu64", unsup: %"PRIu64", rate: %.4f%%\n", id_names[i].c_str(), support_count[i], unsupport_count[i],
@@ -608,16 +661,15 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 	// printf("Switch error number: %"PRIu64", length: %"PRIu64", length rate: %.4f%%\n", switch_error_count, switch_error_length, (((double) switch_error_length)/ ((double) total_length)) * 100);
 }
 
-int main_switch_error(yak_copt_t opt, char* hic_file1,char* hic_file2, char* hap_file1, char* hap_file2, std::map<std::string,std::string> contig2_1_map)
+int main_switch_error(yak_copt_t opt, string hic_file1,string hic_file2, string hap_file1, string hap_file2, std::map<std::string,std::string> contig2_1_map)
 {
 	pldat_t *h;
-	bseq_file_t* hic_fn1 = bseq_open(hic_file1);
-	bseq_file_t* hic_fn2 = bseq_open(hic_file2);
+	bseq_file_t* hic_fn1 = bseq_open(hic_file1.c_str());
+	bseq_file_t* hic_fn2 = bseq_open(hic_file2.c_str());
 	if (hic_fn1 == 0 || hic_fn2 == 0) {
 		fprintf(stderr, "ERROR: fail to open hic files\n");
 		exit(1);
 	}
-
 	h = yak_counting_switch_error(hap_file1,hap_file2, &opt);
 
 	get_switch_error(h, hic_fn1, hic_fn2, contig2_1_map);

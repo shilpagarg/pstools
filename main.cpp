@@ -198,6 +198,44 @@ int main_intersect(int argc, char* argv[]) {
 
 }
 
+int main_clean_graph(int argc, char* argv[]) {
+    printf("start main\n");
+    if (argc != 3) {
+        std::cerr << "Usage: " << argv[0] << " <input-gfa-file>  <output-gfa-file>" << std::endl;
+        return 1;
+    }
+
+    asg_t* g;
+	int ret = 1;
+	int counter = 0;
+	string infile = string(argv[1]);
+	string outfile = string("pstools.clean_graph.temp.")+to_string(counter)+string(".out");
+	string file_out = string(argv[2]);
+	while(ret!=0){
+		g = gfa_read_cerr(strdup(infile.c_str()));
+    	ret = clean_graph(g,infile,outfile,NULL);
+		counter++;
+		infile = outfile;
+		outfile = string("pstools.clean_graph.temp.")+to_string(counter)+string(".out");
+		if(counter>=2){
+			string rm_cmd = string("rm ") + string("pstools.clean_graph.temp.")+to_string(counter-2)+string(".out");
+			system(rm_cmd.c_str());
+		}
+	}
+	string line;
+    ifstream finalOutput(infile);
+    ofstream outputFile(file_out);
+    while (getline(finalOutput, line))
+    {
+		outputFile << line << endl;
+	}
+	outputFile.close();
+	finalOutput.close();
+	string rm_cmd = string("rm ") + infile;
+	system(rm_cmd.c_str());
+	printf("finish main\n");
+    return 0;
+}
 int main_bubble_chain(int argc, char* argv[]) {
     // printf("start main\n");
     // if (argc != 3) {
@@ -264,35 +302,16 @@ int main_resolve_repeat(int argc, char* argv[]) {
 int main_resolve_haplotypes(int argc, char* argv[]) {
 	ketopt_t o = KETOPT_INIT;
     int c,n_threads = 8;
-	string enzymes_unsplit;
-	string identityFile;
-	bool check_identity = false;
-	while ((c = ketopt(&o, argc, argv, 1, "t:e:i:f:", 0)) >= 0) {
+	while ((c = ketopt(&o, argc, argv, 1, "t:", 0)) >= 0) {
 		if (c == 't') n_threads = atoi(o.arg);
-		else if (c == 'e') enzymes_unsplit = string(o.arg);
-		else if (c == 'i') check_identity = strcmp(o.arg, "false");
-		else if (c == 'f') identityFile = string(o.arg);
 	}
 	if (argc - o.ind < 3) {
 		fprintf(stderr, "Usage: pstools resolve_haplotypes [options] <hic_mapping file> <gfa file> <output_directory>\n");
 		fprintf(stderr, "Options:\n");
 		fprintf(stderr, "  -t INT     number of threads [%d]\n", n_threads);
-		fprintf(stderr, "  -e STR     enzymes separated by comma, optional [%s]\n", enzymes_unsplit.c_str());
-		fprintf(stderr, "  -f STR     identity file path, identity check will be ran if it is enabled and no file is given [%s]\n", identityFile.c_str());
-		fprintf(stderr, "  -i BOOL    enable identity check on contigs, exclude identical ones while scaffolding [%s]\n", (check_identity ? "true":"false"));
 		return 1;
 	}
 
-	vector<string> enzymes;
-	if(enzymes_unsplit.size()>1){
-		stringstream s_stream(enzymes_unsplit);
-		while(s_stream.good()) {
-			string substr;
-			getline(s_stream, substr, ',');
-			substr.erase(remove(substr.begin(), substr.end(), '^'), substr.end());
-			enzymes.push_back(substr);
-		}
-	}
 
 
     char* connectionFile = argv[o.ind];
@@ -300,6 +319,7 @@ int main_resolve_haplotypes(int argc, char* argv[]) {
     char* output_directory = argv[o.ind+2];
     printf("start main\n");
     asg_t* graph = gfa_read(gfa_filename);
+	asg_t** graph_ptr = (&graph);
 	// for(int i = 0; i<graph->n_seq; i++){
 	    // cout << graph->seq[0].len << "\t" << string(graph->seq[0].seq).length() << endl; 
 	    // cout << graph->seq[asg_arc_a(graph,0)[0].v>>1].len << "\t" << string(graph->seq[asg_arc_a(graph,0)[0].v>>1].seq).length() << endl; 
@@ -320,15 +340,130 @@ int main_resolve_haplotypes(int argc, char* argv[]) {
 	}
     ifstream infile(connectionFile);
     uint32_t i,j,count_forward,count_backward;
-    while(infile >> i >> j >> count_backward >> count_forward){
-        connections_backward[i][j] = count_backward;
-        connections_backward[j][i] = count_backward;
-        connections_foward[i][j] = count_forward;
-        connections_foward[j][i] = count_forward;
+	string tag, name, line;
+	map<string, uint32_t> node_name_id;
+	map<uint32_t, uint32_t> mapID_nodeID;
+	for(int i = 0; i < graph->n_seq; i++){
+		node_name_id[string(graph->seq[i].name)] = i;
+	}
+	while (getline(infile, line))
+    {
+        istringstream iss(line);
+        iss >> tag;
+        if(tag==string("M")){
+			iss >> i >> name;
+			mapID_nodeID[i] = node_name_id[name];
+        }else if(tag==string("C")){
+			iss >> i >> j >> count_backward >> count_forward;
+			if(mapID_nodeID.find(i)!=mapID_nodeID.end() && mapID_nodeID.find(j)!=mapID_nodeID.end()){
+				i = mapID_nodeID[i];
+				j = mapID_nodeID[j];
+				connections_backward[i][j] = count_backward;
+				connections_backward[j][i] = count_backward;
+				connections_foward[i][j] = count_forward;
+				connections_foward[j][i] = count_forward;
+			}
+        }
+        // process pair (a,b)
     }
-    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph = get_bubbles(graph,string(output_directory),connections_foward,connections_backward);
-    get_haplotype_path(connections_foward, connections_backward, graph, bubble_chain_graph, output_directory,n_threads, enzymes, identityFile, check_identity);
+	// gfa_destory(graph);
+    map<string,string> excluded_nodes;
+    map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph = get_bubbles(string(gfa_filename),graph_ptr,string(output_directory),connections_foward,connections_backward,(&excluded_nodes));
+    get_haplotype_path(connections_foward, connections_backward, *graph_ptr, bubble_chain_graph, output_directory,n_threads,&excluded_nodes);
 
+    return 0;
+}
+
+int main_haplotype_scaffold(int argc, char* argv[]) {
+	ketopt_t o = KETOPT_INIT;
+    int c,n_threads = 8;
+	// string enzymes_unsplit;
+	string identityFile;
+	bool check_identity = false;
+	while ((c = ketopt(&o, argc, argv, 1, "t:e:i:f:", 0)) >= 0) {
+		if (c == 't') n_threads = atoi(o.arg);
+		// else if (c == 'e') enzymes_unsplit = string(o.arg);
+		else if (c == 'i') check_identity = strcmp(o.arg, "false");
+		else if (c == 'f') identityFile = string(o.arg);
+	}
+	if (argc - o.ind < 3) {
+		fprintf(stderr, "Usage: pstools haplotype_scaffold [options] <haplotype connection file> <pred_haplotypes.fa> <output_directory>\n");
+		fprintf(stderr, "Options:\n");
+		fprintf(stderr, "  -t INT     number of threads [%d]\n", n_threads);
+		// fprintf(stderr, "  -e STR     enzymes separated by comma, optional [%s]\n", enzymes_unsplit.c_str());
+		fprintf(stderr, "  -f STR     identity file path, identity check will be ran if it is enabled and no file is given [%s]\n", identityFile.c_str());
+		fprintf(stderr, "  -i BOOL    enable identity check on contigs, exclude identical ones while scaffolding [%s]\n", (check_identity ? "true":"false"));
+		return 1;
+	}
+
+
+
+    char* connectionFile = argv[o.ind];
+    char* haploFile = argv[o.ind+1];
+    char* output_directory = argv[o.ind+2];
+    printf("start main\n");
+
+	map<string, string> contig_hap1s;
+    map<string, string> contig_hap2s;
+    map<string, uint32_t> contig_lengths;
+    map<string, uint32_t> contig_id;
+    map<uint32_t, string> id_contig;
+
+    ifstream inHaploFile(haploFile);
+	string line;
+	string name;
+	string sequence;
+	uint32_t id = 0;
+	while (getline(inHaploFile, line)){
+        istringstream iss1(line);
+		iss1 >> name;
+		name = name.substr(1,name.size()-6);
+		getline(inHaploFile, line);
+        istringstream iss2(line);
+		iss2 >> sequence;
+		if(id%2 == 0){
+			contig_id[name] = (id>>1);
+			id_contig[id>>1] = name;
+			contig_hap1s[name] = sequence;
+			contig_lengths[name] = sequence.size();
+		}else{
+			contig_hap2s[name] = sequence;
+		}
+		id++;
+	}
+
+
+
+
+    uint32_t **contig_connection;
+	CALLOC(contig_connection,contig_lengths.size()*4);
+	for(int i = 0; i< contig_lengths.size()*4; i++){
+		CALLOC(contig_connection[i], contig_lengths.size()*4);
+		memset(contig_connection[i], 0, contig_lengths.size()*4*sizeof(uint32_t));
+	}
+
+    ifstream infile(connectionFile);
+    string outContig;
+    string inContig;
+	uint32_t count;
+    while(infile >> outContig >> inContig >> count){
+		bool inForward = inContig[inContig.size()-1]=='+';
+		bool outForward = outContig[outContig.size()-1]=='+';
+		bool inHap1 = inContig[inContig.size()-2]=='1';
+		uint32_t inID = contig_id[inContig.substr(0,inContig.size()-6)]<<2;		
+		uint32_t outID = contig_id[outContig.substr(0,outContig.size()-6)]<<2;
+		if(!inForward){
+			inID = inID^1;
+		}
+		if(!outForward){
+			outID = outID^1;
+		}
+		if(!inHap1){
+			inID = inID^2;
+		}
+		contig_connection[outID][inID] = count;
+    }
+	haplotypes_scaffold(contig_connection, contig_hap1s, contig_hap2s, contig_lengths, contig_id, id_contig, output_directory, identityFile, check_identity, n_threads);
     return 0;
 }
 
@@ -380,6 +515,9 @@ int main_hic_mapping(int argc, char* argv[]){
     return main_hic_map(argc, argv);
 }
 
+int main_hic_mapping_haplo(int argc, char* argv[]){
+    return main_hic_map_haplo(argc, argv);
+}
 // int main_completeness_check(int argc, char* argv[]){
 //     return main_completeness(argc, argv);
 // }
@@ -440,7 +578,48 @@ int main_hic_mapping(int argc, char* argv[]){
 // 	return 0;
 // }
 
-int main_eval(int argc, char *argv[]){
+int main_completeness_check(int argc, char *argv[]){
+	int ret = 0;
+	yak_copt_t opt;
+	ketopt_t o = KETOPT_INIT;
+	yak_ch_t *haplo_h;
+	int c, i, kmer;
+	double completeness;
+	yak_copt_init(&opt);
+	opt.pre = YAK_COUNTER_BITS;
+	while ((c = ketopt(&o, argc, argv, 1, "k:K:t:", 0)) >= 0) {
+		if (c == 'k') opt.k = atoi(o.arg);
+		else if (c == 'K') opt.chunk_size = atoi(o.arg);
+		else if (c == 't') opt.n_thread = atoi(o.arg);
+	}
+	if (argc - o.ind < 3) {
+		fprintf(stderr, "Usage: pstools completeness [options] <seq.fa> <hic.R1.fastq.gz> <hic.R2.fastq.gz>\n");
+		fprintf(stderr, "Options:\n");
+		fprintf(stderr, "  -k INT     k-mer size [%d]\n", opt.k);
+		fprintf(stderr, "  -t INT     number of worker threads [%d]\n", opt.n_thread);
+		fprintf(stderr, "  -K INT     chunk size [100m]\n");
+		return 1;
+	}
+	if (opt.k >= 64) {
+		fprintf(stderr, "ERROR: -k must be smaller than 64\n");
+		return 1;
+	} else if (opt.k >= 32) {
+		fprintf(stderr, "WARNING: counts are inexact if -k is greater than 31\n");
+	}
+
+	char* hap1_file = argv[o.ind];
+	char* hic1_file = argv[o.ind+1];
+	char* hic2_file = argv[o.ind+2];
+	haplo_h = yak_count_create_new(hap1_file, &opt, 0);
+	completeness = main_completeness(haplo_h, opt.n_thread, string(hic1_file), string(hic2_file));
+	yak_ch_destroy(haplo_h);
+	fprintf(stderr, "\n[M::Result] ");
+	printf("Completeness\n");
+	printf("%.3f%%\n",completeness);
+	fprintf(stderr, "\n");
+}
+
+int main_qv_check(int argc, char *argv[]){
 	int ret = 0;
 	yak_copt_t opt;
 	yak_qopt_t qopt;
@@ -460,9 +639,8 @@ int main_eval(int argc, char *argv[]){
 		else if (c == 'K') opt.chunk_size = atoi(o.arg);
 		else if (c == 't') opt.n_thread = atoi(o.arg);
 	}
-	qopt.n_threads = opt.n_thread;
-	if (argc - o.ind < 4) {
-		fprintf(stderr, "Usage: pstools eval [options] <hap1.fa> <hap2.fa> <hic.R1.fastq.gz> <hic.R2.fastq.gz>\n");
+	if (argc - o.ind < 3) {
+		fprintf(stderr, "Usage: pstools qv [options] <seq.fa> <hic.R1.fastq.gz> <hic.R2.fastq.gz>\n");
 		fprintf(stderr, "Options:\n");
 		fprintf(stderr, "  -k INT     k-mer size [%d]\n", opt.k);
 		fprintf(stderr, "  -t INT     number of worker threads [%d]\n", opt.n_thread);
@@ -475,18 +653,61 @@ int main_eval(int argc, char *argv[]){
 	} else if (opt.k >= 32) {
 		fprintf(stderr, "WARNING: counts are inexact if -k is greater than 31\n");
 	}
-	
+	qopt.n_threads = opt.n_thread;
+
+	char* hap1_file = argv[o.ind];
+	char* hic1_file = argv[o.ind+1];
+	char* hic2_file = argv[o.ind+2];
+	hic_h = yak_count_create_new(hic1_file, &opt, 0);
+	hic_h = yak_count_create_new(hic2_file, &opt, hic_h);
+	kmer = hic_h->k;
+	yak_ch_hist(hic_h, hist, opt.n_thread);
+
+	yak_qv(&qopt, hap1_file, hic_h, cnt);
+	yak_qv_solve(hist, cnt, kmer, qopt.fpr, &qs);
+	yak_ch_destroy(hic_h);
+	fprintf(stderr, "\n[M::Result] ");
+	printf("QV_RAW\tQV\n");
+	printf("%.3f\t%.3f\n", qs.qv_raw, qs.qv);
+	fprintf(stderr, "\n");
+}
+
+int main_switch_error_check(int argc, char *argv[]){
+	int ret = 0;
+	yak_copt_t opt;
+	ketopt_t o = KETOPT_INIT;
+	int c, i, kmer;
+
+	yak_copt_init(&opt);
+	while ((c = ketopt(&o, argc, argv, 1, "k:K:t:", 0)) >= 0) {
+		if (c == 'k') opt.k = atoi(o.arg);
+		else if (c == 'K') opt.chunk_size = atoi(o.arg);
+		else if (c == 't') opt.n_thread = atoi(o.arg);
+	}
+	if (argc - o.ind < 4) {
+		fprintf(stderr, "Usage: pstools phasing_error [options] <hap1.fa> <hap2.fa> <hic.R1.fastq.gz> <hic.R2.fastq.gz>\n");
+		fprintf(stderr, "Options:\n");
+		fprintf(stderr, "  -k INT     k-mer size [%d]\n", opt.k);
+		fprintf(stderr, "  -t INT     number of worker threads [%d]\n", opt.n_thread);
+		fprintf(stderr, "  -K INT     chunk size [100m]\n");
+		return 1;
+	}
+	if (opt.k >= 64) {
+		fprintf(stderr, "ERROR: -k must be smaller than 64\n");
+		return 1;
+	} else if (opt.k >= 32) {
+		fprintf(stderr, "WARNING: counts are inexact if -k is greater than 31\n");
+	}
 	char* hap1_file = argv[o.ind];
 	char* hap2_file = argv[o.ind+1];
 	char* hic1_file = argv[o.ind+2];
 	char* hic2_file = argv[o.ind+3];
 
-
 	string minimap2_cmd = string("minimap2 -ax asm5 -t");
 	minimap2_cmd += to_string(opt.n_thread) + string(" -o temp.sam ");
 	minimap2_cmd += string(hap1_file) + " " + string(hap2_file);
 
-	// ret = system(minimap2_cmd.c_str());
+	ret = system(minimap2_cmd.c_str());
 	
 	map<string, map<string, uint32_t>> contig_name_map;
 	map<string, map<string, uint32_t>> contig_name_len;
@@ -549,49 +770,16 @@ int main_eval(int argc, char *argv[]){
 		}
 	}
 	for(auto i : contig_map){
-		cout << i.first << " to " << i.second << endl;
+		fprintf(stderr, "[Mapping relationship] %s and %s \n", i.first.c_str(), i.second.c_str());
+		// cout << i.first << " and " << i.second << endl;
 	}
-	cout << contig_map.size() << endl;
-	// system("rm temp.sam");
+	// cout << contig_map.size() << endl;
+	system("rm temp.sam");
+	opt.pre = YAK_COUNTER_BITS;
+	main_switch_error(opt, string(hic1_file), string(hic2_file), string(hap1_file), string(hap2_file), contig_map);
 
-	// hic_h = yak_count_create_new(hic1_file, &opt, 0);
-	// hic_h = yak_count_create_new(hic2_file, &opt, hic_h);
-	// kmer = hic_h->k;
-	// yak_ch_hist(hic_h, hist, opt.n_thread);
-
-	// yak_qv(&qopt, argv[o.ind+1], hic_h, cnt);
-	// yak_qv_solve(hist, cnt, kmer, qopt.fpr, &qs);
-	// yak_ch_destroy(hic_h);
-
-	// haplo_h = yak_count_create_new(hap1_file, &opt, 0);
-	// haplo_h = yak_count_create_new(hap2_file, &opt, haplo_h);
-	// completeness = main_completeness(haplo_h, opt.n_thread, hic1_file, hic2_file);
-	// yak_ch_destroy(haplo_h);
-
-	main_switch_error(opt, hic1_file, hic2_file, hap1_file, hap2_file, contig_map);
-
-
-
-
-	// // printf("CC\tCT  kmer_occurrence    short_read_kmer_count  raw_input_kmer_count  adjusted_input_kmer_count\n");
-	// printf("CC\tFR  fpr_lower_bound    fpr_upper_bound\n");
-	// printf("CC\tER  total_input_kmers  adjusted_error_kmers\n");
-	// printf("CC\tCV  coverage\n");
-	// printf("CC\tQV  raw_quality_value  adjusted_quality_value\n");
-	// printf("CC\n");
-	// // for (i = (1<<YAK_COUNTER_BITS) - 1; i >= 0; --i)
-	// 	// printf("CT\t%d\t%ld\t%ld\t%.3f\n", i, (long)hist[i], (long)cnt[i], qs.adj_cnt[i]);
-	// printf("FR\t%.3g\t%.3g\n", qs.fpr_lower, qs.fpr_upper);
-	// printf("ER\t%ld\t%.3f\n", (long)qs.tot, qs.err);
-	// printf("CV\t%.3f\n", qs.cov);
-	// printf("QV\t%.3f\t%.3f\n", qs.qv_raw, qs.qv);
-	// printf("QV          \t%.3f\n", qs.qv_raw);
-	// printf("Completeness\t%.4f\n",completeness);
-
-
-	
-    return ret;
 }
+
 
 // int main_identity_check(int argc, char *argv[]){
 // 	stringstream minimap2_cmd;
@@ -681,27 +869,37 @@ int main(int argc, char *argv[])
 	if (argc == 1) {
 		fprintf(stderr, "Usage: pstools <command> <arguments> <inputs>\n");
 		fprintf(stderr, "Commands:\n");
-		fprintf(stderr, "  bubble_chain          returns bubble chains from hifi graph using ONT data\n");
+		// fprintf(stderr, "  bubble_chain          returns bubble chains from hifi graph using ONT data\n");
+		fprintf(stderr, "  clean_graph           cleaning the given graph\n");
 		fprintf(stderr, "  intersect             extract corresponding paf records for sub graph\n");
-		fprintf(stderr, "  resolve_repeat        use ONT data to resolve repeats in hifi graph\n");
+		// fprintf(stderr, "  resolve_repeat        use ONT data to resolve repeats in hifi graph\n");
 		fprintf(stderr, "  resolve_haplotypes    use hic data to resolve haplotypes\n");
-		fprintf(stderr, "  hic_mapping           map hic data to sequences in the graph\n");
-		fprintf(stderr, "  count                 count k-mers\n");
+		fprintf(stderr, "  haplotype_scaffold    scaffolding the predicted haplotypes\n");
+		fprintf(stderr, "  hic_mapping_unitig    map hic data to sequences in the graph\n");
+		fprintf(stderr, "  hic_mapping_haplo     map hic data to predicted haplotypes for scaffolding\n");
+		// fprintf(stderr, "  count                 count k-mers\n");
 		// fprintf(stderr, "  identity_check        generate identity table for contigs\n");
-        fprintf(stderr, "  eval                  evaluate the prediction\n");
+        fprintf(stderr, "  qv                    calculate qv score for prediction\n");
+        fprintf(stderr, "  completeness          calculate completeness for prediction\n");
+        fprintf(stderr, "  phasing_error         calculate switch error\n");
 		fprintf(stderr, "  version               print version number\n");
 		return 1;
 	}
 	yak_reset_realtime();
 	t_start = yak_realtime();
 	if (strcmp(argv[1], "intersect") == 0) ret = main_intersect(argc-1, argv+1);
-	else if (strcmp(argv[1], "bubble_chain") == 0) ret = main_bubble_chain(argc-1, argv+1);
-	else if (strcmp(argv[1], "resolve_repeat") == 0) ret = main_resolve_repeat(argc-1, argv+1);
-	else if (strcmp(argv[1], "resolve_haplotypes") == 0) ret = main_resolve_haplotypes(argc-1, argv+1);
+	// else if (strcmp(argv[1], "bubble_chain") == 0) ret = main_bubble_chain(argc-1, argv+1);
+	else if (strcmp(argv[1], "clean_graph") == 0) ret = main_clean_graph(argc-1, argv+1);
+	// else if (strcmp(argv[1], "resolve_repeat") == 0) ret = main_resolve_repeat(argc-1, argv+1);
 	else if (strcmp(argv[1], "obtain_graph_sequence") == 0) ret = main_obtain_graph_sequence(argc-1, argv+1);
-	else if (strcmp(argv[1], "hic_mapping") == 0) ret = main_hic_mapping(argc-1, argv+1);
-	else if (strcmp(argv[1], "eval") == 0) ret = main_eval(argc-1, argv+1);
-	else if (strcmp(argv[1], "count") == 0) ret = main_count(argc-1, argv+1);
+	else if (strcmp(argv[1], "hic_mapping_unitig") == 0) ret = main_hic_mapping(argc-1, argv+1);
+	else if (strcmp(argv[1], "hic_mapping_haplo") == 0) ret = main_hic_mapping_haplo(argc-1, argv+1);
+	else if (strcmp(argv[1], "haplotype_scaffold") == 0) ret = main_haplotype_scaffold(argc-1, argv+1);
+	else if (strcmp(argv[1], "resolve_haplotypes") == 0) ret = main_resolve_haplotypes(argc-1, argv+1);
+	// else if (strcmp(argv[1], "count") == 0) ret = main_count(argc-1, argv+1);
+	else if (strcmp(argv[1], "phasing_error") == 0) ret = main_switch_error_check(argc-1, argv+1);
+	else if (strcmp(argv[1], "qv") == 0) ret = main_qv_check(argc-1, argv+1);
+	else if (strcmp(argv[1], "completeness") == 0) ret = main_completeness_check(argc-1, argv+1);
 	// else if (strcmp(argv[1], "identity_check") == 0) ret = main_identity_check(argc-1, argv+1);
 	else if (strcmp(argv[1], "version") == 0) {
 		printf("gfa.h: %s\nps: %s\n", PSTOOLS_VERSION, PSTOOLS_VERSION);

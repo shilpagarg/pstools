@@ -18,6 +18,7 @@
 #endif
 
 #define CHUNK_SIZE 200000000
+using namespace std;
 
 typedef struct {
 	int appear_counting;
@@ -124,7 +125,7 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 	return 0;
 }
 
-double main_completeness(yak_ch_t *ch, int n_threads, char* file1, char* file2)
+double main_completeness(yak_ch_t *ch, int n_threads, string file1, string file2)
 {
 	ketopt_t o = KETOPT_INIT;
 	int i, c, min_cnt = 2, mid_cnt = 5;
@@ -139,9 +140,9 @@ double main_completeness(yak_ch_t *ch, int n_threads, char* file1, char* file2)
 	aux.k = ch->k;
 	aux.ch = ch;
 
-	aux.fp = bseq_open(file1);
+	aux.fp = bseq_open(file1.c_str());
 	if (aux.fp == 0) {
-		fprintf(stderr, "ERROR: fail to open file '%s'\n", file1);
+		fprintf(stderr, "ERROR: fail to open file '%s'\n", file1.c_str());
 		exit(1);
 	}
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
@@ -149,10 +150,10 @@ double main_completeness(yak_ch_t *ch, int n_threads, char* file1, char* file2)
 	bseq_close(aux.fp);
 	for (i = 0; i < aux.n_threads; ++i) free(aux.buf[i].s);
 	free(aux.buf);
-	
-	aux.fp = bseq_open(file2);
+
+	aux.fp = bseq_open(file2.c_str());
 	if (aux.fp == 0) {
-		fprintf(stderr, "ERROR: fail to open file '%s'\n", file2);
+		fprintf(stderr, "ERROR: fail to open file '%s'\n", file2.c_str());
 		exit(1);
 	}
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
@@ -160,6 +161,6 @@ double main_completeness(yak_ch_t *ch, int n_threads, char* file1, char* file2)
 	bseq_close(aux.fp);
 	for (i = 0; i < aux.n_threads; ++i) free(aux.buf[i].s);
 	free(aux.buf);
-	
+
 	return ((double)aux.appear_counting) / aux.total_counting * 100;
 }

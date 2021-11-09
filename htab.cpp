@@ -8,21 +8,43 @@
 #include <pthread.h>
 #include <set>
 #include <map>
+#include <inttypes.h>
 #include "khashl.h" // hash table
 #define yak_ch_eq(a, b) ((a)>>YAK_COUNTER_BITS == (b)>>YAK_COUNTER_BITS) // lower 8 bits for counts; higher bits for k-mer
 #define yak_ch_hash(a) ((a)>>YAK_COUNTER_BITS)
+#define yak_ch_pos_eq(a, b) ((a)>>YAK_COUNTER_BITS_LONG == (b)>>YAK_COUNTER_BITS_LONG) // lower 8 bits for counts; higher bits for k-mer
+#define yak_ch_pos_hash(a) ((a)>>YAK_COUNTER_BITS_LONG)
 KHASHL_SET_INIT(, yak_ht_t, yak_ht, uint64_t, yak_ch_hash, yak_ch_eq)
+KHASHL_SET_INIT(, yak_ht_pos_t, yak_ht_pos, uint64_t, yak_ch_pos_hash, yak_ch_pos_eq)
 
 yak_ch_t *yak_ch_init(int k, int pre, int n_hash, int n_shift)
 {
 	yak_ch_t *h;
 	int i;
-	if (pre < YAK_COUNTER_BITS) return 0;
+	// if (pre < YAK_COUNTER_BITS) return 0;
 	CALLOC(h, 1);
 	h->k = k, h->pre = pre;
 	CALLOC(h->h, 1<<h->pre);
 	for (i = 0; i < 1<<h->pre; ++i)
 		h->h[i].h = yak_ht_init();
+	if (n_hash > 0 && n_shift > h->pre) {
+		h->n_hash = n_hash, h->n_shift = n_shift;
+		for (i = 0; i < 1<<h->pre; ++i)
+			h->h[i].b = yak_bf_init(h->n_shift - h->pre, h->n_hash);
+	}
+	return h;
+}
+
+yak_ch_pos_t *yak_ch_pos_init(int k, int pre, int n_hash, int n_shift)
+{
+	yak_ch_pos_t *h;
+	int i;
+	// if (pre < YAK_COUNTER_BITS) return 0;
+	CALLOC(h, 1);
+	h->k = k, h->pre = pre;
+	CALLOC(h->h, 1<<h->pre);
+	for (i = 0; i < 1<<h->pre; ++i)
+		h->h[i].h = yak_ht_pos_init();
 	if (n_hash > 0 && n_shift > h->pre) {
 		h->n_hash = n_hash, h->n_shift = n_shift;
 		for (i = 0; i < 1<<h->pre; ++i)
@@ -41,6 +63,16 @@ void yak_ch_destroy_bf(yak_ch_t *h)
 	}
 }
 
+void yak_ch_pos_destroy_bf(yak_ch_pos_t *h)
+{
+	int i;
+	for (i = 0; i < 1<<h->pre; ++i) {
+		if (h->h[i].b)
+			yak_bf_destroy(h->h[i].b);
+		h->h[i].b = 0;
+	}
+}
+
 void yak_ch_destroy(yak_ch_t *h)
 {
 	int i;
@@ -48,6 +80,16 @@ void yak_ch_destroy(yak_ch_t *h)
 	yak_ch_destroy_bf(h);
 	for (i = 0; i < 1<<h->pre; ++i)
 		yak_ht_destroy(h->h[i].h);
+	free(h->h); free(h);
+}
+
+void yak_ch_pos_destroy(yak_ch_pos_t *h)
+{
+	int i;
+	if (h == 0) return;
+	yak_ch_pos_destroy_bf(h);
+	for (i = 0; i < 1<<h->pre; ++i)
+		yak_ht_pos_destroy(h->h[i].h);
 	free(h->h); free(h);
 }
 
@@ -80,7 +122,7 @@ int yak_ch_insert_list(yak_ch_t *h, int create_new, int n, const uint64_t *a)
 	return n_ins;
 }
 
-int yak_ch_insert_list_kmer_record_mapping(yak_ch_t *h, int create_new, int n, const uint64_t *a, const bool *f, recordset_t * recordset, const uint16_t *r, long i, std::set<uint64_t>* deleted)
+int yak_ch_insert_list_kmer_record_mapping(yak_ch_t *h, int create_new, int n, const uint64_t *a, const bool *f, recordset_t * recordset, const uint32_t *r, long i, std::set<uint64_t>* deleted)
 {
 	int j, mask = (1<<h->pre) - 1, n_ins = 0;
 	yak_ch1_t *g;
@@ -116,61 +158,110 @@ int yak_ch_insert_list_kmer_record_mapping(yak_ch_t *h, int create_new, int n, c
 	return n_ins;
 }
 
-int yak_ch_insert_list_kmer_pos(yak_ch_t *h, yak_ch_t *h_pos, int create_new, int n, const uint64_t *a, const uint16_t *r, const uint32_t*pos, long i)
+int yak_ch_insert_list_kmer_pos(yak_ch_t *h, yak_ch_pos_t *h_pos, int create_new, int n, const uint64_t *a, const uint32_t *r, const uint32_t*pos, long i)
 {
-	int j, mask = (1<<h->pre) - 1, n_ins = 0;
-	int mask_pos = (1<<30)-1;
+	int j, mask = (1<<YAK_COUNTER_BITS) - 1, n_ins = 0;
+	int mask_pos = (1<<YAK_COUNTER_BITS_LONG)-1;
 	yak_ch1_t *g;
-	yak_ch1_t *g_pos;
-	// recordset_ps_t *cur_recordset = &recordset[a[0]&mask];
+	yak_ch1_pos_t *g_pos;
 	if (n == 0) return 0;
 	g = &h->h[a[0]&mask];
-	g_pos = &h_pos->h[a[0]&mask_pos];
 	for (j = 0; j < n; ++j) {
-		int ins = 1, absent;
-		uint64_t x = a[j] >> h->pre;
+		g_pos = &h_pos->h[a[j]&mask_pos];
+		int absent, absent_pos;
 		khint_t k;
-		if ((a[j]&mask) != (a[0]&mask)) continue;
-		if (create_new) {
-			if (g->b)
-				ins = (yak_bf_insert(g->b, (a[j] >> h->pre)) == h->n_hash);
-			if (ins) {
-				k = yak_ht_put(g->h, (a[j] >> h->pre)<<YAK_COUNTER_BITS, &absent);
-				if (absent){
-					kh_key(g->h, k)|=r[j];
-					k = yak_ht_put(g_pos->h, (a[j] >> 30)<<30, &absent);
-					kh_key(g_pos->h, k)|=(pos[j]&YAK_POS_MASK);
-					++n_ins;
-				}else if(((kh_key(g->h, k)&YAK_KEY_MASK) ^ r[j]) != 0){
-					kh_key(g->h,k) |= YAK_REPEAT_MASK;
-				}
+		k = yak_ht_put(g->h, (a[j] >> YAK_COUNTER_BITS)<<YAK_COUNTER_BITS, &absent);
+		if (absent){
+			kh_key(g->h, k)|=r[j];
+			k = yak_ht_pos_put(g_pos->h, (a[j] >> YAK_COUNTER_BITS_LONG)<<YAK_COUNTER_BITS_LONG, &absent_pos);
+			kh_key(g_pos->h, k)|=pos[j];
+			++n_ins;
+			if(!absent_pos){
+				printf("ERROR: key in position table not absent.\n");
 			}
-		} else {
-			k = yak_ht_get(g->h, (a[j] >> h->pre)<<YAK_COUNTER_BITS);
-			if(k != kh_end(g->h) && ((kh_key(g->h, k)&YAK_KEY_MASK) ^ r[j]) != 0){
-				kh_key(g->h,k) |= YAK_REPEAT_MASK;
+		}else{
+			kh_key(g->h,k) |= YAK_REPEAT_MASK;
+		}
+	}
+	return n_ins;
+}
+
+int yak_ch_insert_list_kmer_pos_haplo(yak_ch_t *h, yak_ch_pos_t *h_pos, int create_new, int n, const uint64_t *a, const bool *f, const uint32_t *r, const uint32_t*pos, long i)
+{
+	int j, mask = (1<<YAK_COUNTER_BITS_MID) - 1, n_ins = 0;
+	int mask_pos = (1<<YAK_COUNTER_BITS_LONG)-1;
+	yak_ch1_t *g;
+	yak_ch1_pos_t *g_pos;
+	if (n == 0) return 0;
+	g = &h->h[a[0]&mask];
+	for (j = 0; j < n; ++j) {
+		g_pos = &h_pos->h[a[j]&mask_pos];
+		int absent, absent_pos;
+		khint_t k;
+		k = yak_ht_put(g->h, (a[j] >> YAK_COUNTER_BITS_MID)<<YAK_COUNTER_BITS_MID, &absent);
+		if (absent){
+			kh_key(g->h, k)|=r[j];
+			// if(f[j]){
+				// kh_key(g->h, k) |= YAK_FORWARD_MASK_MID;
+			// }
+			k = yak_ht_pos_put(g_pos->h, (a[j] >> YAK_COUNTER_BITS_LONG)<<YAK_COUNTER_BITS_LONG, &absent_pos);
+			kh_key(g_pos->h, k)|=pos[j];
+			++n_ins;
+			if(!absent_pos){
+				printf("ERROR: key in position table not absent.\n");
+			}
+		}else if((kh_key(g->h,k)&YAK_KEY_MASK_MID) != r[j]){
+			if(((kh_key(g->h,k)&YAK_KEY_MASK_MID)>>1) == (r[j]>>1)){
+				kh_key(g->h, k)|=YAK_HAPLO_MASK_MID;
+			}else{
+				kh_key(g->h, k)|=YAK_REPEAT_MASK_MID;
 			}
 		}
 	}
 	return n_ins;
 }
 
-uint16_t yak_ch_get_pos(const yak_ch_t *h, const yak_ch_t *h_pos, uint64_t x, uint32_t *pos)
+uint32_t yak_ch_get_pos(const yak_ch_t *h, const yak_ch_pos_t *h_pos, uint64_t x, uint32_t *pos)
 {
-	int mask = (1<<h->pre) - 1;
-	int mask_pos = (1<<30) - 1;
+	int mask = (1<<YAK_COUNTER_BITS) - 1;
+	int mask_pos = (1<<YAK_COUNTER_BITS_LONG) - 1;
 	yak_ht_t *g = h->h[x&mask].h;
-	yak_ht_t *g_pos = h_pos->h[x&mask_pos].h;
-	khint_t k;
-	k = yak_ht_get(g, x >> h->pre << YAK_COUNTER_BITS);
+	yak_ht_pos_t *g_pos = h_pos->h[x&mask_pos].h;
+	khint_t k, k_pos;
+	k = yak_ht_get(g, (x >> YAK_COUNTER_BITS) << YAK_COUNTER_BITS);
 	if(k == kh_end(g) || (kh_key(g, k)&YAK_REPEAT_MASK) != 0 ){
-		return 65535;
+		return -1;
 	}
-	uint16_t id = kh_key(g, k)&YAK_KEY_MASK;
-	k = yak_ht_get(g_pos, (x >> 30) << 30);
-	if(k!=kh_end(g_pos))
-	(*pos) = (kh_key(g_pos, k)&YAK_POS_MASK);
+	uint32_t id = kh_key(g, k)&YAK_KEY_MASK;
+	k_pos = yak_ht_pos_get(g_pos, (x >> YAK_COUNTER_BITS_LONG) << YAK_COUNTER_BITS_LONG);
+	if(k_pos!=kh_end(g_pos)){
+		(*pos) = (kh_key(g_pos, k_pos)&YAK_POS_MASK_LONG);
+	}else{
+		printf("ERROR: key not in position table.\n");
+		return -1;
+	}
 	return id;
+}
+
+uint32_t yak_ch_get_pos_haplo(const yak_ch_t *h, const yak_ch_pos_t *h_pos, uint64_t x, uint32_t *pos)
+{
+	int mask = (1<<YAK_COUNTER_BITS_MID) - 1;
+	int mask_pos = (1<<YAK_COUNTER_BITS_LONG) - 1;
+	yak_ht_t *g = h->h[x&mask].h;
+	yak_ht_pos_t *g_pos = h_pos->h[x&mask_pos].h;
+	khint_t k, k_pos;
+	k = yak_ht_get(g, (x >> YAK_COUNTER_BITS_MID) << YAK_COUNTER_BITS_MID);
+	if(k == kh_end(g) || (kh_key(g, k)&YAK_REPEAT_MASK_MID) != 0 ){
+		return -1;
+	}
+	k_pos = yak_ht_pos_get(g_pos, (x >> YAK_COUNTER_BITS_LONG) << YAK_COUNTER_BITS_LONG);
+	if(k_pos!=kh_end(g_pos)){
+		(*pos) = (kh_key(g_pos, k_pos)&YAK_POS_MASK_LONG);
+	}else{
+		printf("ERROR: key not in position table.\n");
+		return -1;
+	}
+	return kh_key(g, k);
 }
 
 int yak_ch_get(const yak_ch_t *h, uint64_t x)
@@ -184,10 +275,10 @@ int yak_ch_get(const yak_ch_t *h, uint64_t x)
 
 int yak_ch_get_k(const yak_ch_t *h, uint64_t x)
 {
-	int mask = (1<<h->pre) - 1;
+	int mask = (1<<YAK_COUNTER_BITS) - 1;
 	yak_ht_t *g = h->h[x&mask].h;
 	khint_t k;
-	k = yak_ht_get(g, x >> h->pre << YAK_COUNTER_BITS);
+	k = yak_ht_get(g, (x >> YAK_COUNTER_BITS) << YAK_COUNTER_BITS);
 	return (k == kh_end(g) || (kh_key(g, k)&YAK_REPEAT_MASK) != 0 )? -1 : kh_key(g, k);
 }
 /*************************

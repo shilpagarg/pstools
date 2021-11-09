@@ -18,6 +18,9 @@
 using namespace std;
 vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len);
 vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections, bool check_identity);
+vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint32_t>> order_input, vector<uint32_t>* orientation_result, vector<uint32_t>* haplo_result);
+vector<vector<uint32_t>> ordered_breaking(uint32_t** connect_num,vector<vector<uint32_t>> order_result, vector<uint32_t> orientation_result, vector<uint32_t> haplo_result);
+vector<vector<uint32_t>> best_buddy_merge_final(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections);
 
 size_t stringCount(const std::string& referenceString,
                    const std::string& subString) {
@@ -66,34 +69,47 @@ void update_best_buddy_haplo(bool** seen, float** best_buddy, uint32_t** connect
 		for(int j = 0; j < len*4; j++){
 			uint32_t num = connections[i][j];
 			if(!seen[i][j] && num > 0){
-				uint32_t max_other = 0;
-				for(int p = 0; p < len*4; p++){
-                    for(int i_s = 0; i_s < 4; i_s++){
-                        if(!(p==j && i_s+((i>>2)<<2)==i)){
-                            uint32_t cur_num = connections[i_s+((i>>2)<<2)][p];
-                            if(!seen[i_s+((i>>2)<<2)][p] && cur_num > max_other){
-                                max_other = cur_num;
+                bool greatest = true;
+                for(int buf_i = 0; buf_i < 4; buf_i++){
+                    for(int buf_j = 0; buf_j < 4; buf_j++){
+                        if(num < connections[(i>>2)+buf_i][(j>>2)+buf_j]){
+                            greatest = false;
+                            break;
+                        }
+                    }
+                }
+                if(greatest){
+                    uint32_t max_other = 0;
+                    for(int p = 0; p < len*4; p++){
+                        for(int i_s = 0; i_s < 4; i_s++){
+                            if((p>>2)!=(j>>2)){
+                                uint32_t cur_num = connections[i_s+((i>>2)<<2)][p];
+                                if(!seen[i_s+((i>>2)<<2)][p] && cur_num > max_other){
+                                    max_other = cur_num;
+                                }
                             }
                         }
                     }
-				}
 
-				for(int p = 0; p < len*4; p++){
-                    for(int j_s = 0; j_s < 4; j_s++){
-                        if(!(p==i && j_s+((j>>2)<<2)==j)){
-                            uint32_t cur_num = connections[p][j_s+((j>>2)<<2)];
-                            if(!seen[p][j_s+((j>>2)<<2)] && cur_num > max_other){
-                                max_other = cur_num;
+                    for(int p = 0; p < len*4; p++){
+                        for(int j_s = 0; j_s < 4; j_s++){
+                            if((p>>2)!=(i>>2)){
+                                uint32_t cur_num = connections[p][j_s+((j>>2)<<2)];
+                                if(!seen[p][j_s+((j>>2)<<2)] && cur_num > max_other){
+                                    max_other = cur_num;
+                                }
                             }
                         }
-					}
-				}
+                    }
 
-				if(max_other>0){
-					best_buddy[i][j] = ((float)num)/max_other;
-				}else{
-					best_buddy[i][j] = 2;
-				}
+                    if(max_other>0){
+                        best_buddy[i][j] = ((float)num)/max_other;
+                    }else{
+                        best_buddy[i][j] = 2;
+                    }
+                }else{
+				    best_buddy[i][j] = 0;
+                }
 			}else{
 				best_buddy[i][j] = 0;
 			}
@@ -136,6 +152,7 @@ void update_best_buddy_haplo_general(bool** seen, float** best_buddy, uint32_t**
 		}
 	}
 }
+
 
 string complement(string unitig){
     stringstream result;
@@ -1340,7 +1357,7 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
         uint32_t bubble_beginning = bubble->begNode;
         uint32_t bubble_end = bubble->endNode;
 
-        // cout << "start get bubble paths from " << g->seq[bubble_beginning /2].name<< " to " << g->seq[bubble_end /2].name << endl;
+        // cout << "start get bubble paths from " << g->seq[bubble_beginning/2].name<< " to " << g->seq[bubble_end/2].name << endl;
 
         vector<asg_arc_t*> arc_stack;
         vector<uint32_t> node_stack;  // DFS
@@ -3791,6 +3808,8 @@ typedef struct { // data structure for each step in kt_pipeline()
     string* haplo_sequences;
     vector<uint32_t>* haplo_pathes;
     map<uint32_t,uint32_t>* node_positions;
+    bool* similar;
+    set<uint32_t>* dif_nodes;
 } step_data;
 
 static void counter_worker_single_step(void *data, long i, int tid) // callback for kt_for()
@@ -3839,7 +3858,6 @@ static void counter_worker_single_step(void *data, long i, int tid) // callback 
             }
         }
     }
-
 }
 
 
@@ -4321,6 +4339,28 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
             }
         }
 
+        uint32_t intersect_len = 0;
+        uint32_t total_len = 0;
+        set<uint32_t> dif_nodes;
+        for(auto node : path_2_included){
+            if(path_1_included.find(node)!=path_1_included.end()){
+                intersect_len += graph->seq[node].len;
+            }else{
+                dif_nodes.insert(node);
+            }
+            total_len += graph->seq[node].len;
+        }
+        
+        for(auto node : path_1_included){
+            total_len += graph->seq[node].len;
+        }
+
+        total_len /= 2;
+
+        if( (total_len - intersect_len) *10 < total_len){
+            s->similar[i] = true;
+            s->dif_nodes[i] = dif_nodes;
+        }
         stringstream to_print_start;
         to_print_start << "Start get Sequence: ";
         to_print_start << graph->seq[(*s->beg_node)[i]>>1].name << " to " << graph->seq[(*s->end_node)[i]>>1].name << endl;
@@ -4344,7 +4384,7 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
 
 
 
-void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connection_count_backward, asg_t *graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, char* output_directory, int n_threads, vector<string> enzymes, string identityFile, bool check_identity){
+void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connection_count_backward, asg_t *graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, char* output_directory, int n_threads, map<string, string>* excluded_nodes){
     set<uint32_t> existing_nodes;
    
     cout << "Start get haplotypes" << endl;
@@ -4611,37 +4651,39 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     cout << "Total Contigs: " << counting_contigs << endl;
     // set<uint32_t> seen_nodes;
 	uint32_t** connect_num;
-	float **best_buddy;
-	bool **seen;
+	// float **best_buddy;
+	// bool **seen;
     uint32_t len = step.current_nodes->size();
 	connect_num = (uint32_t**)calloc(len*4,sizeof(uint32_t*));
-	best_buddy = (float**)calloc(len*4,sizeof(float*));
-	seen = (bool**)calloc(len*4,sizeof(bool*));
+	// best_buddy = (float**)calloc(len*4,sizeof(float*));
+	// seen = (bool**)calloc(len*4,sizeof(bool*));
 
 	for(int i = 0; i < len*4; ++i){
         connect_num[i] = (uint32_t*)calloc(len*4, sizeof(uint32_t));
-        best_buddy[i] = (float*)calloc(len*4, sizeof(float));
-        seen[i] = (bool*)calloc(len*4, sizeof(bool));
+    //     best_buddy[i] = (float*)calloc(len*4, sizeof(float));
+    //     seen[i] = (bool*)calloc(len*4, sizeof(bool));
 	}
 
-    map<uint32_t,uint32_t> seen_nodes;
-    for(auto x: (*step.current_nodes)){
-        for(auto n: x){
-            seen_nodes[n]++;
-        }
-    }
+    // map<uint32_t,uint32_t> seen_nodes;
+    // for(auto x: (*step.current_nodes)){
+    //     for(auto n: x){
+    //         seen_nodes[n]++;
+    //     }
+    // }
 
-    ofstream covered_nodesFile;
-    covered_nodesFile.open(string(output_directory)+string("/covered_nodes.txt"), ofstream::out | ofstream::trunc);
-    for(auto n: seen_nodes){
-        covered_nodesFile << string(graph->seq[n.first].name) << "\t" << n.second << endl;
-    }
-    covered_nodesFile.close();
-    cout << seen_nodes.size() << " out of " << graph->n_seq << endl;
+    // ofstream covered_nodesFile;
+    // covered_nodesFile.open(string(output_directory)+string("/covered_nodes.txt"), ofstream::out | ofstream::trunc);
+    // for(auto n: seen_nodes){
+    //     covered_nodesFile << string(graph->seq[n.first].name) << "\t" << n.second << endl;
+    // }
+    // covered_nodesFile.close();
+    // cout << seen_nodes.size() << " out of " << graph->n_seq << endl;
 
 
 
     step.haplo_sequences = (string*)calloc(step.beg_node->size()*2,sizeof(string));
+    step.dif_nodes = (set<uint32_t>*)calloc(step.beg_node->size(),sizeof(set<uint32_t>));
+    step.similar = (bool*)calloc(step.beg_node->size(),sizeof(bool));
     step.haplo_pathes = (vector<uint32_t>*)calloc(step.beg_node->size()*2,sizeof(vector<uint32_t>));
     step.node_positions = (map<uint32_t,uint32_t>*)calloc(step.beg_node->size()*2,sizeof(map<uint32_t,uint32_t>));
 
@@ -4660,52 +4702,65 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
 
 
     ofstream outFile;
-    ofstream outFileLen;
+    ofstream outFileBrokenNodes;
     outFile.open(string(output_directory)+string("/pred_haplotypes.fa"), ofstream::out | ofstream::trunc);
-    outFileLen.open(string(output_directory)+string("/pred_haplotypes_length.txt"), ofstream::out | ofstream::trunc);
+    outFileBrokenNodes.open(string(output_directory)+string("/pred_broken_nodes.fa"), ofstream::out | ofstream::trunc);
     for(int i = 0; i < step.beg_node->size()*2; i++){
-        outFile << string(">")+string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name))+string("_hap")+to_string(i%2==0?1:2) << endl;
-        outFile << step.haplo_sequences[i] << endl;
-        if(i%2==0){
-            outFileLen << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "\t" << step.haplo_sequences[i].size() << endl;
+        if(step.similar[i>>1]){
+            outFile << string(">")+string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name))+string("s_hap")+to_string(i%2==0?1:2) << endl;
+            outFile << step.haplo_sequences[i] << endl;
+        }else{
+            outFile << string(">")+string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name))+string("_hap")+to_string(i%2==0?1:2) << endl;
+            outFile << step.haplo_sequences[i] << endl;
         }
     }
+    for(auto i : *excluded_nodes){
+        // cout << i.first << endl;
+        outFileBrokenNodes << ">" << i.first << endl;
+        outFileBrokenNodes << i.second << endl;
+    }
+    // for(int i = 0; i < step.beg_node->size(); i++){
+    //     for(auto n: step.dif_nodes[i]){
+    //         outFileBrokenNodes << ">" << graph->seq[n].name << endl;
+    //         outFileBrokenNodes << graph->seq[n].seq << endl;
+    //     }
+    // }
     outFile.close();
-    outFileLen.close();
+    outFileBrokenNodes.close();
 
-    ofstream outFileBroken;
-    outFileBroken.open(string(output_directory)+string("/pred_haplotypes_broken.fa"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < step.beg_node->size()*2; i++){
-        for (unsigned j = 0; j < step.haplo_sequences[i].length(); j += 1000000) {
-            outFileBroken << string(">")+string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name))+string("_hap")+to_string(i%2==0?1:2) << "_" << to_string(j) << endl;
-            outFileBroken << step.haplo_sequences[i].substr(j, 1000000) << endl;
-        }
-    }
-    outFileBroken.close();
-
-
-    ofstream outFileContigHapNodes;
-    outFileContigHapNodes.open(string(output_directory)+string("/contig_hap_nodes.txt"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < step.beg_node->size()*2; i++){
-	// for(auto ns: hap2_nodes){
-        for(auto n: step.haplo_pathes[i]){
-            outFileContigHapNodes <<graph->seq[n>>1].name << ",";
-        }
-        outFileContigHapNodes << endl;
-    }
-    outFileContigHapNodes.close();
+    // ofstream outFileBroken;
+    // outFileBroken.open(string(output_directory)+string("/pred_haplotypes_broken.fa"), ofstream::out | ofstream::trunc);
+    // for(int i = 0; i < step.beg_node->size()*2; i++){
+    //     for (unsigned j = 0; j < step.haplo_sequences[i].length(); j += 1000000) {
+    //         outFileBroken << string(">")+string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name))+string("_hap")+to_string(i%2==0?1:2) << "_" << to_string(j) << endl;
+    //         outFileBroken << step.haplo_sequences[i].substr(j, 1000000) << endl;
+    //     }
+    // }
+    // outFileBroken.close();
 
 
-    ofstream outFileContigNodes;
-    outFileContigNodes.open(string(output_directory)+string("/contig_nodes.txt"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < step.beg_node->size(); i++){
-	// for(auto ns: hap2_nodes){
-        for(auto n: (*step.current_nodes)[i]){
-            outFileContigNodes <<graph->seq[n].name << ",";
-        }
-        outFileContigNodes << endl;
-    }
-    outFileContigNodes.close();
+    // ofstream outFileContigHapNodes;
+    // outFileContigHapNodes.open(string(output_directory)+string("/contig_hap_nodes.txt"), ofstream::out | ofstream::trunc);
+    // for(int i = 0; i < step.beg_node->size()*2; i++){
+	// // for(auto ns: hap2_nodes){
+    //     for(auto n: step.haplo_pathes[i]){
+    //         outFileContigHapNodes <<graph->seq[n>>1].name << ",";
+    //     }
+    //     outFileContigHapNodes << endl;
+    // }
+    // outFileContigHapNodes.close();
+
+
+    // ofstream outFileContigNodes;
+    // outFileContigNodes.open(string(output_directory)+string("/contig_nodes.txt"), ofstream::out | ofstream::trunc);
+    // for(int i = 0; i < step.beg_node->size(); i++){
+	// // for(auto ns: hap2_nodes){
+    //     for(auto n: (*step.current_nodes)[i]){
+    //         outFileContigNodes <<graph->seq[n].name << ",";
+    //     }
+    //     outFileContigNodes << endl;
+    // }
+    // outFileContigNodes.close();
 
     count_step cstep;
     cstep.len = step.beg_node->size()*2;
@@ -4716,8 +4771,9 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     cstep.current_nodes_haplo = step.haplo_pathes;
     cstep.node_positions = step.node_positions;
     
+
     kt_for(n_threads, counter_worker_single_step , &cstep, step.beg_node->size()*2);
-    if(enzymes.size()==0){
+    // if(enzymes.size()==0){
         for(int i = 0; i < len*4; i++){
             double ratio_i = 1;
             if(step.haplo_sequences[i>>1].size()<10000000){
@@ -4726,36 +4782,36 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
             for(int j = 0; j < len*4; j++){
                 double ratio_j = 1;
                 if(step.haplo_sequences[j>>1].size()<10000000){
-                    ratio_j = 10000000.0/((double)step.haplo_sequences[i>>1].size());
+                    ratio_j = 10000000.0/((double)step.haplo_sequences[j>>1].size());
                 }
 
                 connect_num[i][j] = (uint32_t)(connect_num[i][j] * ratio_i * ratio_j);
             }
         }
-    }else{
-        vector<uint32_t> front_re;
-        vector<uint32_t> back_re;
-        for(int i = 0; i < len*4; i++){
-            uint32_t cur_front = 0;
-            uint32_t cur_back = 0;
-            string whole_str = step.haplo_sequences[i>>1];
-            string ff = whole_str.substr(0,min(10000000,(int)whole_str.size()));
-            string fb = whole_str.substr(max(((int)whole_str.size())-10000000,0), whole_str.size());
-            for(auto e: enzymes){
-                cur_front += stringCount(ff,e);
-                cur_back += stringCount(fb,e);
-            }
-            front_re.push_back(cur_front);
-            back_re.push_back(cur_back);
-        }
+    // }else{
+        // vector<uint32_t> front_re;
+        // vector<uint32_t> back_re;
+        // for(int i = 0; i < len*4; i++){
+        //     uint32_t cur_front = 0;
+        //     uint32_t cur_back = 0;
+        //     string whole_str = step.haplo_sequences[i>>1];
+        //     string ff = whole_str.substr(0,min(10000000,(int)whole_str.size()));
+        //     string fb = whole_str.substr(max(((int)whole_str.size())-10000000,0), whole_str.size());
+        //     for(auto e: enzymes){
+        //         cur_front += stringCount(ff,e);
+        //         cur_back += stringCount(fb,e);
+        //     }
+        //     front_re.push_back(cur_front);
+        //     back_re.push_back(cur_back);
+        // }
 
-        ofstream outFileRECount;
-        outFileRECount.open(string(output_directory)+string("/re_count.txt"), ofstream::out | ofstream::trunc);
-        for(int i = 0; i < len*2; i++){
-            outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Front" << "\t" << front_re[i<<1] << endl;
-            outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Back" << "\t" << back_re[i<<1] << endl;
-        }
-        outFileRECount.close();
+        // ofstream outFileRECount;
+        // outFileRECount.open(string(output_directory)+string("/re_count.txt"), ofstream::out | ofstream::trunc);
+        // for(int i = 0; i < len*2; i++){
+        //     outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Front" << "\t" << front_re[i<<1] << endl;
+        //     outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Back" << "\t" << back_re[i<<1] << endl;
+        // }
+        // outFileRECount.close();
 
         // for(int i = 0; i < len*4; i++){
         //     uint32_t cur_front_i = front_re[i];
@@ -4797,42 +4853,27 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
         //     }
         // }
         
-        for(int i = 0; i < len*4; i++){
-            uint32_t cur_front_i = front_re[i];
-            uint32_t cur_back_i = back_re[i];
-            for(int j = 0; j < len*4; j++){
-                uint32_t cur_front_j = front_re[j];
-                uint32_t cur_back_j = back_re[j];
-                double ratio = 0;
-                if(i%2 == 0 && j%2 == 0){
-                    ratio = 300000/((double)(cur_back_i + cur_front_j));
-                }else if(i%2 == 1 && j%2 == 0){
-                    ratio = 300000/((double)(cur_front_i + cur_front_j));
-                }else if(i%2 == 0 && j%2 == 1){
-                    ratio = 300000/((double)(cur_back_i + cur_back_j));
-                }else if(i%2 == 1 && j%2 == 1){
-                    ratio = 300000/((double)(cur_front_i + cur_back_j));
-                }
-                // ratio = 1;
-                connect_num[i][j] *= ratio;
-            }
-        }
-    }
-    map<string, string> contig_hap1s;
-    map<string, string> contig_hap2s;
-    map<string, uint32_t> contig_lengths;
-    map<string, uint32_t> contig_id;
-    map<uint32_t, string> id_contig;
-
-    for(uint32_t i = 0; i < step.beg_node->size(); i++){
-        string contig_name = string(graph->seq[(*step.beg_node)[i]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i]>>1].name));
-        contig_hap1s[contig_name] = step.haplo_sequences[i<<1];
-        contig_hap2s[contig_name] = step.haplo_sequences[(i<<1)+1];
-        contig_lengths[contig_name] = max(contig_hap1s[contig_name].size(), contig_hap2s[contig_name].size());
-        contig_id[contig_name] = i;
-        id_contig[i] = contig_name;
-    }
-
+        // for(int i = 0; i < len*4; i++){
+        //     uint32_t cur_front_i = front_re[i];
+        //     uint32_t cur_back_i = back_re[i];
+        //     for(int j = 0; j < len*4; j++){
+        //         uint32_t cur_front_j = front_re[j];
+        //         uint32_t cur_back_j = back_re[j];
+        //         double ratio = 0;
+        //         if(i%2 == 0 && j%2 == 0){
+        //             ratio = 300000/((double)(cur_back_i + cur_front_j));
+        //         }else if(i%2 == 1 && j%2 == 0){
+        //             ratio = 300000/((double)(cur_front_i + cur_front_j));
+        //         }else if(i%2 == 0 && j%2 == 1){
+        //             ratio = 300000/((double)(cur_back_i + cur_back_j));
+        //         }else if(i%2 == 1 && j%2 == 1){
+        //             ratio = 300000/((double)(cur_front_i + cur_back_j));
+        //         }
+        //         // ratio = 1;
+        //         connect_num[i][j] *= ratio;
+        //     }
+        // }
+    // }
     
     ofstream outFileScaffold;
     outFileScaffold.open(string(output_directory)+string("/scaffold_connection.txt"), ofstream::out | ofstream::trunc);
@@ -4844,42 +4885,53 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
                 connect_num[i][j] = 0;
             }
             if(connect_num[i][j]>0){
-                outFileScaffold << string(graph->seq[(*step.beg_node)[i>>2]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>2]>>1].name)) << "_haplo_" << (i>>1)%2+1 << (i%2==0?"+":"-") << "\t" << string(graph->seq[(*step.beg_node)[j>>2]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[j>>2]>>1].name)) << "_haplo_" << (j>>1)%2+1 << (j%2==0?"+":"-") << "\t" << connect_num[i][j] << endl;
+                outFileScaffold << string(graph->seq[(*step.beg_node)[i>>2]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>2]>>1].name)) << "_hap" << (i>>1)%2+1 << (i%2==0?"+":"-") << "\t" << string(graph->seq[(*step.beg_node)[j>>2]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[j>>2]>>1].name)) << "_haplo_" << (j>>1)%2+1 << (j%2==0?"+":"-") << "\t" << connect_num[i][j] << endl;
             }
         }
     }
 
-    outFileScaffold.close();
-    ofstream outFileScaffoldMap;
-    outFileScaffoldMap.open(string(output_directory)+string("/scaffold_id_name.txt"), ofstream::out | ofstream::trunc);
-    for(int p = 0; p < step.beg_node->size(); p++){
-        outFileScaffoldMap << "ctg" << p << "l"  << "\t"<< string(graph->seq[(*step.beg_node)[p]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[p]>>1].name)) << endl;
-    }
-    outFileScaffoldMap.close();
-    
-    ofstream outFileScaffoldSimple;
-    outFileScaffoldSimple.open(string(output_directory)+string("/scaffold_connection_simp.txt"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < len; i++){
-        for(int j = 0; j < len; j++){
-            uint32_t max_num = 0;
-            for(int is = 0; is < 4; is++){
-                for(int js = 0; js < 4; js++){
-                    max_num = max(connect_num[(i<<2)+is][(j<<2)+js],max_num);
-                }
-            }
-            if(max_num>0){
-                outFileScaffoldSimple << "ctg" << i << "l" << "\t" << "ctg" << j << "l" << "\t" << max_num << endl;
-            }
-        }
-    }
-    outFileScaffoldSimple.close();
+    // outFileScaffold.close();
+    // ofstream outFileScaffoldMap;
+    // outFileScaffoldMap.open(string(output_directory)+string("/scaffold_id_name.txt"), ofstream::out | ofstream::trunc);
+    // for(int p = 0; p < step.beg_node->size(); p++){
+    //     outFileScaffoldMap << "ctg" << p << "l"  << "\t"<< string(graph->seq[(*step.beg_node)[p]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[p]>>1].name)) << endl;
+    // }
+    // outFileScaffoldMap.close();
+}
+
+void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1s, map<string, string> contig_hap2s, map<string, uint32_t> contig_lengths, map<string, uint32_t> contig_id, map<uint32_t, string> id_contig, char* output_directory, string identityFile, bool check_identity, uint32_t n_threads){
+
+
+
+    // ofstream outFileScaffoldSimple;
+    // outFileScaffoldSimple.open(string(output_directory)+string("/scaffold_connection_simp.txt"), ofstream::out | ofstream::trunc);
+    // for(int i = 0; i < len; i++){
+    //     for(int j = 0; j < len; j++){
+    //         uint32_t max_num = 0;
+    //         for(int is = 0; is < 4; is++){
+    //             for(int js = 0; js < 4; js++){
+    //                 max_num = max(connect_num[(i<<2)+is][(j<<2)+js],max_num);
+    //             }
+    //         }
+    //         if(max_num>0){
+    //             outFileScaffoldSimple << "ctg" << i << "l" << "\t" << "ctg" << j << "l" << "\t" << max_num << endl;
+    //         }
+    //     }
+    // }
+    // outFileScaffoldSimple.close();
 
     uint32_t long_threshold = 5000000;
-    len = contig_lengths.size();
-	// float **best_buddy;
-	// bool **seen;
-	// best_buddy = (float**)calloc(len*4,sizeof(float*));
-	// seen = (bool**)calloc(len*4,sizeof(bool*));
+	float **best_buddy;
+	bool **seen;
+    uint32_t len = contig_lengths.size();
+	best_buddy = (float**)calloc(len*4,sizeof(float*));
+	seen = (bool**)calloc(len*4,sizeof(bool*));
+
+	for(int i = 0; i < len*4; ++i){
+        best_buddy[i] = (float*)calloc(len*4, sizeof(float));
+        seen[i] = (bool*)calloc(len*4, sizeof(bool));
+	}
+
 
     
     set<string> exclude_contigs;
@@ -4918,9 +4970,9 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
             system(rm_cmd.str().c_str());
         }
 
-        for(auto i: exclude_contigs){
-            // cout << i << endl;
-        }
+        // for(auto i: exclude_contigs){
+        //     cout << i << endl;
+        // }
     }
 	for(int i = 0; i < len*4; ++i){
         best_buddy[i] = (float*)calloc(len*4, sizeof(float));
@@ -4939,9 +4991,10 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
             }
         }
     }
-    cout << "All above 10M: " << long_count << endl;
+    cout << "All above 5M: " << long_count << endl;
     cout << "All above 1.5M: " << all_count << endl;
 
+    
     uint32_t low_connect = 0;
     vector<uint32_t> all_connect;
     for(int i = 0; i < len; i++){
@@ -4975,15 +5028,21 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
                 total_greaters++;
             }
             for(int j = 0; j < len*4; j++){
+                bool to_exclude = false;
                 uint32_t max_count = 0;
-                for(int i_s = 0; i_s<4; i_s++){
+                uint32_t min_count = connect_num[i][j];
+                for(int i_s = 0; i_s<2; i_s++){
                     for(int j_s = 0; j_s<4; j_s++){
                         max_count = max(max_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
+                        min_count = min(min_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
                     }
+                }
+                if(min_count * 10 <= max_count){
+                    to_exclude = true;
                 }
                 if( exclude_contigs.find(id_contig[i>>2]) != exclude_contigs.end() || exclude_contigs.find(id_contig[j>>2]) != exclude_contigs.end()
                 || connect_num[i][j] ==0 || i == j || contig_lengths[id_contig[i>>2]] < long_threshold || contig_lengths[id_contig[j>>2]] < long_threshold 
-                || (seen_node.find(i>>2) != seen_node.end() && seen_node.find(j>>2) != seen_node.end()) ){
+                || (seen_node.find(i>>2) != seen_node.end() && seen_node.find(j>>2) != seen_node.end()) || to_exclude){
                     seen[i][j] = true;
                 }else{
                     seen[i][j] = false;
@@ -5010,7 +5069,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
             vector<pair<float, pair<uint32_t,uint32_t>>> result;
             // next = false;
             update_best_buddy_haplo(seen, best_buddy,connect_num,len);
-            // cout << "Update best buddy score." << endl;
+            cout << "Update best buddy score." << endl;
             for(int i = 0; i < len*4; i++){
                 for(int j = 0; j < len*4; j++){
                     if(best_buddy[i][j] > 0.999){
@@ -5028,7 +5087,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
             [](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
                 return r1.first > r2.first;
             });
-            // cout << "Get potential connections " << result.size() << "." << endl;
+            cout << "Get potential connections " << result.size() << "." << endl;
 
             for(auto res:result){
                 if(!seen[res.second.first][res.second.second]){
@@ -5162,8 +5221,8 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
                     }
                 }
             }
-            // cout << "Insert connections." << endl;
-            // cout << "Save graphs and scores." << endl;
+            cout << "Insert connections." << endl;
+            cout << "Save graphs and scores." << endl;
 
             uint32_t counting_left = 0;
             for(int i = 0; i < len*4 ; i++){
@@ -5174,13 +5233,13 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
                     }
                 }
             }
-            // cout << "Nodes in graph: " << seen_node.size() << "." << endl;
-            // cout << "Left edges: " << counting_left << "." << endl;
+            cout << "Nodes in graph: " << seen_node.size() << "." << endl;
+            cout << "Left edges: " << counting_left << "." << endl;
             iteration++;
         }
     }
 	
-    // cout << "Finish get first scaffolds." << endl;
+    cout << "Finish get first scaffolds." << endl;
 
 
 
@@ -5924,7 +5983,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
                     if(best_2[1]>0 && best_2[0]*0.2>best_2[1]){
                         scaffold_connect_num[i][j] -= best_2[0]/(cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
                     }
-                    if(!check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+                    if((cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1) && !check_identity){
                         scaffold_connect_num[i][j]*=4;
                     }
                 }
@@ -6098,7 +6157,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
                     if(best_2[1]>0 && best_2[0]*0.2>best_2[1]){
                         scaffold_connect_num[i][j] -= best_2[0]/(cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
                     }
-                    if(!check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+                    if((cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1) && !check_identity){
                         scaffold_connect_num[i][j]*=4;
                     }
                 }
@@ -6798,17 +6857,6 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
 //     cur_scaffold_result = new_scaffold_result;
 
 
-    // Correct the orientation and ordering.
-    ofstream outFileIterationResult;
-    outFileIterationResult.open(string(output_directory)+string("/scaffold_result_iterated.txt"), ofstream::out | ofstream::trunc);
-
-    for(auto i : cur_scaffold_result){
-        for(auto j: i){
-            outFileIterationResult << id_contig[j] << "_hap1+" << ", ";
-        }
-        outFileIterationResult << ": 123: 123" << endl;
-    }
-    outFileIterationResult.close();
     // new_scaffold_result = vector<vector<uint32_t>>();
     // for(auto res: cur_scaffold_result){
     //     if(res.size()>1){
@@ -8163,7 +8211,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
                     if(best_2[1]>0 && best_2[0]*0.2>best_2[1]){
                         scaffold_connect_num[i][j] -= best_2[0]/(cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
                     }
-                    if(!check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+                    if((cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1) && !check_identity){
                         scaffold_connect_num[i][j]*=4;
                     }
                 }
@@ -8258,249 +8306,240 @@ new_scaffold_result = vector<vector<uint32_t>>();
         }
     }
     cur_scaffold_result = new_scaffold_result;
-    new_scaffold_result = vector<vector<uint32_t>>();
     scaffold_orientation = vector<uint32_t>();
     vector<uint32_t> scaffold_haps = vector<uint32_t>();
-    for(auto res: cur_scaffold_result){
-        if(res.size()>1){
-            vector<uint32_t> nodes = res;
-            sort(nodes.begin(), nodes.end());
-            vector<uint32_t> best_perm = nodes;
-            uint32_t best_perm_score = 0;
-            uint32_t single_len = nodes.size();
-            uint32_t best_orientation = 0;
-            if(res.size() < 10){
-                do {
-                    // for(auto i : nodes){
-                    //     cout << id_contig[i] << ", ";
-                    // }
-                    // cout << endl;
-                    uint32_t ids = 1<<nodes.size();
-                    uint32_t cur_max_score = 0;
-                    uint32_t cur_best_orientation = 0;
-                    for(uint32_t orientation = 0; orientation < ids; orientation++){
-                        uint32_t orientations = orientation;
-                        uint32_t current_score = 0;
-                        for(int i = 0; i < single_len-1; i++){
-                            current_score += max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)]);
-                            if(i!=single_len-2){
-                                // current_score +=  0.5*max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)]);
-                            }
-                        }
-                        if(current_score>cur_max_score){
-                            cur_max_score = current_score;
-                            cur_best_orientation = orientations;
-                        }
-                    }
-                    
-                    if(cur_max_score > best_perm_score){
-                        best_orientation = cur_best_orientation;
-                        best_perm_score = cur_max_score;
-                        best_perm = nodes;
-
-                    }
-                } while (std::next_permutation(nodes.begin(), nodes.end()));
-            }else if(res.size() < 20){
-                uint32_t half_size = res.size()/2;
-                vector<uint32_t> haf1(res.begin(), res.begin()+half_size);
-                sort(haf1.begin(), haf1.end());
-                vector<uint32_t> best_perm_haf1 = haf1;
-                uint32_t best_perm_score_haf1 = 0;
-                uint32_t single_len_haf1 = haf1.size();
-                uint32_t best_orientation_haf1 = 0;
-                vector<uint32_t> haf2(res.begin()+half_size, res.end());
-                sort(haf2.begin(), haf2.end());
-                vector<uint32_t> best_perm_haf2 = haf2;
-                uint32_t best_perm_score_haf2 = 0;
-                uint32_t single_len_haf2 = haf2.size();
-                uint32_t best_orientation_haf2 = 0;
-                do {
-                    uint32_t ids = 1<<haf1.size();
-                    uint32_t cur_max_score = 0;
-                    uint32_t cur_best_orientation = 0;
-                    for(uint32_t orientation = 0; orientation < ids; orientation++){
-                        uint32_t orientations = orientation;
-                        uint32_t current_score = 0;
-                        for(int i = 0; i < single_len_haf1-1; i++){
-                            current_score += max(connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+1]<<2)+((orientations>>(i+1))%2)]);
-                            if(i!=single_len_haf1-2){
-                                // current_score +=  0.5*max(connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)]);
-                            }
-                        }
-                        if(current_score>cur_max_score){
-                            cur_max_score = current_score;
-                            cur_best_orientation = orientations;
-                        }
-                    }
-                    if(cur_max_score > best_perm_score_haf1){
-                        best_orientation_haf1 = cur_best_orientation;
-                        best_perm_score_haf1 = cur_max_score;
-                        best_perm_haf1 = haf1;
-                    }
-                } while (std::next_permutation(haf1.begin(), haf1.end()));
-
-                do {
-                    uint32_t ids = 1<<haf2.size();
-                    uint32_t cur_max_score = 0;
-                    uint32_t cur_best_orientation = 0;
-                    for(uint32_t orientation = 0; orientation < ids; orientation++){
-                        uint32_t orientations = orientation;
-                        uint32_t current_score = 0;
-                        for(int i = 0; i < single_len_haf2-1; i++){
-                            current_score += max(connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+1]<<2)+((orientations>>(i+1))%2)]);
-                            if(i!=single_len_haf2-2){
-                                // current_score +=  0.5*max(connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+2]<<2)+((orientations>>(i+2))%2)]);
-                            }
-                        }
-                        if(current_score>cur_max_score){
-                            cur_max_score = current_score;
-                            cur_best_orientation = orientations;
-                        }
-                    }
-                    if(cur_max_score > best_perm_score_haf2){
-                        best_orientation_haf2 = cur_best_orientation;
-                        best_perm_score_haf2= cur_max_score;
-                        best_perm_haf2 = haf2;
-                    }
-                } while (std::next_permutation(haf2.begin(), haf2.end()));
-                
-                uint32_t haf1_beg = best_perm_haf1[0];
-                uint32_t haf1_end = best_perm_haf1[best_perm_haf1.size()-1];
-                
-                uint32_t haf2_beg = best_perm_haf2[0];
-                uint32_t haf2_end = best_perm_haf2[best_perm_haf2.size()-1];
-                
-                uint32_t max_beg_beg = 0;
-                uint32_t max_beg_end = 0;
-                uint32_t max_end_beg = 0;
-                uint32_t max_end_end = 0;
-                
-                for(uint32_t i_s = 0; i_s < 4; i_s++){
-                    for(uint32_t j_s = 0; j_s < 4; j_s++){
-                        max_beg_beg = max(max_beg_beg, connect_num[(haf1_beg<<2)+i_s][(haf2_beg<<2)+j_s]);
-                        max_beg_beg = max(max_beg_beg, connect_num[(haf2_beg<<2)+i_s][(haf1_beg<<2)+j_s]);
-
-                        max_beg_end = max(max_beg_end, connect_num[(haf1_beg<<2)+i_s][(haf2_end<<2)+j_s]);
-                        max_beg_end = max(max_beg_end, connect_num[(haf2_end<<2)+i_s][(haf1_beg<<2)+j_s]);
-
-                        max_end_beg = max(max_end_beg, connect_num[(haf1_end<<2)+i_s][(haf2_beg<<2)+j_s]);
-                        max_end_beg = max(max_end_beg, connect_num[(haf2_beg<<2)+i_s][(haf1_end<<2)+j_s]);
-
-                        max_end_end = max(max_end_end, connect_num[(haf1_end<<2)+i_s][(haf2_end<<2)+j_s]);
-                        max_end_end = max(max_end_end, connect_num[(haf2_end<<2)+i_s][(haf1_end<<2)+j_s]);
-                    }
-                }
-
-                uint32_t max_score = 0;
-                max_score = max(max_score, max_beg_beg);
-                max_score = max(max_score, max_beg_end);
-                max_score = max(max_score, max_end_beg);
-                max_score = max(max_score, max_end_end);
-
-                best_perm = vector<uint32_t>();
-
-                if(max_score == max_beg_beg){
-                    reverse(best_perm_haf1.begin(), best_perm_haf1.end());
-                    best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
-                    best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
-                }else if(max_score == max_beg_end){
-                    best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
-                    best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
-                }else if(max_score == max_end_beg){
-                    best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
-                    best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
-                }else{
-                    reverse(best_perm_haf2.begin(), best_perm_haf2.end());
-                    best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
-                    best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
-                }
-
-                uint32_t ids = 1<<best_perm.size();
-                uint32_t cur_max_score = 0;
-                single_len = best_perm.size();
-                for(uint32_t orientation = 0; orientation < ids; orientation++){
-                    uint32_t orientations = orientation;
-                    uint32_t current_score = 0;
-                    for(int i = 0; i < single_len-1; i++){
-                        current_score += max(connect_num[(best_perm[i]<<2)+((orientations>>i)%2)][(best_perm[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(best_perm[i]<<2)+((orientations>>i)%2)][(best_perm[i+1]<<2)+((orientations>>(i+1))%2)]);
-                        if(i!=single_len-2){
-                            // current_score +=  0.5*max(connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)]);
-                        }
-                    }
-                    if(current_score>cur_max_score){
-                        cur_max_score = current_score;
-                        best_orientation = orientations;
-                    }
-                }
+    new_scaffold_result = order_fixing(connect_num, cur_scaffold_result, &scaffold_orientation, &scaffold_haps);
+    if(!check_identity){
+        new_scaffold_result = ordered_breaking(connect_num, new_scaffold_result, scaffold_orientation, scaffold_haps);
+        new_scaffold_result = order_fixing(connect_num, new_scaffold_result, &scaffold_orientation, &scaffold_haps);
+        cur_scaffold_result = vector<vector<uint32_t>>();
+        for(auto i : new_scaffold_result){
+            if(i.size()>1){
+                cur_scaffold_result.push_back(i);
             }
-            new_scaffold_result.push_back(best_perm);
-            scaffold_orientation.push_back(best_orientation);
-            int current_hap_score = 0;
-            uint32_t haps = 0;
-            for(int p = 0; p < best_perm.size()-1; p++){
-                bool pre_hap2 = (haps >> p) % 2 == 1;
-                bool this_switch = connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)+2] > connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)];
-                uint32_t num = (this_switch ^ pre_hap2)?1:0;
-                haps |= (num<<(p+1));
-            }
-            scaffold_haps.push_back(haps);
-        }else{
-            new_scaffold_result.push_back(res);
-            scaffold_orientation.push_back(0);
-            scaffold_haps.push_back(0);
         }
+
+
+        // ofstream outFileIterationResult;
+        // outFileIterationResult.open(string(output_directory)+string("/scaffold_result_iterated.txt"), ofstream::out | ofstream::trunc);
+
+        // for(auto i : cur_scaffold_result){
+        //     for(auto j: i){
+        //         outFileIterationResult << id_contig[j] << "_hap1+" << ", ";
+        //     }
+        //     outFileIterationResult << ": 123: 123" << endl;
+        // }
+        // outFileIterationResult.close();
+
+        {
+            uint32_t scaffold_len = cur_scaffold_result.size();
+            uint32_t** scaffold_connect_num;
+            float **scaffold_best_buddy;
+            bool **scaffold_seen;
+            scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
+            scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
+            scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
+            for(int i = 0; i < scaffold_len; ++i){
+                scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
+                scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
+                scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+            }
+
+            for(int i = 0; i < scaffold_len; i++){
+                vector<uint32_t> end_is;
+                end_is.push_back(cur_scaffold_result[i][cur_scaffold_result[i].size()-1]);
+                end_is.push_back(cur_scaffold_result[i][cur_scaffold_result[i].size()-2]);
+                for(int j = 0; j< scaffold_len; j++){
+                    vector<uint32_t> beg_js;
+                    beg_js.push_back(cur_scaffold_result[j][0]);
+                    beg_js.push_back(cur_scaffold_result[j][1]);
+                    if(i==j){
+                        scaffold_seen[i][j] = true;
+                    }else{
+                        bool false_connection = false;
+                        vector<uint32_t> scores;
+                        for(auto end_i : end_is){
+                            for(auto beg_j: beg_js){
+                                uint32_t this_max = 0;
+                                uint32_t this_min = connect_num[(end_i<<2)][(beg_j<<2)];
+                                for(int i_c = 0; i_c < 2; i_c++){
+                                    for(int j_c = 0; j_c < 4; j_c++){
+                                        this_max = max(this_max, connect_num[(end_i<<2)+i_c][(beg_j<<2)+j_c]);
+                                        this_min = min(this_min, connect_num[(end_i<<2)+i_c][(beg_j<<2)+j_c]);
+                                    }
+                                }
+                                scores.push_back(this_max);
+                                // if(this_min*10 < this_max){
+                                //     false_connection = true;
+                                // }
+                            }
+                        }
+                        if(false_connection){
+                            scaffold_connect_num[i][j] = 0;
+                            scaffold_seen[i][j] = true;
+                        }else{
+                            int final_score = 0;
+                            sort(scores.begin(), scores.end(),greater<>());
+                            for(int idx = 0; idx < scores.size(); idx++){
+                                if(idx < 2){
+                                    final_score += scores[idx];
+                                }
+                                if(idx>0){
+                                    if(scores[idx-1]/4 >= scores[idx]){
+                                        final_score -= scores[idx];
+                                    }
+                                }
+                            }
+                            if(final_score > 0){
+                                scaffold_connect_num[i][j] = final_score/2;
+                            }else{
+                                scaffold_connect_num[i][j] = 0;
+                                scaffold_seen[i][j] = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            vector<uint32_t> inside_connections;
+            for(int i = 0; i < scaffold_len; i++){
+                uint32_t connection_counter = 0;
+                uint32_t total_connection = 0;
+                if(cur_scaffold_result[i].size()>1){
+                    for(int p = 0; p < cur_scaffold_result[i].size()-1; p++){
+                        uint32_t max_count = 0;
+                        for(int i_c = 0; i_c < 4; i_c++){
+                            for(int j_c = 0; j_c < 4; j_c++){
+                                max_count = max(max_count, connect_num[(cur_scaffold_result[i][p]<<2)+i_c][((cur_scaffold_result[i][p+1])<<2)+j_c]);
+                            }
+                        }
+                        total_connection+=max_count;
+                        connection_counter++;
+                    }
+                    inside_connections.push_back(total_connection/connection_counter);
+                }else{
+                    inside_connections.push_back(0);
+                }
+            }
+            uint32_t average_inside_connections = 0;
+            uint32_t valid_counter = 0;
+            
+            for(int i = 0; i < scaffold_len; i++){
+                if(inside_connections[i]>0){
+                    average_inside_connections += inside_connections[i];
+                    valid_counter++;
+                }
+            }
+            if(valid_counter > 0){
+                average_inside_connections/=valid_counter;
+            }
+
+            for(int i = 0; i < scaffold_len; i++){
+                // cout << i+1<< "\t"<< inside_connections[i] << endl;
+                if(inside_connections[i] <= average_inside_connections){
+                    inside_connections[i] = average_inside_connections;
+                }
+            }
+            vector<vector<uint32_t>> scaffold_graph = best_buddy_merge_final(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections);
+            vector<vector<uint32_t>> new_scaffold_result;
+            set<uint32_t> seen_idx;
+            for(auto i : scaffold_graph){
+                vector<uint32_t> merged_graph;
+                for(auto j:i){
+                    merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+                    seen_idx.insert(j);
+                }
+                new_scaffold_result.push_back(merged_graph);
+            }
+            for(int i = 0; i<cur_scaffold_result.size();i++){
+                if(seen_idx.find(i)==seen_idx.end()){
+                    new_scaffold_result.push_back(cur_scaffold_result[i]);
+                }
+            }
+
+            for(int i = 0; i < scaffold_len; ++i){
+                free(scaffold_connect_num[i]);
+                free(scaffold_best_buddy[i]);
+                free(scaffold_seen[i]);
+            }
+            free(scaffold_connect_num);
+            free(scaffold_best_buddy);
+            free(scaffold_seen);
+            cur_scaffold_result = new_scaffold_result;
+        }
+        cur_scaffold_result = order_fixing(connect_num, cur_scaffold_result, &scaffold_orientation, &scaffold_haps);
+    }else{
+        cur_scaffold_result = new_scaffold_result;
     }
-    cur_scaffold_result = new_scaffold_result;
     ofstream outFileReorderedResult;
     outFileReorderedResult.open(string(output_directory)+string("/scaffold_result_reordered.txt"), ofstream::out | ofstream::trunc);
+    vector<pair<string,string>> hap2s;
     vector<string> hap1s;
-    vector<string> hap2s;
-    vector<set<uint32_t>> hap1_nodes;
-    vector<set<uint32_t>> hap2_nodes;
+    // vector<set<uint32_t>> hap1_nodes;
+    // vector<set<uint32_t>> hap2_nodes;
     for(int i = 0; i< cur_scaffold_result.size(); i++){
         uint32_t cur_length_hap1 = 0;
         uint32_t cur_length_hap2 = 0;
-        set<uint32_t> hap1_node;
-        set<uint32_t> hap2_node;
+        // set<uint32_t> hap1_node;
+        // set<uint32_t> hap2_node;
         stringstream result_hap1;
         stringstream result_hap2;
+        bool is_repeated = false;
+        for(int j = 0; j < cur_scaffold_result[i].size(); j++){
+            string cur_name = id_contig[cur_scaffold_result[i][j]];
+            is_repeated = is_repeated || cur_name[cur_name.size()-1] == 's';
+        }
         for(int j = 0; j < cur_scaffold_result[i].size(); j++){
             outFileReorderedResult << id_contig[cur_scaffold_result[i][j]] << "_hap" << ((scaffold_haps[i]>>j)%2==0 ? "1" : "2") << ((scaffold_orientation[i]>>j)%2==0 ? "+" : "-") << ", ";
             
             string cur_hap1 = contig_hap1s[id_contig[cur_scaffold_result[i][j]]];
             string cur_hap2 = contig_hap2s[id_contig[cur_scaffold_result[i][j]]];
 
+            string cur_name = id_contig[cur_scaffold_result[i][j]];
+            bool is_repeated_cur = cur_name[cur_name.size()-1] == 's';
+
             if((scaffold_haps[i]>>j)%2!=0){
                 string buf = cur_hap1;
                 cur_hap1 = cur_hap2;
                 cur_hap2 = buf;
-                vector<uint32_t> path = (step.haplo_pathes)[(cur_scaffold_result[i][j]<<1)+1];
-                hap1_node.insert(path.begin(),path.end());
-                path = (step.haplo_pathes)[cur_scaffold_result[i][j]<<1];
-                hap2_node.insert(path.begin(),path.end());
-            }else{
-                vector<uint32_t> path = (step.haplo_pathes)[cur_scaffold_result[i][j]<<1];
-                hap1_node.insert(path.begin(),path.end());
-                path = (step.haplo_pathes)[(cur_scaffold_result[i][j]<<1)+1];
-                hap2_node.insert(path.begin(),path.end());
+                // vector<uint32_t> path = (step.haplo_pathes)[(cur_scaffold_result[i][j]<<1)+1];
+                // hap1_node.insert(path.begin(),path.end());
+                // path = (step.haplo_pathes)[cur_scaffold_result[i][j]<<1];
+                // hap2_node.insert(path.begin(),path.end());
             }
-
+            // else{
+                // vector<uint32_t> path = (step.haplo_pathes)[cur_scaffold_result[i][j]<<1];
+                // hap1_node.insert(path.begin(),path.end());
+                // path = (step.haplo_pathes)[(cur_scaffold_result[i][j]<<1)+1];
+                // hap2_node.insert(path.begin(),path.end());
+            // }
+            
             if((scaffold_orientation[i]>>j)%2==0){
                 cur_hap1 = complement(cur_hap1);
                 cur_hap2 = complement(cur_hap2);
             }
 
             result_hap1 << cur_hap1 << string(100, 'N');
-            result_hap2 << cur_hap2 << string(100, 'N');
             cur_length_hap1 += cur_hap1.size() + 100;
-            cur_length_hap2 += cur_hap2.size() + 100;
+            if(!is_repeated){
+                result_hap2 << cur_hap2 << string(100, 'N');
+                cur_length_hap2 += cur_hap2.size() + 100;
+            }
+            if(is_repeated){
+                if(!is_repeated_cur){
+                    hap2s.push_back(make_pair(string("scaffold")+to_string(i)+string("l_hap2_")+cur_name, cur_hap2));
+                }
+            }
+        }
+        
+        // hap1_nodes.push_back(hap1_node);
+        // hap2_nodes.push_back(hap2_node);
+
+        if(!is_repeated){
+            hap2s.push_back(make_pair(string("scaffold")+to_string(i)+string("l_hap2"), result_hap2.str()));
         }
 
-        hap1_nodes.push_back(hap1_node);
-        hap2_nodes.push_back(hap2_node);
-
         hap1s.push_back(result_hap1.str());
-        hap2s.push_back(result_hap2.str());
         outFileReorderedResult << ": " << cur_length_hap1 << ": " << cur_length_hap2 << endl;
     }
     outFileReorderedResult.close();
@@ -8614,27 +8653,27 @@ new_scaffold_result = vector<vector<uint32_t>>();
 
 
 
-    vector<pair<string,uint64_t>> scaffold_result_length;
-	for(int i = 0; i < hap1s.size(); i++){
-        stringstream name;
-        name <<"scaffold" << i << "l";
-        scaffold_result_length.push_back(make_pair(name.str(),hap1s[i].size()));
-    }
-    for(auto i : hap1s_remain){
-        scaffold_result_length.push_back(make_pair(i.first,i.second.size()));
-    }
+    // vector<pair<string,uint64_t>> scaffold_result_length;
+	// for(int i = 0; i < hap1s.size(); i++){
+    //     stringstream name;
+    //     name <<"scaffold" << i << "l";
+    //     scaffold_result_length.push_back(make_pair(name.str(),hap1s[i].size()));
+    // }
+    // for(auto i : hap1s_remain){
+    //     scaffold_result_length.push_back(make_pair(i.first,i.second.size()));
+    // }
     
-    sort(scaffold_result_length.begin(), scaffold_result_length.end(),
-    [](const pair<string,uint64_t>& r1, const pair<string,uint64_t>& r2){
-        return r1.second > r2.second;
-    });
+    // sort(scaffold_result_length.begin(), scaffold_result_length.end(),
+    // [](const pair<string,uint64_t>& r1, const pair<string,uint64_t>& r2){
+    //     return r1.second > r2.second;
+    // });
     
-    ofstream outFileHap1Length;
-    outFileHap1Length.open(string(output_directory)+string("/pred_hap1_length.txt"), ofstream::out | ofstream::trunc);
-    for(auto i : scaffold_result_length){
-        outFileHap1Length << i.first << endl << i.second << endl;
-    }
-    outFileHap1Length.close();
+    // ofstream outFileHap1Length;
+    // outFileHap1Length.open(string(output_directory)+string("/pred_hap1_length.txt"), ofstream::out | ofstream::trunc);
+    // for(auto i : scaffold_result_length){
+    //     outFileHap1Length << i.first << endl << i.second << endl;
+    // }
+    // outFileHap1Length.close();
 
     ofstream outFileHap1;
     outFileHap1.open(string(output_directory)+string("/pred_hap1.fa"), ofstream::out | ofstream::trunc);
@@ -8652,71 +8691,89 @@ new_scaffold_result = vector<vector<uint32_t>>();
     ofstream outFileHap2;
     outFileHap2.open(string(output_directory)+string("/pred_hap2.fa"), ofstream::out | ofstream::trunc);
 	for(int i = 0; i < hap2s.size(); i++){
-        outFileHap2 << ">scaffold" << i << "l_hap2" << endl;
-        outFileHap2 << hap2s[i] << endl;
+        outFileHap2 << ">" << hap2s[i].first << endl;
+        outFileHap2 << hap2s[i].second << endl;
 	}
     for(auto i : hap2s_remain){
-        outFileHap2 << ">" << i.first << "_hap2" << endl;
-        outFileHap2 << i.second << endl;
+        bool is_repeated_cur = i.first[i.first.size()-1] == 's';
+        if(!is_repeated_cur){
+            outFileHap2 << ">" << i.first << "_hap2" << endl;
+            outFileHap2 << i.second << endl;
+        }  
     }
     outFileHap2.close();
 
 
-    ofstream outFileHap1Nodes;
-    outFileHap1Nodes.open(string(output_directory)+string("/pred_hap1_nodes.txt"), ofstream::out | ofstream::trunc);
-	for(auto ns: hap1_nodes){
-        for(auto n:ns){
-            outFileHap1Nodes <<graph->seq[n>>1].name << ",";
-        }
-        outFileHap1Nodes << endl;
-    }
-    outFileHap1Nodes.close();
+    // ofstream outFileHap1Nodes;
+    // outFileHap1Nodes.open(string(output_directory)+string("/pred_hap1_nodes.txt"), ofstream::out | ofstream::trunc);
+	// for(auto ns: hap1_nodes){
+    //     for(auto n:ns){
+    //         outFileHap1Nodes <<graph->seq[n>>1].name << ",";
+    //     }
+    //     outFileHap1Nodes << endl;
+    // }
+    // outFileHap1Nodes.close();
 
-    ofstream outFileHap2Nodes;
-    outFileHap2Nodes.open(string(output_directory)+string("/pred_hap2_nodes.txt"), ofstream::out | ofstream::trunc);
-	for(auto ns: hap2_nodes){
-        for(auto n:ns){
-            outFileHap2Nodes <<graph->seq[n>>1].name << ",";
-        }
-        outFileHap2Nodes << endl;
-    }
-    outFileHap2Nodes.close();
-
-
-    ofstream outFileHap1Broken;
-    outFileHap1Broken.open(string(output_directory)+string("/pred_hap1_broken.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap1s.size(); i++){
-        for (unsigned j = 0; j < hap1s[i].length(); j += 3000000) {
-            outFileHap1Broken << ">scaffold" << i << "l_hap1" << "_" << to_string(j) << endl;
-            outFileHap1Broken << hap1s[i].substr(j, 3000000) << endl;
-        }
-	}
-    for(auto i : hap1s_remain){
-        outFileHap1Broken << ">" << i.first << "_hap1" << endl;
-        outFileHap1Broken << i.second << endl;
-    }
-    outFileHap1Broken.close();
-
-    ofstream outFileHap2Broken;
-    outFileHap2Broken.open(string(output_directory)+string("/pred_hap2_broken.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap2s.size(); i++){
-        for (unsigned j = 0; j < hap2s[i].length(); j += 3000000) {
-            outFileHap2Broken << ">scaffold" << i << "l_hap2" << "_" << to_string(j) << endl;
-            outFileHap2Broken << hap2s[i].substr(j, 3000000) << endl;
-        }
-	}
-    for(auto i : hap2s_remain){
-        outFileHap2Broken << ">" << i.first  << "_hap2" << endl;
-        outFileHap2Broken << i.second << endl;
-    }
-    outFileHap2Broken.close();
+    // ofstream outFileHap2Nodes;
+    // outFileHap2Nodes.open(string(output_directory)+string("/pred_hap2_nodes.txt"), ofstream::out | ofstream::trunc);
+	// for(auto ns: hap2_nodes){
+    //     for(auto n:ns){
+    //         outFileHap2Nodes <<graph->seq[n>>1].name << ",";
+    //     }
+    //     outFileHap2Nodes << endl;
+    // }
+    // outFileHap2Nodes.close();
 
 
+    // ofstream outFileHap1Broken;
+    // outFileHap1Broken.open(string(output_directory)+string("/pred_hap1_broken.fa"), ofstream::out | ofstream::trunc);
+	// for(int i = 0; i < hap1s.size(); i++){
+    //     for (unsigned j = 0; j < hap1s[i].length(); j += 3000000) {
+    //         outFileHap1Broken << ">scaffold" << i << "l_hap1" << "_" << to_string(j) << endl;
+    //         outFileHap1Broken << hap1s[i].substr(j, 3000000) << endl;
+    //     }
+	// }
+    // for(auto i : hap1s_remain){
+    //     outFileHap1Broken << ">" << i.first << "_hap1" << endl;
+    //     outFileHap1Broken << i.second << endl;
+    // }
+    // outFileHap1Broken.close();
+
+    // ofstream outFileHap2Broken;
+    // outFileHap2Broken.open(string(output_directory)+string("/pred_hap2_broken.fa"), ofstream::out | ofstream::trunc);
+	// for(int i = 0; i < hap2s.size(); i++){
+    //     for (unsigned j = 0; j < hap2s[i].length(); j += 3000000) {
+    //         outFileHap2Broken << ">scaffold" << i << "l_hap2" << "_" << to_string(j) << endl;
+    //         outFileHap2Broken << hap2s[i].substr(j, 3000000) << endl;
+    //     }
+	// }
+    // for(auto i : hap2s_remain){
+    //     outFileHap2Broken << ">" << i.first  << "_hap2" << endl;
+    //     outFileHap2Broken << i.second << endl;
+    // }
+    // outFileHap2Broken.close();
 }
 
 
+    // ofstream outFileHap1Nodes;
+    // outFileHap1Nodes.open(string(output_directory)+string("/pred_hap1_nodes.txt"), ofstream::out | ofstream::trunc);
+	// for(auto ns: hap1_nodes){
+    //     for(auto n:ns){
+    //         outFileHap1Nodes <<graph->seq[n>>1].name << ",";
+    //     }
+    //     outFileHap1Nodes << endl;
+    // }
+    // outFileHap1Nodes.close();
 
-
+    // ofstream outFileHap2Nodes;
+    // outFileHap2Nodes.open(string(output_directory)+string("/pred_hap2_nodes.txt"), ofstream::out | ofstream::trunc);
+	// for(auto ns: hap2_nodes){
+    //     for(auto n:ns){
+    //         outFileHap2Nodes <<graph->seq[n>>1].name << ",";
+    //     }
+    //     outFileHap2Nodes << endl;
+    // }
+    // outFileHap2Nodes.close();
 
 
 
@@ -8934,8 +8991,6 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
     return graph_connection;
 }
 
-
-
 vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len){
     vector<vector<uint32_t>> graph_connection;
 
@@ -9139,3 +9194,338 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
     return graph_connection;
 }
 
+
+vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint32_t>> order_input, vector<uint32_t>* orientation_result, vector<uint32_t>* haplo_result){
+    vector<vector<uint32_t>> order_result;
+    for(auto res: order_input){
+        if(res.size()>1){
+            vector<uint32_t> nodes = res;
+            sort(nodes.begin(), nodes.end());
+            vector<uint32_t> best_perm = nodes;
+            uint32_t best_perm_score = 0;
+            uint32_t single_len = nodes.size();
+            uint32_t best_orientation = 0;
+            if(res.size() < 9){
+                do {
+                    // for(auto i : nodes){
+                    //     cout << id_contig[i] << ", ";
+                    // }
+                    // cout << endl;
+                    uint32_t ids = 1<<nodes.size();
+                    uint32_t cur_max_score = 0;
+                    uint32_t cur_best_orientation = 0;
+                    for(uint32_t orientation = 0; orientation < ids; orientation++){
+                        uint32_t orientations = orientation;
+                        uint32_t current_score = 0;
+                        for(int i = 0; i < single_len-1; i++){
+                            current_score += max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)]);
+                            // if(i!=single_len-2){
+                            //     current_score +=  0.5*max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)]);
+                            // }
+                        }
+                        if(current_score>cur_max_score){
+                            cur_max_score = current_score;
+                            cur_best_orientation = orientations;
+                        }
+                    }
+                    
+                    if(cur_max_score > best_perm_score){
+                        best_orientation = cur_best_orientation;
+                        best_perm_score = cur_max_score;
+                        best_perm = nodes;
+
+                    }
+                } while (std::next_permutation(nodes.begin(), nodes.end()));
+            }else if(res.size() < 18){
+                uint32_t half_size = res.size()/2;
+                vector<uint32_t> haf1(res.begin(), res.begin()+half_size);
+                sort(haf1.begin(), haf1.end());
+                vector<uint32_t> best_perm_haf1 = haf1;
+                uint32_t best_perm_score_haf1 = 0;
+                uint32_t single_len_haf1 = haf1.size();
+                uint32_t best_orientation_haf1 = 0;
+                vector<uint32_t> haf2(res.begin()+half_size, res.end());
+                sort(haf2.begin(), haf2.end());
+                vector<uint32_t> best_perm_haf2 = haf2;
+                uint32_t best_perm_score_haf2 = 0;
+                uint32_t single_len_haf2 = haf2.size();
+                uint32_t best_orientation_haf2 = 0;
+                do {
+                    uint32_t ids = 1<<haf1.size();
+                    uint32_t cur_max_score = 0;
+                    uint32_t cur_best_orientation = 0;
+                    for(uint32_t orientation = 0; orientation < ids; orientation++){
+                        uint32_t orientations = orientation;
+                        uint32_t current_score = 0;
+                        for(int i = 0; i < single_len_haf1-1; i++){
+                            current_score += max(connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+1]<<2)+((orientations>>(i+1))%2)]);
+                            if(i!=single_len_haf1-2){
+                                // current_score +=  0.5*max(connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)]);
+                            }
+                        }
+                        if(current_score>cur_max_score){
+                            cur_max_score = current_score;
+                            cur_best_orientation = orientations;
+                        }
+                    }
+                    if(cur_max_score > best_perm_score_haf1){
+                        best_orientation_haf1 = cur_best_orientation;
+                        best_perm_score_haf1 = cur_max_score;
+                        best_perm_haf1 = haf1;
+                    }
+                } while (std::next_permutation(haf1.begin(), haf1.end()));
+
+                do {
+                    uint32_t ids = 1<<haf2.size();
+                    uint32_t cur_max_score = 0;
+                    uint32_t cur_best_orientation = 0;
+                    for(uint32_t orientation = 0; orientation < ids; orientation++){
+                        uint32_t orientations = orientation;
+                        uint32_t current_score = 0;
+                        for(int i = 0; i < single_len_haf2-1; i++){
+                            current_score += max(connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+1]<<2)+((orientations>>(i+1))%2)]);
+                            if(i!=single_len_haf2-2){
+                                // current_score +=  0.5*max(connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+2]<<2)+((orientations>>(i+2))%2)]);
+                            }
+                        }
+                        if(current_score>cur_max_score){
+                            cur_max_score = current_score;
+                            cur_best_orientation = orientations;
+                        }
+                    }
+                    if(cur_max_score > best_perm_score_haf2){
+                        best_orientation_haf2 = cur_best_orientation;
+                        best_perm_score_haf2= cur_max_score;
+                        best_perm_haf2 = haf2;
+                    }
+                } while (std::next_permutation(haf2.begin(), haf2.end()));
+                
+                uint32_t haf1_beg = best_perm_haf1[0];
+                uint32_t haf1_end = best_perm_haf1[best_perm_haf1.size()-1];
+                
+                uint32_t haf2_beg = best_perm_haf2[0];
+                uint32_t haf2_end = best_perm_haf2[best_perm_haf2.size()-1];
+                
+                uint32_t max_beg_beg = 0;
+                uint32_t max_beg_end = 0;
+                uint32_t max_end_beg = 0;
+                uint32_t max_end_end = 0;
+                
+                for(uint32_t i_s = 0; i_s < 4; i_s++){
+                    for(uint32_t j_s = 0; j_s < 4; j_s++){
+                        max_beg_beg = max(max_beg_beg, connect_num[(haf1_beg<<2)+i_s][(haf2_beg<<2)+j_s]);
+                        max_beg_beg = max(max_beg_beg, connect_num[(haf2_beg<<2)+i_s][(haf1_beg<<2)+j_s]);
+
+                        max_beg_end = max(max_beg_end, connect_num[(haf1_beg<<2)+i_s][(haf2_end<<2)+j_s]);
+                        max_beg_end = max(max_beg_end, connect_num[(haf2_end<<2)+i_s][(haf1_beg<<2)+j_s]);
+
+                        max_end_beg = max(max_end_beg, connect_num[(haf1_end<<2)+i_s][(haf2_beg<<2)+j_s]);
+                        max_end_beg = max(max_end_beg, connect_num[(haf2_beg<<2)+i_s][(haf1_end<<2)+j_s]);
+
+                        max_end_end = max(max_end_end, connect_num[(haf1_end<<2)+i_s][(haf2_end<<2)+j_s]);
+                        max_end_end = max(max_end_end, connect_num[(haf2_end<<2)+i_s][(haf1_end<<2)+j_s]);
+                    }
+                }
+
+                uint32_t max_score = 0;
+                max_score = max(max_score, max_beg_beg);
+                max_score = max(max_score, max_beg_end);
+                max_score = max(max_score, max_end_beg);
+                max_score = max(max_score, max_end_end);
+
+                best_perm = vector<uint32_t>();
+
+                if(max_score == max_beg_beg){
+                    reverse(best_perm_haf1.begin(), best_perm_haf1.end());
+                    best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
+                    best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
+                }else if(max_score == max_beg_end){
+                    best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
+                    best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
+                }else if(max_score == max_end_beg){
+                    best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
+                    best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
+                }else{
+                    reverse(best_perm_haf2.begin(), best_perm_haf2.end());
+                    best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
+                    best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
+                }
+
+                uint32_t ids = 1<<best_perm.size();
+                uint32_t cur_max_score = 0;
+                single_len = best_perm.size();
+                for(uint32_t orientation = 0; orientation < ids; orientation++){
+                    uint32_t orientations = orientation;
+                    uint32_t current_score = 0;
+                    for(int i = 0; i < single_len-1; i++){
+                        current_score += max(connect_num[(best_perm[i]<<2)+((orientations>>i)%2)][(best_perm[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(best_perm[i]<<2)+((orientations>>i)%2)][(best_perm[i+1]<<2)+((orientations>>(i+1))%2)]);
+                    }
+                    if(current_score>cur_max_score){
+                        cur_max_score = current_score;
+                        best_orientation = orientations;
+                    }
+                }
+            }
+            order_result.push_back(best_perm);
+            orientation_result->push_back(best_orientation);
+            uint32_t haps = 0;
+            for(int p = 0; p < best_perm.size()-1; p++){
+                bool pre_hap2 = (haps >> p) % 2 == 1;
+                bool this_switch = connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)+2] > connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)];
+                uint32_t num = (this_switch ^ pre_hap2)?1:0;
+                haps |= (num<<(p+1));
+            }
+            haplo_result->push_back(haps);
+        }else{
+            order_result.push_back(res);
+            orientation_result->push_back(0);
+            haplo_result->push_back(0);
+        }
+    }
+    return order_result;
+}
+
+
+
+vector<vector<uint32_t>> ordered_breaking(uint32_t** connect_num,vector<vector<uint32_t>> order_result, vector<uint32_t> orientation_result, vector<uint32_t> haplo_result){
+    vector<vector<uint32_t>> new_scaffold_result;
+    for(int idx = 0; idx < order_result.size(); idx++){
+        if(order_result[idx].size()>2){
+            int last_break = -1;
+            vector<uint32_t> node = order_result[idx];
+            uint32_t orientation = orientation_result[idx];
+            uint32_t haplo = haplo_result[idx];
+            uint32_t average_connection = 0;
+            for(int i = 0; i < node.size() - 1; i++){
+                uint32_t i_ori = (orientation>>i)%2;
+                uint32_t i_1_ori = (orientation>>(i+1))%2;
+                uint32_t i_hap = (haplo>>i)%2;
+                uint32_t i_1_hap = (haplo>>(i+1))%2;
+                if(i_hap == i_1_hap){
+                    average_connection += connect_num[(node[i]<<2)+i_ori][(node[i+1]<<2)+i_1_ori];
+                }else{
+                    average_connection += connect_num[(node[i]<<2)+i_ori][(node[i+1]<<2)+i_1_ori+2];
+                }
+            }
+            average_connection /= node.size() - 1;
+            for(int i = 0; i < node.size() - 1; i++){
+                uint32_t cur_connection = 0;
+                uint32_t i_ori = (orientation>>i)%2;
+                uint32_t i_1_ori = (orientation>>(i+1))%2;
+                uint32_t i_hap = (haplo>>i)%2;
+                uint32_t i_1_hap = (haplo>>(i+1))%2;
+                if(i_hap == i_1_hap){
+                    cur_connection = connect_num[(node[i]<<2)+i_ori][(node[i+1]<<2)+i_1_ori];
+                }else{
+                    cur_connection = connect_num[(node[i]<<2)+i_ori][(node[i+1]<<2)+i_1_ori+2];
+                }
+                if(cur_connection < average_connection/4 ){
+                    new_scaffold_result.push_back(vector<uint32_t>(node.begin()+last_break+1 , node.begin()+i+1));
+                    last_break = i;
+                }
+            }
+            new_scaffold_result.push_back(vector<uint32_t>(node.begin()+last_break+1 , node.begin()+node.size()));
+        }else{
+            new_scaffold_result.push_back(order_result[idx]);
+        }
+    }
+
+    return new_scaffold_result;
+}
+
+
+
+
+
+
+vector<vector<uint32_t>> best_buddy_merge_final(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections){
+    vector<vector<uint32_t>> graph_connection;
+    // cout << "Merge Started" << endl;
+    // cout << len << endl;
+	if(len > target){
+        bool next = true;
+        set<uint32_t> seen_node;
+        uint32_t safe_break = 0;
+        uint32_t iteration = 0;
+        // while(next){
+        vector<pair<double, pair<uint32_t,uint32_t>>> all_connect;
+        for(int i = 0; i < len; i++){
+            for(int j = 0; j < len; j++){
+                if(i!=j && connect_num[i][j] > 0){
+                    all_connect.push_back(make_pair(((double)connect_num[i][j])/inside_connections[i]/inside_connections[j]*10, make_pair(i,j)));
+                }
+            }
+        }
+        sort(all_connect.begin(), all_connect.end(),
+        [](const pair<double, pair<uint32_t,uint32_t>>& r1, const pair<double, pair<uint32_t,uint32_t>>& r2){
+            return r1.first > r2.first;
+        });
+        uint32_t left_to_connect = (len - target)*3;
+        set<uint32_t> seen_beg;
+        set<uint32_t> seen_end;
+        set<uint32_t> black_listed_beg;
+        set<uint32_t> black_listed_end;
+        for(int i = 0; i < min((uint32_t)all_connect.size(),left_to_connect); i++){
+            uint32_t node_i = all_connect[i].second.first;
+            uint32_t node_j = all_connect[i].second.second;
+            if(seen_beg.find(node_i)!=seen_beg.end()){
+                black_listed_beg.insert(node_i);
+            }
+            if(seen_end.find(node_j)!=seen_end.end()){
+                black_listed_end.insert(node_j);
+            }
+            seen_beg.insert(node_i);
+            seen_end.insert(node_j);
+        }
+        uint32_t cur_len = len;
+        for(int i = 0; i < min((uint32_t)all_connect.size(),left_to_connect); i++){
+            uint32_t node_i = all_connect[i].second.first;
+            uint32_t node_j = all_connect[i].second.second;
+            if(black_listed_beg.find(node_i) == black_listed_beg.end() && black_listed_end.find(node_j) == black_listed_end.end()){
+                bool found = false;
+                uint16_t idx_i = 65535;
+                uint16_t idx_j = 65535;
+                for(int cur_idx = 0; cur_idx < graph_connection.size(); cur_idx++){
+                    if(find(graph_connection[cur_idx].begin(), graph_connection[cur_idx].end(), node_i)!=graph_connection[cur_idx].end()){
+                        idx_i = cur_idx;
+                        found = true;
+                    }
+                    if(find(graph_connection[cur_idx].begin(), graph_connection[cur_idx].end(), node_j)!=graph_connection[cur_idx].end()){
+                        idx_j = cur_idx;
+                        found = true;
+                    }
+                }
+                if(idx_i == 65535 && idx_j == 65535){
+                    vector<uint32_t> to_insert;
+                    to_insert.push_back(node_i);
+                    to_insert.push_back(node_j);
+                    graph_connection.push_back(to_insert);
+                }else if(idx_i != 65535 && idx_j != 65535){
+                    cur_len++;
+                }else if(idx_i!=65535){
+                    graph_connection[idx_i].push_back(node_j);
+                }else if(idx_j!=65535){
+                    graph_connection[idx_j].push_back(node_i);
+                }
+                cur_len--;
+                seen_node.insert(node_i);
+                seen_node.insert(node_j);
+                // cout << node_i << "\t" << node_j << endl;
+            }
+            if(cur_len <= target){
+                break;
+            }
+        }
+
+        for(int i = 0; i<len; i++){
+            if(seen_node.find(i)==seen_node.end()){
+                vector<uint32_t> to_insert;
+                to_insert.push_back(i);
+                graph_connection.push_back(to_insert);
+            }
+        }
+        cout << graph_connection.size() << endl;
+    // cout << "Finish get scaffolds." << endl;
+    }
+    return graph_connection;
+}

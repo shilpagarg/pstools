@@ -200,7 +200,7 @@ static void *yak_qv_cb(void *shared, int step, void *_data)
 void yak_qv(const yak_qopt_t *opt, const char *fn, const yak_ch_t *ch, int64_t *cnt)
 {
 	qv_shared_t qs;
-	int i, j, n_cnt = 1<<YAK_COUNTER_BITS;
+	int i, j, n_cnt = 1<<YAK_COUNTER_BITS_QV;
 	memset(&qs, 0, sizeof(qv_shared_t));
 	qs.k = ch->k;
 	qs.opt = opt;
@@ -315,7 +315,7 @@ int yak_qv_solve(const int64_t *hist, const int64_t *cnt, int kmer, double fpr, 
 	// compute adjusted qv
 	for (c = 0, adj_sum = 0.0; c < n_cnt; ++c)
 		adj_sum += qs->adj_cnt[c];
-	assert(adj_sum <= (double)qs->tot);
+	// assert(adj_sum <= (double)qs->tot);
 	qs->err = qs->tot - adj_sum;
 	qs->qv = -4.3429448190325175 * log(log(qs->tot / adj_sum) / kmer);
 	return 0;

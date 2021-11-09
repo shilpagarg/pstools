@@ -26,7 +26,7 @@ typedef struct {
 	int n, m;
 	uint64_t n_ins;
 	uint64_t *a;
-	uint16_t *r;
+	uint32_t *r;
 	bool *f;
 } ch_buf_t;
 
@@ -44,7 +44,7 @@ void printBits(size_t const size, void const * const ptr)
     }
     puts("");
 }
-static inline void ch_insert_buf(ch_buf_t *buf, int p, uint64_t y, uint16_t seq_id, bool f) // insert a k-mer $y to a linear buffer
+static inline void ch_insert_buf(ch_buf_t *buf, int p, uint64_t y, uint32_t seq_id, bool f) // insert a k-mer $y to a linear buffer
 {
 	int pre = y & ((1<<p) - 1);
 	ch_buf_t *b = &buf[pre];
@@ -59,7 +59,7 @@ static inline void ch_insert_buf(ch_buf_t *buf, int p, uint64_t y, uint16_t seq_
 	b->r[b->n++] = seq_id;
 }
 
-static void count_seq_buf(ch_buf_t *buf, int k, int p, int len, const char *seq, uint16_t seq_id) // insert k-mers in $seq to linear buffer $buf
+static void count_seq_buf(ch_buf_t *buf, int k, int p, int len, const char *seq, uint32_t seq_id) // insert k-mers in $seq to linear buffer $buf
 {
 	int i, l;
 	bool f;
@@ -78,7 +78,7 @@ static void count_seq_buf(ch_buf_t *buf, int k, int p, int len, const char *seq,
 	}
 }
 
-static void count_seq_buf_long(ch_buf_t *buf, int k, int p, int len, const char *seq, uint16_t seq_id) // insert k-mers in $seq to linear buffer $buf
+static void count_seq_buf_long(ch_buf_t *buf, int k, int p, int len, const char *seq, uint32_t seq_id) // insert k-mers in $seq to linear buffer $buf
 {
 	int i, l;
 	bool f;
@@ -238,9 +238,9 @@ typedef struct {
 
 typedef struct {
 	char* name;
-	uint16_t unit_id;
+	uint32_t unit_id;
 	bool forward;
-} mapping_res_t;
+} mapping_res_node_t;
 
 typedef struct {
 	int k, n_threads, print_diff;
@@ -248,7 +248,7 @@ typedef struct {
 	bseq_file_t *fp;
 	yak_ch_t *ch;
 	tb_buf_t *buf;
-	std::vector<mapping_res_t>* mappings;
+	std::vector<mapping_res_node_t>* mappings;
 	int record_num;
 } tb_shared_t;
 
@@ -256,7 +256,7 @@ typedef struct {
 	int n_seq;
 	tb_shared_t *aux;
 	bseq1_t *seq;
-	uint16_t *mappings;
+	uint32_t *mappings;
 	bool *mappings_forward;
 } tb_step_t;
 
@@ -269,8 +269,8 @@ static void tb_worker(void *_data, long k, int tid)
 	uint64_t x[4], mask;
 	int i, l, shift;
 	bool is_forward;
-	std::map<uint16_t,int> counts;
-	std::map<uint16_t,bool> forward;
+	std::map<uint32_t,int> counts;
+	std::map<uint32_t,bool> forward;
 
 	if (aux->ch->k < 32) {
 		mask = (1ULL<<2*aux->ch->k) - 1;
@@ -315,7 +315,7 @@ static void tb_worker(void *_data, long k, int tid)
 			}
 		} else l = 0, x[0] = x[1] = x[2] = x[3] = 0;
 	}
-	uint16_t max_idx = -1;
+	uint32_t max_idx = -1;
 	int max_val = 0;
 	for(auto idx: counts) {
 		if(max_val < idx.second){
@@ -336,7 +336,7 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 		s->seq = bseq_read(aux->fp, CHUNK_SIZE, 0, &s->n_seq);
 		s->aux = aux;
 		if (s->n_seq) {
-			s->mappings = (uint16_t*)calloc(s->n_seq, sizeof(uint16_t));
+			s->mappings = (uint32_t*)calloc(s->n_seq, sizeof(uint32_t));
 			s->mappings_forward = (bool*)calloc(s->n_seq, sizeof(bool));
 			// fprintf(stderr, "[M::%s] read %d sequences\n", __func__, s->n_seq);
 			return s;
@@ -346,8 +346,8 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 		tb_step_t *s = (tb_step_t*)_data;
 		kt_for(aux->n_threads, tb_worker, s, s->n_seq);
 		for (i = 0; i < s->n_seq; ++i) {
-			mapping_res_t res;
-			// res.name = strdup(s->seq[i].name);
+			mapping_res_node_t res;
+			res.name = strdup(s->seq[i].name);
 			res.unit_id = s->mappings[i];
 			res.forward = s->mappings_forward[i];
 			aux->mappings->push_back(res);
@@ -379,7 +379,7 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 	aux.record_num = pl->global_counter;
 
 	aux.fp = hic_fn1;
-	std::vector<mapping_res_t>* map1 = new std::vector<mapping_res_t>();
+	std::vector<mapping_res_node_t>* map1 = new std::vector<mapping_res_node_t>();
 	aux.mappings = map1;
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);
@@ -392,7 +392,7 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 
 
 	aux.fp = hic_fn2;
-	std::vector<mapping_res_t>* map2 = new std::vector<mapping_res_t>();
+	std::vector<mapping_res_node_t>* map2 = new std::vector<mapping_res_node_t>();
 	aux.mappings = map2;
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);
@@ -420,8 +420,17 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 	}
 	uint32_t coverage[pl->global_counter];
 	memset(coverage, 0, sizeof(uint32_t)*pl->global_counter);
+	// uint16_t forward[pl->global_counter];
+	// memset(coverage, 0, sizeof(uint16_t)*pl->global_counter);
+	// uint16_t backward[pl->global_counter];
+	// memset(coverage, 0, sizeof(uint16_t)*pl->global_counter);
+	// printf("connections size: %ld;\n", sizeof(uint16_t)*pl->global_counter*pl->global_counter);
+	// printf("coverage size: %ld;\n",sizeof(uint16_t)*pl->global_counter);
 	std::vector<uint64_t> failed_matches;
-	const uint16_t max_count = -1;
+	const uint32_t max_count = -1;
+	
+	FILE* fp_temp = fopen("hic_name_connection.output","w");
+	
 	for(uint64_t j = 0; j < std::min(map1->size(), map2->size()); j++){
 		// if((*map1)[j].unit_id != 65535){
 		// 	if((*map1)[j].forward){
@@ -437,7 +446,12 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 		// 		backward[(*map2)[j].unit_id]++;
 		// 	}
 		// }
-		if((*map1)[j].unit_id != 65535 && (*map2)[j].unit_id != 65535 ){
+			// printf("%s %s\n",(*map1)[j].name,(*map2)[j].name);
+		fprintf(fp_temp,"%s\t",(*map1)[j].name);
+		if((*map1)[j].unit_id != -1) fprintf(fp_temp,"%s\t", (*pl->names)[(*map1)[j].unit_id]);
+		if((*map2)[j].unit_id != -1) fprintf(fp_temp,"%s\t", (*pl->names)[(*map2)[j].unit_id]);
+		fprintf(fp_temp,"\n");
+		if((*map1)[j].unit_id != -1 && (*map2)[j].unit_id != -1 ){
 			// printf("%s and %s\n", (*pl->names)[(*map1)[j].unit_id].c_str(),(*pl->names)[(*map2)[j].unit_id].c_str());
 			// printf("%s and %s, %s\n", (*map1)[j].name.c_str(),(*map2)[j].name.c_str(), !((*map1)[j].forward ^ (*map2)[j].forward)?"forward":"backward");
 			// printf("%s and %s\n", (*pl->names)[(*map1)[j].unit_id],(*pl->names)[(*map2)[j].unit_id]);
@@ -461,11 +475,37 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 		}
 	}
 
+	fclose(fp_temp);
 
 	printf("Useful Records: %ld\n" , success_counter_result);
 	printf("Not matched due to Wrong names: %ld\n" , failed_matches.size());
 
 
+	// {
+	// 	FILE* fp = fopen ("coverage_report.output","w");
+	// 	uint16_t total_no_coverage = 0;
+	// 	uint16_t total_have_coverage = 0;
+	// 	for(int i = 0; i < pl->global_counter; i++){
+	// 		if(coverage[i]==0){
+	// 			total_no_coverage++;
+	// 		}else{
+	// 			total_have_coverage++;
+	// 		}
+	// 	}
+	// 	fprintf(fp, "Total No Coverage: %d\n", total_no_coverage);
+	// 	for(int i = 0; i < pl->global_counter; i++){
+	// 		if(coverage[i]==0){
+	// 			fprintf(fp, "%s\n",(*pl->names)[i]);
+	// 		}
+	// 	}
+	// 	fprintf(fp, "Total Have Coverage: %d\n",total_have_coverage);
+	// 	for(int i = 0; i < pl->global_counter; i++){
+	// 		if(coverage[i]!=0){
+	// 			fprintf(fp, "%s, %d\n",(*pl->names)[i],coverage[i]);
+	// 		}
+	// 	}
+	// 	fclose(fp);
+	// }
 
 	if(out_fn){
 		FILE* fp = fopen (out_fn,"w");
@@ -476,13 +516,16 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 		// }
 		
 		for(int i = 0; i < pl->global_counter; i++){
+			fprintf(fp,"M\t%d\t%s\n",i,(*pl->names)[i]);
+		}
+		for(int i = 0; i < pl->global_counter; i++){
 			for(int j = 0; j < pl->global_counter; j++){
 				if(connections_forward[i][j] > 0 || connections_backward[i][j] > 0){
 					if(i<j){
 						connections_forward[j][i] += connections_forward[i][j];
 						connections_backward[j][i] += connections_backward[i][j];
 					}else if(i>j){
-							fprintf(fp, "%d\t%d\t%d\t%d\n", i, j, connections_forward[i][j], connections_backward[i][j]);
+							fprintf(fp, "C\t%d\t%d\t%d\t%d\n", i, j, connections_forward[i][j], connections_backward[i][j]);
 					}
 				}
 			}
@@ -512,7 +555,7 @@ int main_hic_map(int argc, char *argv[])
 		else if (c == 'o') fn_out = o.arg;
 	}
 	if (argc - o.ind < 1) {
-		fprintf(stderr, "Usage: pstools hic_mapping [options] <graph.fa> <hic.R1.fastq.gz> <hic.R2.fastq.gz>\n");
+		fprintf(stderr, "Usage: pstools hic_mapping_unitig [options] <graph.fa> <hic.R1.fastq.gz> <hic.R2.fastq.gz>\n");
 		fprintf(stderr, "Options:\n");
 		fprintf(stderr, "  -k INT     k-mer size [%d]\n", opt.k);
 		fprintf(stderr, "  -p INT     prefix length [%d]\n", opt.pre);

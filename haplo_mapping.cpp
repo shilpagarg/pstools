@@ -219,7 +219,7 @@ typedef struct {
 typedef struct {
 	uint16_t unit_id;
 	uint64_t pos;
-} mapping_res_t;
+} mapping_res_pos_t;
 
 typedef struct {
 	int k, n_threads, print_diff;
@@ -227,7 +227,7 @@ typedef struct {
 	bseq_file_t *fp;
 	yak_ch_t *ch;
 	tb_buf_t *buf;
-	std::vector<mapping_res_t>* mappings;
+	std::vector<mapping_res_pos_t>* mappings;
 	int record_num;
 	recordset_ps_t *record_set;
 } tb_shared_t;
@@ -323,7 +323,7 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 		tb_step_t *s = (tb_step_t*)_data;
 		kt_for(aux->n_threads, tb_worker, s, s->n_seq);
 		for (i = 0; i < s->n_seq; ++i) {
-			mapping_res_t res;
+			mapping_res_pos_t res;
 			res.unit_id = s->mappings[i];
 			res.pos = s->map_pos[i];
 			aux->mappings->push_back(res);
@@ -391,7 +391,7 @@ void map_hic_pairs(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2)
 	aux.record_num = pl->global_counter;
 	
 	aux.fp = hic_fn1;
-	std::vector<mapping_res_t>* map1 = new std::vector<mapping_res_t>();
+	std::vector<mapping_res_pos_t>* map1 = new std::vector<mapping_res_pos_t>();
 	aux.mappings = map1;
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);
@@ -404,7 +404,7 @@ void map_hic_pairs(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2)
 
 
 	aux.fp = hic_fn2;
-	std::vector<mapping_res_t>* map2 = new std::vector<mapping_res_t>();
+	std::vector<mapping_res_pos_t>* map2 = new std::vector<mapping_res_pos_t>();
 	aux.mappings = map2;
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);

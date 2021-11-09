@@ -87,6 +87,25 @@ typedef struct {
 	ma_utg_t* F_seq;
 } asg_t;
 
+// void gfa_destory(asg_t* g){
+// 	// for(int i = 0; i < g->n_arc; i++){
+// 	// 	free(&g->arc[i]);
+// 	// }
+// 	free(g->arc);
+// 	free(g->idx);
+// 	for(int i = 0; i < g->n_seq; i++){
+// 		free(g->seq[i].name);
+// 		free(g->seq[i].seq);
+// 		// free(&g->seq[i]);
+// 	}
+// 	free(g->seq);
+// 	// kh_destory(g->h_names);
+// 	// kh_destory(g->h_snames);
+// 	free(g->h_names);
+// 	free(g->h_snames);
+// 	free(g);
+// }
+
 asg_t *gfa_init(void)
 {
 	asg_t *g;
