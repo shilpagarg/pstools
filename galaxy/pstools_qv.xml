@@ -1,0 +1,30 @@
+<tool id="pstools_qv" name="Calculate qv score for prediction (pstools)" version="0.1.0" python_template_version="3.5">
+    <requirements>
+        <container type="docker">ghcr.io/junaruga/pstools:latest</container>
+    </requirements>
+    <command detect_errors="exit_code"><![CDATA[
+        pstools qv '$input1' '$input2' '$input3' > '$output1'
+    ]]></command>
+    <inputs>
+        <param type="data" name="input1" format="fa" />
+        <param type="data" name="input2" format="gz" />
+        <param type="data" name="input3" format="gz" />
+    </inputs>
+    <outputs>
+        <data name="output1" format="txt" />
+    </outputs>
+    <help><![CDATA[
+        pstools qv --help
+    ]]></help>
+    <citations>
+        <citation type="bibtex">
+@misc{githubpstools,
+  author = {Shilpa, Garg},
+  year = 2021,
+  title = pstools,
+  publisher = GitHub,
+  journal = GitHub repository,
+  url = https://github.com/shilpagarg/pstools,
+}</citation>
+    </citations>
+</tool>
