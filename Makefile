@@ -1,4 +1,5 @@
-CFLAGS=		-g -gdwarf-3 -fpermissive -Wall -O0 #-O2
+# Don't get CXXFLAGS from the environment variable, as the build doesn't work with -O2.
+CXXFLAGS?=		-g -gdwarf-3 -fpermissive -Wall -O0
 CXX?=		g++
 INCLUDES=	-I.
 OBJS=		kthread.o bbf.o htab.o bseq.o misc.o sys.o \
@@ -7,7 +8,7 @@ PROG=		pstools
 LIBS=		-lm -lz -lpthread ./libminimap2.a ./libz.a
 
 ifneq ($(asan),)
-	CFLAGS+=-fsanitize=address
+	CXXFLAGS+=-fsanitize=address
 	LIBS+=-fsanitize=address
 endif
 
@@ -15,17 +16,17 @@ endif
 .PHONY:all clean depend
 
 .c.o:
-		$(CXX) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
+		$(CXX) -c $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
 all:$(PROG)
 
 pstools: $(OBJS) main.o
-	$(CXX) $(CFLAGS) main.cpp misc.o bbf.o bseq.o htab.o hic_mapping.o hic_mapping_haplo.o hic_completeness.o hic_switch_error.o hic_qv.o count.o kalloc.o paf.o seqio.o seqhash.o  $(UTILS_OBJS) $(LIBS) -o $@
+	$(CXX) $(CXXFLAGS) main.cpp misc.o bbf.o bseq.o htab.o hic_mapping.o hic_mapping_haplo.o hic_completeness.o hic_switch_error.o hic_qv.o count.o kalloc.o paf.o seqio.o seqhash.o  $(UTILS_OBJS) $(LDFLAGS) $(LIBS) -o $@
 clean:
 		rm -fr gmon.out *.o ext/*.o a.out $(PROG) *~  *.dSYM session*
 
 depend:
-		(LC_ALL=C; export LC_ALL; makedepend -Y -- $(CFLAGS) $(DFLAGS) -- *.c)
+		(LC_ALL=C; export LC_ALL; makedepend -Y -- $(CXXFLAGS) $(DFLAGS) -- *.c)
 
 
 

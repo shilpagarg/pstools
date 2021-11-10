@@ -26,7 +26,8 @@ jobs:
       run: |
         echo "CXX='${{ matrix.entry.compiler }}'" >> $GITHUB_ENV
     - name: Compile
-      run:  make
+      # To see the acutal commands
+      run:  make VERBOSE=1
     - name: Test
       run: |
         ./pstools 2>&1 | grep Usage
