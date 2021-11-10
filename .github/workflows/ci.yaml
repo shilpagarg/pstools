@@ -1,0 +1,32 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  build:
+    runs-on: ${{ matrix.entry.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu-20.04: focal
+        # ubuntu-18.04: bionic
+        entry:
+          - { os: ubuntu-20.04, compiler: g++-10 }
+          # The compile fails with g++5.
+          # https://github.com/shilpagarg/pstools/issues/8
+          # - { os: ubuntu-18.04, compiler: g++-5 }
+    steps:
+    - name: Checkout pstools
+      uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update -q || :
+        sudo apt install -q -y make ${{ matrix.entry.compiler }} zlib1g-dev
+    - name: Set ENV CXX=${{ matrix.entry.compiler }}
+      run: |
+        echo "CXX='${{ matrix.entry.compiler }}'" >> $GITHUB_ENV
+    - name: Compile
+      run:  make
+    - name: Test
+      run: |
+        ./pstools 2>&1 | grep Usage

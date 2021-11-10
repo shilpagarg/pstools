@@ -1,5 +1,5 @@
 CFLAGS=		-g -gdwarf-3 -fpermissive -Wall -O0 #-O2
-CC=			g++
+CXX?=		g++
 INCLUDES=	-I.
 OBJS=		kthread.o bbf.o htab.o bseq.o misc.o sys.o \
 		    kalloc.o paf.o hic_mapping.o hic_mapping_haplo.o hic_completeness.o hic_qv.o count.o hic_switch_error.o
@@ -15,12 +15,12 @@ endif
 .PHONY:all clean depend
 
 .c.o:
-		g++ -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
+		$(CXX) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
 all:$(PROG)
 
 pstools: $(OBJS) main.o
-	$(CC) $(CFLAGS) main.cpp misc.o bbf.o bseq.o htab.o hic_mapping.o hic_mapping_haplo.o hic_completeness.o hic_switch_error.o hic_qv.o count.o kalloc.o paf.o seqio.o seqhash.o  $(UTILS_OBJS) $(LIBS) -o $@
+	$(CXX) $(CFLAGS) main.cpp misc.o bbf.o bseq.o htab.o hic_mapping.o hic_mapping_haplo.o hic_completeness.o hic_switch_error.o hic_qv.o count.o kalloc.o paf.o seqio.o seqhash.o  $(UTILS_OBJS) $(LIBS) -o $@
 clean:
 		rm -fr gmon.out *.o ext/*.o a.out $(PROG) *~  *.dSYM session*
 
