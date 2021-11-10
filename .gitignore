@@ -1,2 +1,3 @@
 *.o
 /pstools
+/test/data/qv_score.txt

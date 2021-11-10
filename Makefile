@@ -13,7 +13,7 @@ ifneq ($(asan),)
 endif
 
 .SUFFIXES:.c .o
-.PHONY:all clean depend
+.PHONY:all clean test depend
 
 .c.o:
 		$(CXX) -c $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
@@ -24,6 +24,8 @@ pstools: $(OBJS) main.o
 	$(CXX) $(CXXFLAGS) main.cpp misc.o bbf.o bseq.o htab.o hic_mapping.o hic_mapping_haplo.o hic_completeness.o hic_switch_error.o hic_qv.o count.o kalloc.o paf.o seqio.o seqhash.o  $(UTILS_OBJS) $(LDFLAGS) $(LIBS) -o $@
 clean:
 		rm -fr gmon.out *.o ext/*.o a.out $(PROG) *~  *.dSYM session*
+test:
+		./test/run.sh
 
 depend:
 		(LC_ALL=C; export LC_ALL; makedepend -Y -- $(CXXFLAGS) $(DFLAGS) -- *.c)

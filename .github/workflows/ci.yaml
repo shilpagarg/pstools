@@ -29,5 +29,4 @@ jobs:
       # To see the acutal commands
       run:  make VERBOSE=1
     - name: Test
-      run: |
-        ./pstools 2>&1 | grep Usage
+      run: make test
