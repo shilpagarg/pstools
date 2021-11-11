@@ -1,3 +1,3 @@
 *.o
 /pstools
-/test/data/qv_score.txt
+/test/data/qv/qv_score.txt
