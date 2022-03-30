@@ -1,4 +1,4 @@
-# pstools: Toolkit for fully phased sequences
+# pstools: Toolkit for fully phased sequences on chromosome level
 
 Routine production of phased sequences (haplotypes) of genomes are important to study variation occurring in complex cancer and healthy samples. We developed a novel graph-based algorithm to integrate HiFi and Hi-C data types to produce haplotypes at the base-level resolution for routine clinical research. When benchmarking our method on healthy human genomes, we produced significantly high-quality genomes with a sequence continuity NG50 >130 Mb, switch/hamming error rates <1.5% and a completeness of >6.0 Gb, and an order of magnitude faster process (only <12 hours). This simple approach will facilitate improvement in understanding of the mechanisms of clinical diseases.
 
@@ -11,7 +11,7 @@ cd pstools && make
 
 ## Execution
 Once you compiled the repo, you will see binary file `pstools` in the same directory.
-Now you are ready to go to produce fully phased sequences.
+Now you are ready to go to produce fully phased sequences on chromosome level.
 
 ```sh
 # Use Hi-C data and node sequences of hifiasm graph (awk '/^S/{print ">"$2;print $3}' hifiasm_r_utg.gfa > hifiasm_r_utg.fa)
