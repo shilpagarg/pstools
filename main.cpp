@@ -10,6 +10,7 @@ extern "C"{
 #include "paf_intersect.h"
 #include "resolve_repeat_haplotype.h"
 #include "hic_mapping.h"
+#include "centro_asm.hpp"
 #define PSTOOLS_VERSION "0.1"
 
 
@@ -858,6 +859,10 @@ int main_count(int argc, char *argv[])
 	return 0;
 }
 
+int main_centro_assemble(int argc, char* argv[]){
+    return main_centro_asm(argc, argv);
+}
+
 int main(int argc, char *argv[])
 {
 	extern double yak_realtime(void);
@@ -877,6 +882,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "  haplotype_scaffold    scaffolding the predicted haplotypes\n");
 		fprintf(stderr, "  hic_mapping_unitig    map hic data to sequences in the graph\n");
 		fprintf(stderr, "  hic_mapping_haplo     map hic data to predicted haplotypes for scaffolding\n");
+		fprintf(stderr, "  centro_asm			 use ONT data to resolve HiFi reads\n");
 		// fprintf(stderr, "  count                 count k-mers\n");
 		// fprintf(stderr, "  identity_check        generate identity table for contigs\n");
         fprintf(stderr, "  qv                    calculate qv score for prediction\n");
@@ -890,6 +896,7 @@ int main(int argc, char *argv[])
 	if (strcmp(argv[1], "intersect") == 0) ret = main_intersect(argc-1, argv+1);
 	// else if (strcmp(argv[1], "bubble_chain") == 0) ret = main_bubble_chain(argc-1, argv+1);
 	else if (strcmp(argv[1], "clean_graph") == 0) ret = main_clean_graph(argc-1, argv+1);
+	else if (strcmp(argv[1], "centro_asm") == 0) ret = main_centro_assemble(argc-1, argv+1);
 	// else if (strcmp(argv[1], "resolve_repeat") == 0) ret = main_resolve_repeat(argc-1, argv+1);
 	else if (strcmp(argv[1], "obtain_graph_sequence") == 0) ret = main_obtain_graph_sequence(argc-1, argv+1);
 	else if (strcmp(argv[1], "hic_mapping_unitig") == 0) ret = main_hic_mapping(argc-1, argv+1);
