@@ -16,7 +16,7 @@ void output_paf_intersect(asg_t *g, paf_file_t *paf_file, char *paf_output_filen
 
     unordered_map<int, bool> graph_id_set;
     vector<uint32_t> topological_order = get_topological_order(g);
-    for (int u=0; u<topological_order.size(); u++) {
+    for (uint u=0; u<topological_order.size(); u++) { // topological_order.size() is unsigned and u >= 0
         string name = g->seq[topological_order[u]/2].name;
         string subname = name.substr(3, 9);
         int subnameint = atoi(subname.c_str());
