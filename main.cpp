@@ -438,7 +438,7 @@ int main_haplotype_scaffold(int argc, char* argv[]) {
 
     uint32_t **contig_connection;
 	CALLOC(contig_connection,contig_lengths.size()*4);
-	for(int i = 0; i< contig_lengths.size()*4; i++){
+	for(uint i = 0; i< contig_lengths.size()*4; i++){ //  contig_lengths.size() is unsigned and i >= 0
 		CALLOC(contig_connection[i], contig_lengths.size()*4);
 		memset(contig_connection[i], 0, contig_lengths.size()*4*sizeof(uint32_t));
 	}
@@ -584,7 +584,8 @@ int main_completeness_check(int argc, char *argv[]){
 	yak_copt_t opt;
 	ketopt_t o = KETOPT_INIT;
 	yak_ch_t *haplo_h;
-	int c, i, kmer;
+	int c;
+	// int i, kmer; unused variables
 	double completeness;
 	yak_copt_init(&opt);
 	opt.pre = YAK_COUNTER_BITS;
@@ -618,19 +619,21 @@ int main_completeness_check(int argc, char *argv[]){
 	printf("Completeness\n");
 	printf("%.3f%%\n",completeness);
 	fprintf(stderr, "\n");
+	return ret;
 }
 
 int main_qv_check(int argc, char *argv[]){
 	int ret = 0;
 	yak_copt_t opt;
 	yak_qopt_t qopt;
-	yak_ch_t *haplo_h;
+	// yak_ch_t *haplo_h; // unused variable
 	yak_ch_t *hic_h;
 	ketopt_t o = KETOPT_INIT;
 	int64_t cnt[YAK_N_COUNTS], hist[YAK_N_COUNTS];
-	int c, i, kmer;
+	int c, kmer;
+	// int i; // unused variable
 	yak_qstat_t qs;
-	double completeness;
+	// double completeness; // unused variable
 
 	yak_copt_init(&opt);
 	yak_qopt_init(&qopt);
@@ -671,13 +674,15 @@ int main_qv_check(int argc, char *argv[]){
 	printf("QV_RAW\tQV\n");
 	printf("%.3f\t%.3f\n", qs.qv_raw, qs.qv);
 	fprintf(stderr, "\n");
+	return ret;
 }
 
 int main_switch_error_check(int argc, char *argv[]){
 	int ret = 0;
 	yak_copt_t opt;
 	ketopt_t o = KETOPT_INIT;
-	int c, i, kmer;
+	int c;
+	// int i, kmer; // unused variables
 
 	yak_copt_init(&opt);
 	while ((c = ketopt(&o, argc, argv, 1, "k:K:t:", 0)) >= 0) {
@@ -778,7 +783,7 @@ int main_switch_error_check(int argc, char *argv[]){
 	system("rm temp.sam");
 	opt.pre = YAK_COUNTER_BITS;
 	main_switch_error(opt, string(hic1_file), string(hic2_file), string(hap1_file), string(hap2_file), contig_map);
-
+	return ret;
 }
 
 
@@ -811,8 +816,17 @@ int main_count(int argc, char *argv[])
 	int c;
 	char *fn_out = 0;
 	yak_copt_t opt;
-	ketopt_t o = KETOPT_INIT;
-	yak_copt_init(&opt);
+	ketopt_t o = KETOPT_INIT; // command line default options
+	yak_copt_init(&opt); 
+	/* initialise opt with the yak_c default options and then overwrite if specified on command line:
+						memset(o, 0, sizeof(yak_copt_t));
+						o->bf_shift = 0;
+						o->bf_n_hash = 4;
+						o->k = 31;
+						o->pre = 10;
+						o->n_thread = 4;
+						o->chunk_size = 10000000;*/
+
 	while ((c = ketopt(&o, argc, argv, 1, "k:p:K:t:b:H:o:", 0)) >= 0) {
 		if (c == 'k') opt.k = atoi(o.arg);
 		else if (c == 'p') opt.pre = atoi(o.arg);
@@ -845,6 +859,7 @@ int main_count(int argc, char *argv[])
 	} else if (opt.k >= 32) {
 		fprintf(stderr, "WARNING: counts are inexact if -k is greater than 31\n");
 	}
+	// Why completely remove and redo the counting if bf_shift is specified? Surely it would be enough to check this before and only do it once?
 	h = yak_count(argv[o.ind], &opt, 0);
 	if (opt.bf_shift > 0) {
 		yak_ch_destroy_bf(h);
