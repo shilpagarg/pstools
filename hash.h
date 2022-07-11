@@ -37,7 +37,7 @@
 
 typedef void* HASH ;
 typedef union {long int i ; float f ; void* p ;} HASHKEY ;
-static  HASHKEY _hk ;
+// static  HASHKEY _hk ; // unused
 
 /* define keys so as to allow ourselves to hash value 0 */
 #define HASH_INT(x) (_hk.i = (x)^INT_MAX, _hk)

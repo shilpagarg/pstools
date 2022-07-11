@@ -53,8 +53,8 @@ void draw_graph(uint32_t len, bool** seen, float** best_buddy, map<uint32_t, map
     main_graph.close();
     ofstream outFileBestBuddy;
     outFileBestBuddy.open(output_directory+string("/") + string("best_buddy_")+to_string(iteration) + string(".txt"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < len; i++){
-        for(int j = 0; j < len; j++){
+    for(uint i = 0; i < len; i++){
+        for(uint j = 0; j < len; j++){
             if(best_buddy[i][j]>0){
                 outFileBestBuddy << (i>>2) << "_haplo_" << (i>>1)%2+1 << (i%2==0?"+":"-") << "\t" << (j>>2) << "_haplo_" << (j>>1)%2+1 << (j%2==0?"+":"-") << "\t" << best_buddy[i][j] << endl;
             }
@@ -65,8 +65,8 @@ void draw_graph(uint32_t len, bool** seen, float** best_buddy, map<uint32_t, map
 }
 
 void update_best_buddy_haplo(bool** seen, float** best_buddy, uint32_t** connections,uint32_t len){
-	for(int i = 0; i < len*4; i++){
-		for(int j = 0; j < len*4; j++){
+	for(uint i = 0; i < len*4; i++){
+		for(uint j = 0; j < len*4; j++){
 			uint32_t num = connections[i][j];
 			if(!seen[i][j] && num > 0){
                 bool greatest = true;
@@ -80,7 +80,7 @@ void update_best_buddy_haplo(bool** seen, float** best_buddy, uint32_t** connect
                 }
                 if(greatest){
                     uint32_t max_other = 0;
-                    for(int p = 0; p < len*4; p++){
+                    for(uint p = 0; p < len*4; p++){
                         for(int i_s = 0; i_s < 4; i_s++){
                             if((p>>2)!=(j>>2)){
                                 uint32_t cur_num = connections[i_s+((i>>2)<<2)][p];
@@ -91,7 +91,7 @@ void update_best_buddy_haplo(bool** seen, float** best_buddy, uint32_t** connect
                         }
                     }
 
-                    for(int p = 0; p < len*4; p++){
+                    for(uint p = 0; p < len*4; p++){
                         for(int j_s = 0; j_s < 4; j_s++){
                             if((p>>2)!=(i>>2)){
                                 uint32_t cur_num = connections[p][j_s+((j>>2)<<2)];
@@ -118,12 +118,12 @@ void update_best_buddy_haplo(bool** seen, float** best_buddy, uint32_t** connect
 }
 
 void update_best_buddy_haplo_general(bool** seen, float** best_buddy, uint32_t** connections,uint32_t len){
-	for(int i = 0; i < len; i++){
-		for(int j = 0; j < len; j++){
+	for(uint i = 0; i < len; i++){
+		for(uint j = 0; j < len; j++){
 			uint32_t num = connections[i][j];
 			if(!seen[i][j] && num > 0){
 				uint32_t max_other = 0;
-				for(int p = 0; p < len; p++){
+				for(uint p = 0; p < len; p++){
                     if(p!=j){
                         uint32_t cur_num = connections[i][p];
                         if(!seen[i][p] && cur_num > max_other){
@@ -132,7 +132,7 @@ void update_best_buddy_haplo_general(bool** seen, float** best_buddy, uint32_t**
                     }
 				}
 
-				for(int p = 0; p < len; p++){
+				for(uint p = 0; p < len; p++){
                     if(p!=i){
                         uint32_t cur_num = connections[p][i];
                         if(!seen[p][i] && cur_num > max_other){
@@ -156,7 +156,7 @@ void update_best_buddy_haplo_general(bool** seen, float** best_buddy, uint32_t**
 
 string complement(string unitig){
     stringstream result;
-    int c = 0;
+    uint c = 0;
     while(c < unitig.size()){
         char current = unitig[c];
         if(current == 'A'){
@@ -180,7 +180,7 @@ string translate(string unitig, uint32_t start, string cs_tag){
     stringstream result;
     char cur_operator;
     char current_char;
-    int c = 0;
+    uint c = 0;
     int u = start;
 
     while(c < cs_tag.size()){
@@ -235,7 +235,7 @@ set<string> find_variant(string unitig, uint32_t start, string cs_tag, int kmer_
     }
     char cur_operator;
     char current_char;
-    int c = 0;
+    uint c = 0;
     int u = start;
     set<string> results = set<string>();
     stringstream buf;
@@ -261,7 +261,7 @@ set<string> find_variant(string unitig, uint32_t start, string cs_tag, int kmer_
                 u+=counter;
             }else if(cur_operator == '*'){
                 c+=2;
-                if(u>=pre && u+post <= unitig.length()){
+                if(u>=pre && static_cast<unsigned int>(u+post) <= unitig.length()){
                     results.insert(unitig.substr(u-pre,kmer_l));
                 }else if(u >= pre){
                     results.insert(unitig.substr(unitig.length() - kmer_l,kmer_l));
@@ -270,7 +270,7 @@ set<string> find_variant(string unitig, uint32_t start, string cs_tag, int kmer_
                 }
                 u++;
             }else if(cur_operator == '-'){
-                if(u>=pre && u+post <= unitig.length()){
+                if(u>=pre && static_cast<unsigned int>(u+post) <= unitig.length()){
                     results.insert(unitig.substr(u-pre,kmer_l));
                 }else if(u >= pre){
                     results.insert(unitig.substr(unitig.length() - kmer_l,kmer_l));
@@ -288,20 +288,20 @@ set<string> find_variant(string unitig, uint32_t start, string cs_tag, int kmer_
                     buf << cs_tag[c];
                 }
                 string buffer = buf.str();
-                if(buffer.length()>kmer_l){
+                if(buffer.length()>static_cast<unsigned int>(kmer_l)){
                     int buf_u = u - buffer.length();
-                    while(buf_u+pre <= u && u+post < unitig.length()){
+                    while(buf_u+pre <= u && static_cast<unsigned int>(u+post) < unitig.length()){
                         results.insert(unitig.substr(buf_u,kmer_l));
                         buf_u += kmer_l;
                     }
 
-                    if(u>buffer.length()+post){
+                    if(static_cast<unsigned int>(u)>buffer.length()+post){
                         results.insert(unitig.substr(u-buffer.length()-post,kmer_l));
                     }else{
                         results.insert(unitig.substr(0,kmer_l));
                     }
                 }else{
-                    if(u>buffer.length()+1+(kmer_l-buffer.length())/2){
+                    if(static_cast<unsigned int>(u)>buffer.length()+1+(kmer_l-buffer.length())/2){
                         results.insert(unitig.substr(u-buffer.length()-1-(kmer_l-buffer.length())/2,kmer_l));
                     }else{
                         results.insert(unitig.substr(0,kmer_l));
@@ -440,7 +440,7 @@ vector<vector<paf_rec_str_t>>* repeat_resolver::get_records_from_paf_file(paf_re
     map<string, vector<paf_rec_str_t>*> unordered_records_by_query_name;
     vector<vector<paf_rec_str_t>>* result = new vector<vector<paf_rec_str_t>>();
     cout << "start read paf file." << endl;
-    bool first_map = true;
+   // bool first_map = true; // unused
     int total_count = 0;
     int long_count = 0;
 	while (reader.paf_read(paf_file, &r) >= 0) {
@@ -506,7 +506,7 @@ map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeat_resolver::check_for_sam
     map<set<uint32_t>,vector<vector<paf_rec_str_t>>> buf_repeating_nodes = map<set<uint32_t>, vector<vector<paf_rec_str_t>>>();
     for(auto record: *ordered_records){
         bool begin = true;
-        int start = 0;
+        uint start = 0;
         set<uint32_t> current_result;
         set<set<uint32_t>> begin_end_set;
         for(auto query: record){
@@ -840,7 +840,7 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::aligning_for_variantion(map<set
     mm_idxopt_t iopt;
 	mm_mapopt_t mopt;
 	mopt.min_cnt = 500;
-	int n_threads = 3;
+	// int n_threads = 3; // unused
 	mm_verbose = 2; // disable message output to stderr
 	mm_set_opt(0, &iopt, &mopt);
 	mopt.flag |= MM_F_CIGAR; // perform alignment
@@ -889,7 +889,7 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::aligning_for_variantion(map<set
 
             // fprintf (stdout, "  %d hashes from %d reference sequences, total length %lld\n",
             //     ref->max, dictMax(ref->dict), totLen) ;
-            int i ; U32 *d = &ref->depth[1] ; U32 n1 = 0, n2 = 0, nM = 0 ;
+            uint i ; U32 *d = &ref->depth[1] ; U32 n1 = 0, n2 = 0, nM = 0 ;
             for (i = 1 ; i <= ref->ms->max ; ++i, ++d)
                 if (*d == 1) { msSetCopy1 (ref->ms, i) ; ++n1 ; }
                 else if (*d == 2) { msSetCopy2 (ref->ms, i) ; ++n2 ; }
@@ -913,7 +913,8 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::aligning_for_variantion(map<set
                 mm_mapopt_update(&mopt, this_node);
                 for(auto other_node: query.first){
                     if(other_node != node){
-                        int j, i, n_reg;
+                        int j, n_reg;
+						// int i; // unused
                         // cout << graph->seq[other_node.first>>1].name << ((other_node.first%2==1) ? "-" : "+") << "\t";
                         // cout << graph->seq[node.first>>1].name << ((node.first%2==1) ? "-" : "+") << endl;
                         mm_reg1_t *reg = mm_map(this_node, other_node.second.length(), other_node.second.c_str(), &n_reg, tbuf, &mopt, graph->seq[other_node.first>>1].name);
@@ -1045,7 +1046,7 @@ vector<vector<uint32_t>>* repeat_resolver::count_support_reads_for_branches(vect
         uint32_t this_begin = 0;
         uint32_t this_end = 0;
         bool invalid = false;
-        for(int a = 0; a < i.size(); a ++ ){
+        for(uint a = 0; a < i.size(); a ++ ){
             if(prev_start == i[a].qs){
                 continue;
             }
@@ -1122,7 +1123,7 @@ set<vector<uint32_t>>* repeat_resolver::cover_gaps_in_long_path(vector<vector<ui
             uint32_t this_end;
             vector<uint32_t> current_result;
             bool valid = true;
-            for(int a = 0; a < b.size()/2; a++){
+            for(uint a = 0; a < b.size()/2; a++){
                 this_beg = b[a*2];
                 this_end = b[a*2+1];
                 if(a != 0 && this_beg != prev_end){
@@ -1143,7 +1144,7 @@ set<vector<uint32_t>>* repeat_resolver::cover_gaps_in_long_path(vector<vector<ui
                 current_result.push_back(this_end);
             }
             if(valid){
-                for(int a = 0; a < current_result.size()/2; a++){
+                for(uint a = 0; a < current_result.size()/2; a++){
                     vector<uint32_t> wrapper;
                     wrapper.push_back(current_result[a*2]);
                     wrapper.push_back(current_result[a*2+1]);
@@ -1153,7 +1154,7 @@ set<vector<uint32_t>>* repeat_resolver::cover_gaps_in_long_path(vector<vector<ui
                     used_edges.insert(wrapper);
                 }
                 vector<uint32_t> current_result_reversed = current_result;
-                for(int a = 0; a < current_result_reversed.size(); a++){
+                for(uint a = 0; a < current_result_reversed.size(); a++){
                     current_result_reversed[a] = current_result_reversed[a] ^ 1;
                 }
                 reverse(current_result_reversed.begin(), current_result_reversed.end());
@@ -1168,7 +1169,7 @@ set<vector<uint32_t>>* repeat_resolver::cover_gaps_in_long_path(vector<vector<ui
         if(used_edges.find(a) == used_edges.end()){
             vector<uint32_t> current_result = a;
             vector<uint32_t> current_result_reversed = current_result;
-            for(int b = 0; b < current_result_reversed.size(); b++){
+            for(uint b = 0; b < current_result_reversed.size(); b++){
                     current_result_reversed[b] = current_result_reversed[b] ^ 1;
                 }
             reverse(current_result_reversed.begin(), current_result_reversed.end());
@@ -1214,11 +1215,11 @@ set<vector<uint32_t>>* repeat_resolver::merge_long_pathes(set<vector<uint32_t>>*
                 for(auto end: endings){
                     extended_path.insert(end);
                     vector<uint32_t> extended_result = end;
-                    for(int i=2; i<begin.size(); i++){
+                    for(uint i=2; i<begin.size(); i++){
                         extended_result.push_back(begin[i]);
                     }
                     vector<uint32_t> extended_result_reversed = extended_result;
-                    for(int a = 0; a < extended_result_reversed.size(); a++){
+                    for(uint a = 0; a < extended_result_reversed.size(); a++){
                         extended_result_reversed[a] = extended_result_reversed[a] ^ 1;
                     }
                     reverse(extended_result_reversed.begin(), extended_result_reversed.end());
@@ -1232,7 +1233,7 @@ set<vector<uint32_t>>* repeat_resolver::merge_long_pathes(set<vector<uint32_t>>*
     for(auto b : *path_set){
         if(b.size()>2 && extended_path.find(b)==extended_path.end()){
             vector<uint32_t> extended_result_reversed = b;
-            for(int a = 0; a < extended_result_reversed.size(); a++){
+            for(uint a = 0; a < extended_result_reversed.size(); a++){
                 extended_result_reversed[a] = extended_result_reversed[a] ^ 1;
             }
             reverse(extended_result_reversed.begin(), extended_result_reversed.end());
@@ -1315,7 +1316,7 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     mm_idxopt_t iopt;
 	mm_mapopt_t mopt;
 	mopt.min_cnt = 500;
-	int n_threads = 3;
+	// int n_threads = 3;
 	mm_verbose = 2; // disable message output to stderr
 	mm_set_opt(0, &iopt, &mopt);
 	mopt.flag |= MM_F_CIGAR; // perform alignment
@@ -1352,7 +1353,7 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
         }
     }
 
-    for (int b=0; b<bubbles_bubbles.size(); b++) {
+    for (uint b=0; b<bubbles_bubbles.size(); b++) {
         bubble_t* bubble = bubbles_bubbles[b];
         uint32_t bubble_beginning = bubble->begNode;
         uint32_t bubble_end = bubble->endNode;
@@ -1370,7 +1371,7 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
             uint32_t u = node_stack.back();
             uint32_t vi = node_vi_stack.back();
             if (u==bubble_end) {
-                for (int ui=0; ui<node_stack.size(); ui++) {
+                for (uint ui=0; ui<node_stack.size(); ui++) {
                     // cout << g->seq[node_stack[ui]/2].name << " ";
                     if(ui==0 || ui == node_stack.size()-1){
                         if(node_type[node_stack[ui]] != 2){
@@ -2411,8 +2412,8 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
 
     set<set<uint32_t>> seen;
     for(auto bubble: bubbles_pure){
-        for(int i = 0; i < bubble->paths_nodes.size(); i++){
-            for(int j = 0; j < bubble->paths_nodes.size(); j++){
+        for(uint i = 0; i < bubble->paths_nodes.size(); i++){
+            for(uint j = 0; j < bubble->paths_nodes.size(); j++){
                 if(i!=j){
                     set<uint32_t> path_nodes_1 = bubble->paths_nodes[i];
                     set<uint32_t> path_nodes_2 = bubble->paths_nodes[j];
@@ -2435,8 +2436,8 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
                                 asg_arc_t *incoming_arcs_x = asg_arc_a(graph, x^1);
                                 uint32_t num_incoming_arcs_y = asg_arc_n(graph, y^1);
                                 asg_arc_t *incoming_arcs_y = asg_arc_a(graph, y^1);
-                                for(int i=0; i<num_outgoing_arcs_x; i++){
-                                    for(int j=0; j<num_outgoing_arcs_y; j++){
+                                for(uint i=0; i<num_outgoing_arcs_x; i++){
+                                    for(uint j=0; j<num_outgoing_arcs_y; j++){
                                         if(outgoing_arcs_x[i].v == outgoing_arcs_y[j].v){
                                             flag = true;
                                             break;
@@ -2446,8 +2447,8 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
                                         break;
                                     }
                                 }
-                                for(int i=0; i<num_incoming_arcs_x; i++){
-                                    for(int j=0; j<num_incoming_arcs_y; j++){
+                                for(uint i=0; i<num_incoming_arcs_x; i++){
+                                    for(uint j=0; j<num_incoming_arcs_y; j++){
                                         if(incoming_arcs_x[i].v == incoming_arcs_y[j].v){
                                             flag2 = true;
                                             break;
@@ -2872,7 +2873,7 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
 
             uint32_t max_idx = 0;
             float max_ratio = 0;
-            for(int idx = 0; idx < bubble->paths_nodes.size(); idx++){
+            for(uint idx = 0; idx < bubble->paths_nodes.size(); idx++){
                 path_support_ratio[idx]/=path_support_count[idx];
                 if(max_ratio < path_support_ratio[idx]){
                     max_idx = idx;
@@ -3565,7 +3566,7 @@ void repeat_resolver::save_pathes_to_file(set<vector<uint32_t>>* set_of_pathes, 
             cout << graph->seq[b>>1].name << " to ";
         }
         set<uint32_t> nodes;
-        for(int b = 0; b < a.size()/2; b++){
+        for(uint b = 0; b < a.size()/2; b++){
             if(nodes.insert(a[b*2]>>1).second){
                 current_file << "S\t" << string(graph->seq[a[b*2]>>1].name) + string("_") + to_string(counting) << "\t" << "*" << endl;
             }
@@ -3583,13 +3584,13 @@ void repeat_resolver::save_pathes_to_file(set<vector<uint32_t>>* set_of_pathes, 
             asg_arc_t *outgoing_arcs = asg_arc_a(graph, (q<<1));
             uint32_t num_outgoing_reversed_arcs = asg_arc_n(graph, (q<<1)^1);
             asg_arc_t *outgoing_reversed_arcs = asg_arc_a(graph, (q<<1)^1);
-            for(int i = 0; i < num_outgoing_arcs; i++){
+            for(uint i = 0; i < num_outgoing_arcs; i++){
                 uint32_t other_node = outgoing_arcs[i].v>>1;
                 if(nodes.find(other_node)!=nodes.end()){
                     current_file << "L\t" << string(graph->seq[q].name) + string("_") + to_string(counting) << "\t"<< "+" << "\t" << string(graph->seq[outgoing_arcs[i].v>>1].name) + string("_") + to_string(counting) << "\t" << (outgoing_arcs[i].v%2==0 ? "+" : "-") << "\t0M\t" <<endl;
                 }
             }
-            for(int i = 0; i < num_outgoing_reversed_arcs; i++){
+            for(uint i = 0; i < num_outgoing_reversed_arcs; i++){
                 uint32_t other_node = outgoing_reversed_arcs[i].v>>1;
                 if(nodes.find(other_node)!=nodes.end()){
                     current_file << "L\t" << string(graph->seq[q].name) + string("_") + to_string(counting) << "\t"<< "-" << "\t" << string(graph->seq[outgoing_reversed_arcs[i].v>>1].name) + string("_") + to_string(counting) << "\t" << (outgoing_reversed_arcs[i].v%2==0 ? "+" : "-") << "\t0M\t" <<endl;
@@ -3815,7 +3816,7 @@ typedef struct { // data structure for each step in kt_pipeline()
 static void counter_worker_single_step(void *data, long i, int tid) // callback for kt_for()
 {
     count_step *p = (count_step*)data;
-    for(int j = 0; j < p->len; ++j){
+    for(uint j = 0; j < p->len; ++j){
         if((i>>1) != (j>>1)){
             for(auto node_i: p->current_nodes_haplo[i]){
                 for(auto node_j: p->current_nodes_haplo[j]){
@@ -3888,7 +3889,7 @@ string get_haplotype_sequence(asg_t* graph, set<uint32_t> set_of_nodes, uint32_t
             break;
         }
         map<uint32_t, asg_arc_t> next_node_arc;
-        for(int i = 0; i < num_outgoing_arcs; i++){
+        for(uint i = 0; i < num_outgoing_arcs; i++){
             next_node_arc[outgoing_arcs[i].v] = outgoing_arcs[i];
         }
 
@@ -3899,7 +3900,7 @@ string get_haplotype_sequence(asg_t* graph, set<uint32_t> set_of_nodes, uint32_t
                 uint32_t num_outgoing_arcs = asg_arc_n(graph, buf_node.first);
                 asg_arc_t *outgoing_arcs = asg_arc_a(graph, buf_node.first);
                 set<uint32_t> current_next_next;
-                for(int i = 0; i < num_outgoing_arcs; i++){
+                for(uint i = 0; i < num_outgoing_arcs; i++){
                     if(set_of_nodes.find(outgoing_arcs[i].v>>1)!=set_of_nodes.end()){
                         current_next_next.insert(outgoing_arcs[i].v);
                     }
@@ -3918,13 +3919,13 @@ string get_haplotype_sequence(asg_t* graph, set<uint32_t> set_of_nodes, uint32_t
             bool found = false;
             uint32_t num_outgoing_arcs_temp = asg_arc_n(graph, node);
             asg_arc_t *outgoing_arcs_temp = asg_arc_a(graph, node);
-            for(int i = 0; i < num_outgoing_arcs_temp; i++){
+            for(uint i = 0; i < num_outgoing_arcs_temp; i++){
                 if(found){
                     break;
                 }
                 uint32_t num_outgoing_arcs_temp_sec = asg_arc_n(graph, outgoing_arcs_temp[i].v);
                 asg_arc_t *outgoing_arcs_temp_sec = asg_arc_a(graph, outgoing_arcs_temp[i].v);
-                for(int j = 0; j < num_outgoing_arcs_temp_sec; j++){
+                for(uint j = 0; j < num_outgoing_arcs_temp_sec; j++){
                     if(set_of_nodes.find(outgoing_arcs_temp_sec[j].v>>1)!=set_of_nodes.end() && visited_nodes.find(outgoing_arcs_temp_sec[j].v)==visited_nodes.end()){
                         found = true;
                         next_node = outgoing_arcs_temp[i].v;
@@ -3952,7 +3953,7 @@ string get_haplotype_sequence(asg_t* graph, set<uint32_t> set_of_nodes, uint32_t
             }
         }
         assert(next_node!=-1);
-        uint32_t prev_n = node;
+        // uint32_t prev_n = node; // unused
         node = next_node;
         current_pos += pre_seq.length() - next_node_arc[node].ol;
         result << pre_seq.substr(0,pre_seq.length() - next_node_arc[node].ol);
@@ -4446,7 +4447,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     }
 
 
-    for (int b=0; b<bubbles.size(); b++) {
+    for (uint b=0; b<bubbles.size(); b++) {
         bubble_t* bubble = bubbles[b];
         uint32_t bubble_beginning = bubble->begNode;
         uint32_t bubble_end = bubble->endNode;
@@ -4464,7 +4465,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
             uint32_t u = node_stack.back();
             uint32_t vi = node_vi_stack.back();
             if (u==bubble_end) {
-                for (int ui=0; ui<node_stack.size(); ui++) {
+                for (uint ui=0; ui<node_stack.size(); ui++) {
                     // cout << g->seq[node_stack[ui]/2].name << " ";
                     if(ui==0 || ui == node_stack.size()-1){
                         if(node_type[node_stack[ui]] != 2){
@@ -4562,7 +4563,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
         bubble->paths_nodes = vec_of_pathes;
     }
     for(auto bubble: pure_bubbles){
-        for(int i = 0; i < bubble->paths_nodes.size(); i++){
+        for(uint i = 0; i < bubble->paths_nodes.size(); i++){
             for(auto node: bubble->paths_nodes[i]){
                 node_bubble_map[node] = bubble;
                 if(node_path_id_map.find(node)==node_path_id_map.end()){
@@ -4658,7 +4659,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
 	// best_buddy = (float**)calloc(len*4,sizeof(float*));
 	// seen = (bool**)calloc(len*4,sizeof(bool*));
 
-	for(int i = 0; i < len*4; ++i){
+	for(uint i = 0; i < len*4; ++i){
         connect_num[i] = (uint32_t*)calloc(len*4, sizeof(uint32_t));
     //     best_buddy[i] = (float*)calloc(len*4, sizeof(float));
     //     seen[i] = (bool*)calloc(len*4, sizeof(bool));
@@ -4705,7 +4706,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     ofstream outFileBrokenNodes;
     outFile.open(string(output_directory)+string("/pred_haplotypes.fa"), ofstream::out | ofstream::trunc);
     outFileBrokenNodes.open(string(output_directory)+string("/pred_broken_nodes.fa"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < step.beg_node->size()*2; i++){
+    for(uint i = 0; i < step.beg_node->size()*2; i++){
         if(step.similar[i>>1]){
             outFile << string(">")+string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name))+string("s_hap")+to_string(i%2==0?1:2) << endl;
             outFile << step.haplo_sequences[i] << endl;
@@ -4774,12 +4775,12 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
 
     kt_for(n_threads, counter_worker_single_step , &cstep, step.beg_node->size()*2);
     // if(enzymes.size()==0){
-        for(int i = 0; i < len*4; i++){
+        for(uint i = 0; i < len*4; i++){
             double ratio_i = 1;
             if(step.haplo_sequences[i>>1].size()<10000000){
                 ratio_i = 10000000.0/((double)step.haplo_sequences[i>>1].size());
             }
-            for(int j = 0; j < len*4; j++){
+            for(uint j = 0; j < len*4; j++){
                 double ratio_j = 1;
                 if(step.haplo_sequences[j>>1].size()<10000000){
                     ratio_j = 10000000.0/((double)step.haplo_sequences[j>>1].size());
@@ -4877,8 +4878,8 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     
     ofstream outFileScaffold;
     outFileScaffold.open(string(output_directory)+string("/scaffold_connection.txt"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < len*4; i++){
-        for(int j = 0; j < len*4; j++){
+    for(uint i = 0; i < len*4; i++){
+        for(uint j = 0; j < len*4; j++){
             if((i&2)==0){
                 connect_num[i][j] += connect_num[i^2][j^2];
             }else{
@@ -4927,7 +4928,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
 	best_buddy = (float**)calloc(len*4,sizeof(float*));
 	seen = (bool**)calloc(len*4,sizeof(bool*));
 
-	for(int i = 0; i < len*4; ++i){
+	for(uint i = 0; i < len*4; ++i){
         best_buddy[i] = (float*)calloc(len*4, sizeof(float));
         seen[i] = (bool*)calloc(len*4, sizeof(bool));
 	}
@@ -4974,7 +4975,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         //     cout << i << endl;
         // }
     }
-	for(int i = 0; i < len*4; ++i){
+	for(uint i = 0; i < len*4; ++i){
         best_buddy[i] = (float*)calloc(len*4, sizeof(float));
         seen[i] = (bool*)calloc(len*4, sizeof(bool));
 	}
@@ -4997,8 +4998,8 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     
     uint32_t low_connect = 0;
     vector<uint32_t> all_connect;
-    for(int i = 0; i < len; i++){
-        for(int j = 0; j < len; j++){
+    for(uint i = 0; i < len; i++){
+        for(uint j = 0; j < len; j++){
             if( exclude_contigs.find(id_contig[i]) == exclude_contigs.end() && exclude_contigs.find(id_contig[j]) == exclude_contigs.end()
                 && connect_num[i][j] !=0 && i != j && contig_lengths[id_contig[i]] >= long_threshold && contig_lengths[id_contig[j]] >= long_threshold 
             ){
@@ -5023,11 +5024,11 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         first_max_iter--;
 
         uint32_t total_greaters = 0;
-        for(int i = 0; i < len*4; i++){
+        for(uint i = 0; i < len*4; i++){
             if(i%4==0 && contig_lengths[id_contig[i>>2]] >= long_threshold && exclude_contigs.find(id_contig[i>>2]) == exclude_contigs.end() ){
                 total_greaters++;
             }
-            for(int j = 0; j < len*4; j++){
+            for(uint j = 0; j < len*4; j++){
                 bool to_exclude = false;
                 uint32_t max_count = 0;
                 uint32_t min_count = connect_num[i][j];
@@ -5070,8 +5071,8 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             // next = false;
             update_best_buddy_haplo(seen, best_buddy,connect_num,len);
             cout << "Update best buddy score." << endl;
-            for(int i = 0; i < len*4; i++){
-                for(int j = 0; j < len*4; j++){
+            for(uint i = 0; i < len*4; i++){
+                for(uint j = 0; j < len*4; j++){
                     if(best_buddy[i][j] > 0.999){
                         if(connect_num[i][j]>low_connect){
                             next = true;
@@ -5099,11 +5100,11 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                     bool found = false;
                     uint16_t idx_i = 65535;
                     uint16_t idx_j = 65535;
-                    uint16_t idx_i_sub = 65535;
-                    uint16_t idx_j_sub = 65535;
-                    for(int i = 0; i < graph_connection.size(); i++){
+                    uint16_t idx_i_sub;// = 65535;
+                    uint16_t idx_j_sub;// = 65535;
+                    for(uint i = 0; i < graph_connection.size(); i++){
                         if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first>>2))!=graph_connection[i].end()){
-                            for(int idx=0; idx<graph_connection[i].size(); idx++){
+                            for(uint idx=0; idx<graph_connection[i].size(); idx++){
                                 if(graph_connection[i][idx]==(res.second.first>>2)){
                                     idx_i_sub = idx;
                                 }
@@ -5112,7 +5113,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                             found = true;
                         }
                         if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second>>2))!=graph_connection[i].end()){
-                            for(int idx=0; idx<graph_connection[i].size(); idx++){
+                            for(uint idx=0; idx<graph_connection[i].size(); idx++){
                                 if(graph_connection[i][idx]==(res.second.second>>2)){
                                     idx_j_sub = idx;
                                 }
@@ -5141,11 +5142,11 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
                         adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
                         uint32_t average_connection = 0;
-                        for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
+                        for(uint i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
                             pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
                             average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
                         }
-                        for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
+                        for(uint j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
                             pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                             average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
                         }
@@ -5162,7 +5163,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         uint32_t adj_connection = 65335;
                         adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
                         uint32_t average_connection = 0;
-                        for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
+                        for(uint j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
                             pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                             average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
                         }
@@ -5178,7 +5179,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         uint32_t adj_connection = 65335;
                         adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
                         uint32_t average_connection = 0;
-                        for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
+                        for(uint i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
                             pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
                             average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
                         }
@@ -5193,7 +5194,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                     
                     
                     if(!erase_connection){
-                        for(int q = 0; q < len*4; q++){
+                        for(uint q = 0; q < len*4; q++){
                             for(int i_s = 0; i_s < 4; i_s++){
                                 for(int j_s = 0; j_s < 4; j_s++){
                                     seen[((res.second.first>>2)<<2)+i_s][q] = true;
@@ -5225,8 +5226,8 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             cout << "Save graphs and scores." << endl;
 
             uint32_t counting_left = 0;
-            for(int i = 0; i < len*4 ; i++){
-                for(int j = 0; j < len*4 ; j++){
+            for(uint i = 0; i < len*4 ; i++){
+                for(uint j = 0; j < len*4 ; j++){
                     if(!seen[i][j]){
                         next = true;
                         counting_left++;
@@ -5252,7 +5253,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     vector<uint32_t> nodes_to_insert;
 
     
-    for(int i = 0; i < len; i++){
+    for(uint i = 0; i < len; i++){
         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > long_threshold && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
         }
@@ -5280,7 +5281,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
                     }
                 }
-                for(int i = 0; i < best_2.size(); i++){
+                for(uint i = 0; i < best_2.size(); i++){
                     if(max_count > best_2[i]){
                         uint32_t buf = max_count;
                         max_count = best_2[i];
@@ -5290,7 +5291,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             }
             bool valid = true;
             uint32_t idx_0 = 1;
-            for(int i = 0; i < best_2.size()-1; i++){
+            for(uint i = 0; i < best_2.size()-1; i++){
                 if(best_2[i+1] > 0){
                     idx_0++;
                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
@@ -5314,7 +5315,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         
         uint32_t max_idx = 0;
         uint32_t max_score = 65535;
-        for(int i = 0; i < scores.size(); i++){
+        for(uint i = 0; i < scores.size(); i++){
             if(max_score < scores[i]){
                 max_score = scores[i];
                 max_idx = i;
@@ -5949,14 +5950,14 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
         scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
         scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-        for(int i = 0; i < scaffold_len; ++i){
+        for(uint i = 0; i < scaffold_len; ++i){
             scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
             scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
             scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
         }
 
-        for(int i = 0; i < scaffold_len; i++){
-            for(int j = 0; j< scaffold_len; j++){
+        for(uint i = 0; i < scaffold_len; i++){
+            for(uint j = 0; j< scaffold_len; j++){
                 if(i==j){
                     scaffold_seen[i][j] = true;
                 }else{
@@ -5970,7 +5971,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                                 }
                             }
                             scaffold_connect_num[i][j] += this_max;
-                            for(int i = 0; i<best_2.size(); i++){
+                            for(uint i = 0; i<best_2.size(); i++){
                                 if(best_2[i]<this_max){
                                     uint32_t buf = best_2[i];
                                     best_2[i] = this_max;
@@ -5991,7 +5992,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         }
 
         vector<uint32_t> inside_connections;
-        for(int i = 0; i < scaffold_len; i++){
+        for(uint i = 0; i < scaffold_len; i++){
             uint32_t connection_counter = 0;
             uint32_t total_connection = 0;
             if(cur_scaffold_result[i].size()>1){
@@ -6018,7 +6019,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         uint32_t average_inside_connections = 0;
         uint32_t valid_counter = 0;
         
-        for(int i = 0; i < scaffold_len; i++){
+        for(uint i = 0; i < scaffold_len; i++){
             if(inside_connections[i]>0){
                 average_inside_connections += inside_connections[i];
                 valid_counter++;
@@ -6028,7 +6029,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             average_inside_connections/=valid_counter;
         }
 
-        for(int i = 0; i < scaffold_len; i++){
+        for(uint i = 0; i < scaffold_len; i++){
             if(inside_connections[i]==0){
                 inside_connections[i] = average_inside_connections;
             }
@@ -6044,13 +6045,13 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             }
             new_scaffold_result.push_back(merged_graph);
         }
-        for(int i = 0; i<cur_scaffold_result.size();i++){
+        for(uint i = 0; i<cur_scaffold_result.size();i++){
             if(seen_idx.find(i)==seen_idx.end()){
                 new_scaffold_result.push_back(cur_scaffold_result[i]);
             }
         }
 
-        for(int i = 0; i < scaffold_len; ++i){
+        for(uint i = 0; i < scaffold_len; ++i){
             free(scaffold_connect_num[i]);
             free(scaffold_best_buddy[i]);
             free(scaffold_seen[i]);
@@ -6069,13 +6070,13 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             single_connect_num = (uint32_t**)calloc(single_len,sizeof(uint32_t*));
             single_best_buddy = (float**)calloc(single_len,sizeof(float*));
             single_seen = (bool**)calloc(single_len,sizeof(bool*));
-            for(int i = 0; i < single_len; ++i){
+            for(uint i = 0; i < single_len; ++i){
                 single_connect_num[i] = (uint32_t*)calloc(single_len, sizeof(uint32_t));
                 single_best_buddy[i] = (float*)calloc(single_len, sizeof(float));
                 single_seen[i] = (bool*)calloc(single_len, sizeof(bool));
             }
-            for(int i = 0; i < nodes.size(); i++){
-                for(int j = 0; j< nodes.size(); j++){
+            for(uint i = 0; i < nodes.size(); i++){
+                for(uint j = 0; j< nodes.size(); j++){
                     uint32_t max_connect = 0;
                     for(int i_s = 0; i_s < 4; i_s++){
                         for(int j_s = 0; j_s < 4; j_s++){
@@ -6091,13 +6092,13 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             }
 
             vector<vector<uint32_t>> single_graph = best_buddy_separate(single_seen, single_best_buddy, single_connect_num, single_len);
-            for(int i = 0; i < single_graph.size(); i++){
-                for(int j = 0; j< single_graph[i].size(); j++){
+            for(uint i = 0; i < single_graph.size(); i++){
+                for(uint j = 0; j< single_graph[i].size(); j++){
                     single_graph[i][j] = nodes[single_graph[i][j]];
                 }
             }
             separated_connections.insert(separated_connections.end(),single_graph.begin(), single_graph.end());
-            for(int i = 0; i < single_len; ++i){
+            for(uint i = 0; i < single_len; ++i){
                 free(single_connect_num[i]);
                 free(single_best_buddy[i]);
                 free(single_seen[i]);
@@ -6123,14 +6124,14 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
         scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
         scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-        for(int i = 0; i < scaffold_len; ++i){
+        for(uint i = 0; i < scaffold_len; ++i){
             scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
             scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
             scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
         }
 
-        for(int i = 0; i < scaffold_len; i++){
-            for(int j = 0; j< scaffold_len; j++){
+        for(uint i = 0; i < scaffold_len; i++){
+            for(uint j = 0; j< scaffold_len; j++){
                 if(i==j){
                     scaffold_seen[i][j] = true;
                 }else{
@@ -6144,7 +6145,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                                 }
                             }
                             scaffold_connect_num[i][j] += this_max;
-                            for(int i = 0; i<best_2.size(); i++){
+                            for(uint i = 0; i<best_2.size(); i++){
                                 if(best_2[i]<this_max){
                                     uint32_t buf = best_2[i];
                                     best_2[i] = this_max;
@@ -6164,7 +6165,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             }
         }
         vector<uint32_t> inside_connections;
-        for(int i = 0; i < scaffold_len; i++){
+        for(uint i = 0; i < scaffold_len; i++){
             uint32_t connection_counter = 0;
             uint32_t total_connection = 0;
             if(cur_scaffold_result[i].size()>1){
@@ -6192,7 +6193,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         }
         uint32_t average_inside_connections = 0;
         uint32_t valid_counter = 0;
-        for(int i = 0; i < scaffold_len; i++){
+        for(uint i = 0; i < scaffold_len; i++){
             if(inside_connections[i]>0){
                 average_inside_connections += inside_connections[i];
                 valid_counter++;
@@ -6201,7 +6202,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
 
         average_inside_connections/=valid_counter;
 
-        for(int i = 0; i < scaffold_len; i++){
+        for(uint i = 0; i < scaffold_len; i++){
             if(inside_connections[i]==0){
                 inside_connections[i] = average_inside_connections;
             }
@@ -6224,13 +6225,13 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             }
             new_scaffold_result.push_back(merged_graph);
         }
-        for(int i = 0; i<cur_scaffold_result.size();i++){
+        for(uint i = 0; i<cur_scaffold_result.size();i++){
             if(seen_idx.find(i)==seen_idx.end()){
                 new_scaffold_result.push_back(cur_scaffold_result[i]);
             }
         }
 
-        for(int i = 0; i < scaffold_len; ++i){
+        for(uint i = 0; i < scaffold_len; ++i){
             free(scaffold_connect_num[i]);
             free(scaffold_best_buddy[i]);
             free(scaffold_seen[i]);
@@ -8177,14 +8178,14 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
         scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
         scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-        for(int i = 0; i < scaffold_len; ++i){
+        for(uint i = 0; i < scaffold_len; ++i){
             scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
             scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
             scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
         }
 
-        for(int i = 0; i < scaffold_len; i++){
-            for(int j = 0; j< scaffold_len; j++){
+        for(uint i = 0; i < scaffold_len; i++){
+            for(uint j = 0; j< scaffold_len; j++){
                 if(i==j){
                     scaffold_seen[i][j] = true;
                 }else{
@@ -8198,7 +8199,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                                 }
                             }
                             scaffold_connect_num[i][j] += this_max;
-                            for(int i = 0; i<best_2.size(); i++){
+                            for(uint i = 0; i<best_2.size(); i++){
                                 if(best_2[i]<this_max){
                                     uint32_t buf = best_2[i];
                                     best_2[i] = this_max;
@@ -8218,7 +8219,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             }
         }
         vector<uint32_t> inside_connections;
-        for(int i = 0; i < scaffold_len; i++){
+        for(uint i = 0; i < scaffold_len; i++){
             uint32_t connection_counter = 0;
             uint32_t total_connection = 0;
             if(cur_scaffold_result[i].size()>1){
@@ -8247,7 +8248,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
 
         uint32_t average_inside_connections = 0;
         uint32_t valid_counter = 0;
-        for(int i = 0; i < scaffold_len; i++){
+        for(uint i = 0; i < scaffold_len; i++){
             if(inside_connections[i]>0){
                 average_inside_connections += inside_connections[i];
                 valid_counter++;
@@ -8256,7 +8257,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
 
         average_inside_connections/=valid_counter;
 
-        for(int i = 0; i < scaffold_len; i++){
+        for(uint i = 0; i < scaffold_len; i++){
             if(inside_connections[i]==0){
                 inside_connections[i] = average_inside_connections;
             }
@@ -8280,13 +8281,13 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             }
             new_scaffold_result.push_back(merged_graph);
         }
-        for(int i = 0; i<cur_scaffold_result.size();i++){
+        for(uint i = 0; i<cur_scaffold_result.size();i++){
             if(seen_idx.find(i)==seen_idx.end()){
                 new_scaffold_result.push_back(cur_scaffold_result[i]);
             }
         }
 
-        for(int i = 0; i < scaffold_len; ++i){
+        for(uint i = 0; i < scaffold_len; ++i){
             free(scaffold_connect_num[i]);
             free(scaffold_best_buddy[i]);
             free(scaffold_seen[i]);
@@ -8339,17 +8340,17 @@ new_scaffold_result = vector<vector<uint32_t>>();
             scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
             scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
             scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-            for(int i = 0; i < scaffold_len; ++i){
+            for(uint i = 0; i < scaffold_len; ++i){
                 scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
                 scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
                 scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
             }
 
-            for(int i = 0; i < scaffold_len; i++){
+            for(uint i = 0; i < scaffold_len; i++){
                 vector<uint32_t> end_is;
                 end_is.push_back(cur_scaffold_result[i][cur_scaffold_result[i].size()-1]);
                 end_is.push_back(cur_scaffold_result[i][cur_scaffold_result[i].size()-2]);
-                for(int j = 0; j< scaffold_len; j++){
+                for(uint j = 0; j< scaffold_len; j++){
                     vector<uint32_t> beg_js;
                     beg_js.push_back(cur_scaffold_result[j][0]);
                     beg_js.push_back(cur_scaffold_result[j][1]);
@@ -8380,7 +8381,7 @@ new_scaffold_result = vector<vector<uint32_t>>();
                         }else{
                             int final_score = 0;
                             sort(scores.begin(), scores.end(),greater<>());
-                            for(int idx = 0; idx < scores.size(); idx++){
+                            for(uint idx = 0; idx < scores.size(); idx++){
                                 if(idx < 2){
                                     final_score += scores[idx];
                                 }
@@ -8402,11 +8403,11 @@ new_scaffold_result = vector<vector<uint32_t>>();
             }
 
             vector<uint32_t> inside_connections;
-            for(int i = 0; i < scaffold_len; i++){
+            for(uint i = 0; i < scaffold_len; i++){
                 uint32_t connection_counter = 0;
                 uint32_t total_connection = 0;
                 if(cur_scaffold_result[i].size()>1){
-                    for(int p = 0; p < cur_scaffold_result[i].size()-1; p++){
+                    for(uint p = 0; p < cur_scaffold_result[i].size()-1; p++){
                         uint32_t max_count = 0;
                         for(int i_c = 0; i_c < 4; i_c++){
                             for(int j_c = 0; j_c < 4; j_c++){
@@ -8424,7 +8425,7 @@ new_scaffold_result = vector<vector<uint32_t>>();
             uint32_t average_inside_connections = 0;
             uint32_t valid_counter = 0;
             
-            for(int i = 0; i < scaffold_len; i++){
+            for(uint i = 0; i < scaffold_len; i++){
                 if(inside_connections[i]>0){
                     average_inside_connections += inside_connections[i];
                     valid_counter++;
@@ -8434,7 +8435,7 @@ new_scaffold_result = vector<vector<uint32_t>>();
                 average_inside_connections/=valid_counter;
             }
 
-            for(int i = 0; i < scaffold_len; i++){
+            for(uint i = 0; i < scaffold_len; i++){
                 // cout << i+1<< "\t"<< inside_connections[i] << endl;
                 if(inside_connections[i] <= average_inside_connections){
                     inside_connections[i] = average_inside_connections;
@@ -8451,13 +8452,13 @@ new_scaffold_result = vector<vector<uint32_t>>();
                 }
                 new_scaffold_result.push_back(merged_graph);
             }
-            for(int i = 0; i<cur_scaffold_result.size();i++){
+            for(uint i = 0; i<cur_scaffold_result.size();i++){
                 if(seen_idx.find(i)==seen_idx.end()){
                     new_scaffold_result.push_back(cur_scaffold_result[i]);
                 }
             }
 
-            for(int i = 0; i < scaffold_len; ++i){
+            for(uint i = 0; i < scaffold_len; ++i){
                 free(scaffold_connect_num[i]);
                 free(scaffold_best_buddy[i]);
                 free(scaffold_seen[i]);
@@ -8477,7 +8478,7 @@ new_scaffold_result = vector<vector<uint32_t>>();
     vector<string> hap1s;
     // vector<set<uint32_t>> hap1_nodes;
     // vector<set<uint32_t>> hap2_nodes;
-    for(int i = 0; i< cur_scaffold_result.size(); i++){
+    for(uint i = 0; i< cur_scaffold_result.size(); i++){
         uint32_t cur_length_hap1 = 0;
         uint32_t cur_length_hap2 = 0;
         // set<uint32_t> hap1_node;
@@ -8485,11 +8486,11 @@ new_scaffold_result = vector<vector<uint32_t>>();
         stringstream result_hap1;
         stringstream result_hap2;
         bool is_repeated = false;
-        for(int j = 0; j < cur_scaffold_result[i].size(); j++){
+        for(uint j = 0; j < cur_scaffold_result[i].size(); j++){
             string cur_name = id_contig[cur_scaffold_result[i][j]];
             is_repeated = is_repeated || cur_name[cur_name.size()-1] == 's';
         }
-        for(int j = 0; j < cur_scaffold_result[i].size(); j++){
+        for(uint j = 0; j < cur_scaffold_result[i].size(); j++){
             outFileReorderedResult << id_contig[cur_scaffold_result[i][j]] << "_hap" << ((scaffold_haps[i]>>j)%2==0 ? "1" : "2") << ((scaffold_orientation[i]>>j)%2==0 ? "+" : "-") << ", ";
             
             string cur_hap1 = contig_hap1s[id_contig[cur_scaffold_result[i][j]]];
@@ -8547,7 +8548,7 @@ new_scaffold_result = vector<vector<uint32_t>>();
     map<string, string> hap1s_remain;
     map<string, string> hap2s_remain;
 
-    for(int i = 0; i < len; i++){
+    for(uint i = 0; i < len; i++){
         if(seen_node.find(i) == seen_node.end()){
             hap1s_remain[id_contig[i]] = contig_hap1s[id_contig[i]];
             hap2s_remain[id_contig[i]] = contig_hap2s[id_contig[i]];
@@ -8677,7 +8678,7 @@ new_scaffold_result = vector<vector<uint32_t>>();
 
     ofstream outFileHap1;
     outFileHap1.open(string(output_directory)+string("/pred_hap1.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap1s.size(); i++){
+	for(uint i = 0; i < hap1s.size(); i++){
         outFileHap1 << ">scaffold" << i << "l_hap1" << endl;
         outFileHap1 << hap1s[i] << endl;
 	}
@@ -8690,7 +8691,7 @@ new_scaffold_result = vector<vector<uint32_t>>();
 
     ofstream outFileHap2;
     outFileHap2.open(string(output_directory)+string("/pred_hap2.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap2s.size(); i++){
+	for(uint i = 0; i < hap2s.size(); i++){
         outFileHap2 << ">" << hap2s[i].first << endl;
         outFileHap2 << hap2s[i].second << endl;
 	}
@@ -8793,8 +8794,8 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
 	// while(next){
     uint32_t low_connect = 0;
     vector<uint32_t> all_connect;
-    for(int i = 0; i < len; i++){
-        for(int j = 0; j < len; j++){
+    for(uint i = 0; i < len; i++){
+        for(uint j = 0; j < len; j++){
             low_connect+= connect_num[i][j];
             all_connect.push_back(connect_num[i][j]);
         }
@@ -8815,8 +8816,8 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
 		// next = false;
 		update_best_buddy_haplo_general(seen, best_buddy,connect_num,len);
         // cout << "Update best buddy score." << endl;
-		for(int i = 0; i < len; i++){
-			for(int j = 0; j < len; j++){
+		for(uint i = 0; i < len; i++){
+			for(uint j = 0; j < len; j++){
 				if(best_buddy[i][j] > 0.999){
                     if(connect_num[i][j]>low_connect){
                         next = true;
@@ -8856,24 +8857,24 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                 bool found = false;
                 uint16_t idx_i = 65535;
                 uint16_t idx_j = 65535;
-                uint16_t idx_i_sub = 65535;
-                uint16_t idx_j_sub = 65535;
-                for(int i = 0; i < graph_connection.size(); i++){
+                // uint16_t idx_i_sub = 65535;
+                // uint16_t idx_j_sub = 65535;
+                for(uint i = 0; i < graph_connection.size(); i++){
                     if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.first)){
-                                idx_i_sub = idx;
-                            }
-                        }
+                        // for(uint idx=0; idx<graph_connection[i].size(); idx++){
+                        //     if(graph_connection[i][idx]==(res.second.first)){
+                        //         idx_i_sub = idx;
+                        //     }
+                        // }
                         idx_i = i;
                         found = true;
                     }
                     if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.second)){
-                                idx_j_sub = idx;
-                            }
-                        }
+                        // for(uint idx=0; idx<graph_connection[i].size(); idx++){
+                        //     if(graph_connection[i][idx]==(res.second.second)){
+                        //         idx_j_sub = idx;
+                        //     }
+                        // }
                         idx_j = i;
                         found = true;
                     }
@@ -8897,10 +8898,10 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                     adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
                     adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
                     uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
+                    for(uint i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
                         average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
                     }
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
+                    for(uint j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
                         average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                     }
                     average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
@@ -8916,7 +8917,7 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                     uint32_t adj_connection = 65335;
                     adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
                     uint32_t average_connection = 0;
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
+                    for(uint j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
                         average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                     }
                     average_connection/=graph_connection[idx_j].size()-1;
@@ -8930,7 +8931,7 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                     uint32_t adj_connection = 65335;
                     adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
                     uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
+                    for(uint i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
                         average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
                     }
                     average_connection/=graph_connection[idx_i].size()-1;
@@ -8950,7 +8951,7 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                     break;
                 }
                 if(!erase_connection){
-                    for(int q = 0; q < len; q++){
+                    for(uint q = 0; q < len; q++){
                         seen[res.second.first][q] = true;
                         seen[q][res.second.second] = true;
                         seen[res.second.second][res.second.first] = true;
@@ -8968,8 +8969,8 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
         // cout << "Insert connections." << endl;
         // cout << "Save graphs and scores." << endl;
         uint32_t counting_left = 0;
-        for(int i = 0; i < len ; i++){
-            for(int j = 0; j < len ; j++){
+        for(uint i = 0; i < len ; i++){
+            for(uint j = 0; j < len ; j++){
                 if(!seen[i][j]){
                     next = true;
                     counting_left++;
@@ -8980,7 +8981,7 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
 		// cout << "Left edges: " << counting_left << "." << endl;
         iteration++;
 	}
-	for(int i = 0; i<len; i++){
+	for(uint i = 0; i<len; i++){
         if(seen_node.find(i)==seen_node.end()){
             vector<uint32_t> to_insert;
             to_insert.push_back(i);
@@ -9001,8 +9002,8 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
     uint32_t low_connect = 0;
 	// while(next){
     vector<uint32_t> all_connections;
-    for(int i = 0; i < len; i++){
-        for(int j = 0; j < len; j++){
+    for(uint i = 0; i < len; i++){
+        for(uint j = 0; j < len; j++){
             all_connections.push_back(connect_num[i][j]);
         }
     }
@@ -9027,8 +9028,8 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
 		// next = false;
 		update_best_buddy_haplo_general(seen, best_buddy,connect_num,len);
         // cout << "Update best buddy score." << endl;
-		for(int i = 0; i < len; i++){
-			for(int j = 0; j < len; j++){
+		for(uint i = 0; i < len; i++){
+			for(uint j = 0; j < len; j++){
 				if(best_buddy[i][j] > 0.999){
                     if(connect_num[i][j]>low_connect){
                         next = true;
@@ -9058,9 +9059,9 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                 uint16_t idx_j = 65535;
                 uint16_t idx_i_sub = 65535;
                 uint16_t idx_j_sub = 65535;
-                for(int i = 0; i < graph_connection.size(); i++){
+                for(uint i = 0; i < graph_connection.size(); i++){
                     if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
+                        for(uint idx=0; idx<graph_connection[i].size(); idx++){
                             if(graph_connection[i][idx]==(res.second.first)){
                                 idx_i_sub = idx;
                             }
@@ -9069,7 +9070,7 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                         found = true;
                     }
                     if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
+                        for(uint idx=0; idx<graph_connection[i].size(); idx++){
                             if(graph_connection[i][idx]==(res.second.second)){
                                 idx_j_sub = idx;
                             }
@@ -9101,10 +9102,10 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                     adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
                     adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
                     uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
+                    for(uint i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
                         average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
                     }
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
+                    for(uint j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
                         average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                     }
                     average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
@@ -9120,7 +9121,7 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                     uint32_t adj_connection = 65335;
                     adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
                     uint32_t average_connection = 0;
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
+                    for(uint j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
                         average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
                     }
                     average_connection/=graph_connection[idx_j].size()-1;
@@ -9135,7 +9136,7 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                     uint32_t adj_connection = 65335;
                     adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
                     uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
+                    for(uint i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
                         average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
                     }
                     average_connection/=graph_connection[idx_i].size()-1;
@@ -9148,7 +9149,7 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                 }
                 
                 if(!erase_connection){
-                    for(int q = 0; q < len; q++){
+                    for(uint q = 0; q < len; q++){
                         seen[res.second.first][q] = true;
                         seen[q][res.second.second] = true;
                         seen[res.second.second][res.second.first] = true;
@@ -9165,8 +9166,8 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
         // cout << "Save graphs and scores." << endl;
 
         uint32_t counting_left = 0;
-        for(int i = 0; i < len ; i++){
-            for(int j = 0; j < len ; j++){
+        for(uint i = 0; i < len ; i++){
+            for(uint j = 0; j < len ; j++){
                 if(!seen[i][j]){
                     next = true;
                     counting_left++;
@@ -9183,7 +9184,7 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
             seen_node.insert(j);
         }
     }
-	for(int i = 0; i<len; i++){
+	for(uint i = 0; i<len; i++){
         if(seen_node.find(i)==seen_node.end()){
             vector<uint32_t> to_insert;
             to_insert.push_back(i);
@@ -9217,7 +9218,7 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
                     for(uint32_t orientation = 0; orientation < ids; orientation++){
                         uint32_t orientations = orientation;
                         uint32_t current_score = 0;
-                        for(int i = 0; i < single_len-1; i++){
+                        for(uint i = 0; i < single_len-1; i++){
                             current_score += max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)]);
                             // if(i!=single_len-2){
                             //     current_score +=  0.5*max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)]);
@@ -9243,21 +9244,21 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
                 vector<uint32_t> best_perm_haf1 = haf1;
                 uint32_t best_perm_score_haf1 = 0;
                 uint32_t single_len_haf1 = haf1.size();
-                uint32_t best_orientation_haf1 = 0;
+                // uint32_t best_orientation_haf1 = 0;
                 vector<uint32_t> haf2(res.begin()+half_size, res.end());
                 sort(haf2.begin(), haf2.end());
                 vector<uint32_t> best_perm_haf2 = haf2;
                 uint32_t best_perm_score_haf2 = 0;
                 uint32_t single_len_haf2 = haf2.size();
-                uint32_t best_orientation_haf2 = 0;
+                // uint32_t best_orientation_haf2 = 0;
                 do {
                     uint32_t ids = 1<<haf1.size();
                     uint32_t cur_max_score = 0;
-                    uint32_t cur_best_orientation = 0;
+                    // uint32_t cur_best_orientation = 0;
                     for(uint32_t orientation = 0; orientation < ids; orientation++){
                         uint32_t orientations = orientation;
                         uint32_t current_score = 0;
-                        for(int i = 0; i < single_len_haf1-1; i++){
+                        for(uint i = 0; i < single_len_haf1-1; i++){
                             current_score += max(connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+1]<<2)+((orientations>>(i+1))%2)]);
                             if(i!=single_len_haf1-2){
                                 // current_score +=  0.5*max(connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)]);
@@ -9265,11 +9266,11 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
                         }
                         if(current_score>cur_max_score){
                             cur_max_score = current_score;
-                            cur_best_orientation = orientations;
+                            // cur_best_orientation = orientations;
                         }
                     }
                     if(cur_max_score > best_perm_score_haf1){
-                        best_orientation_haf1 = cur_best_orientation;
+                        // best_orientation_haf1 = cur_best_orientation;
                         best_perm_score_haf1 = cur_max_score;
                         best_perm_haf1 = haf1;
                     }
@@ -9278,11 +9279,11 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
                 do {
                     uint32_t ids = 1<<haf2.size();
                     uint32_t cur_max_score = 0;
-                    uint32_t cur_best_orientation = 0;
+                    // uint32_t cur_best_orientation = 0;
                     for(uint32_t orientation = 0; orientation < ids; orientation++){
                         uint32_t orientations = orientation;
                         uint32_t current_score = 0;
-                        for(int i = 0; i < single_len_haf2-1; i++){
+                        for(uint i = 0; i < single_len_haf2-1; i++){
                             current_score += max(connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+1]<<2)+((orientations>>(i+1))%2)]);
                             if(i!=single_len_haf2-2){
                                 // current_score +=  0.5*max(connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+2]<<2)+((orientations>>(i+2))%2)]);
@@ -9290,11 +9291,11 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
                         }
                         if(current_score>cur_max_score){
                             cur_max_score = current_score;
-                            cur_best_orientation = orientations;
+                            // cur_best_orientation = orientations;
                         }
                     }
                     if(cur_max_score > best_perm_score_haf2){
-                        best_orientation_haf2 = cur_best_orientation;
+                        // best_orientation_haf2 = cur_best_orientation;
                         best_perm_score_haf2= cur_max_score;
                         best_perm_haf2 = haf2;
                     }
@@ -9357,7 +9358,7 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
                 for(uint32_t orientation = 0; orientation < ids; orientation++){
                     uint32_t orientations = orientation;
                     uint32_t current_score = 0;
-                    for(int i = 0; i < single_len-1; i++){
+                    for(uint i = 0; i < single_len-1; i++){
                         current_score += max(connect_num[(best_perm[i]<<2)+((orientations>>i)%2)][(best_perm[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(best_perm[i]<<2)+((orientations>>i)%2)][(best_perm[i+1]<<2)+((orientations>>(i+1))%2)]);
                     }
                     if(current_score>cur_max_score){
@@ -9369,7 +9370,7 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
             order_result.push_back(best_perm);
             orientation_result->push_back(best_orientation);
             uint32_t haps = 0;
-            for(int p = 0; p < best_perm.size()-1; p++){
+            for(uint p = 0; p < best_perm.size()-1; p++){
                 bool pre_hap2 = (haps >> p) % 2 == 1;
                 bool this_switch = connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)+2] > connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)];
                 uint32_t num = (this_switch ^ pre_hap2)?1:0;
@@ -9389,14 +9390,14 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
 
 vector<vector<uint32_t>> ordered_breaking(uint32_t** connect_num,vector<vector<uint32_t>> order_result, vector<uint32_t> orientation_result, vector<uint32_t> haplo_result){
     vector<vector<uint32_t>> new_scaffold_result;
-    for(int idx = 0; idx < order_result.size(); idx++){
+    for(uint idx = 0; idx < order_result.size(); idx++){
         if(order_result[idx].size()>2){
             int last_break = -1;
             vector<uint32_t> node = order_result[idx];
             uint32_t orientation = orientation_result[idx];
             uint32_t haplo = haplo_result[idx];
             uint32_t average_connection = 0;
-            for(int i = 0; i < node.size() - 1; i++){
+            for(uint i = 0; i < node.size() - 1; i++){
                 uint32_t i_ori = (orientation>>i)%2;
                 uint32_t i_1_ori = (orientation>>(i+1))%2;
                 uint32_t i_hap = (haplo>>i)%2;
@@ -9408,7 +9409,7 @@ vector<vector<uint32_t>> ordered_breaking(uint32_t** connect_num,vector<vector<u
                 }
             }
             average_connection /= node.size() - 1;
-            for(int i = 0; i < node.size() - 1; i++){
+            for(uint i = 0; i < node.size() - 1; i++){
                 uint32_t cur_connection = 0;
                 uint32_t i_ori = (orientation>>i)%2;
                 uint32_t i_1_ori = (orientation>>(i+1))%2;
@@ -9443,14 +9444,14 @@ vector<vector<uint32_t>> best_buddy_merge_final(bool** seen, float** best_buddy,
     // cout << "Merge Started" << endl;
     // cout << len << endl;
 	if(len > target){
-        bool next = true;
+        // bool next = true; // unused
         set<uint32_t> seen_node;
-        uint32_t safe_break = 0;
-        uint32_t iteration = 0;
+        // uint32_t safe_break = 0; // unused
+        // uint32_t iteration = 0; // unused
         // while(next){
         vector<pair<double, pair<uint32_t,uint32_t>>> all_connect;
-        for(int i = 0; i < len; i++){
-            for(int j = 0; j < len; j++){
+        for(uint i = 0; i < len; i++){
+            for(uint j = 0; j < len; j++){
                 if(i!=j && connect_num[i][j] > 0){
                     all_connect.push_back(make_pair(((double)connect_num[i][j])/inside_connections[i]/inside_connections[j]*10, make_pair(i,j)));
                 }
@@ -9465,7 +9466,7 @@ vector<vector<uint32_t>> best_buddy_merge_final(bool** seen, float** best_buddy,
         set<uint32_t> seen_end;
         set<uint32_t> black_listed_beg;
         set<uint32_t> black_listed_end;
-        for(int i = 0; i < min((uint32_t)all_connect.size(),left_to_connect); i++){
+        for(uint i = 0; i < min((uint32_t)all_connect.size(),left_to_connect); i++){
             uint32_t node_i = all_connect[i].second.first;
             uint32_t node_j = all_connect[i].second.second;
             if(seen_beg.find(node_i)!=seen_beg.end()){
@@ -9478,21 +9479,21 @@ vector<vector<uint32_t>> best_buddy_merge_final(bool** seen, float** best_buddy,
             seen_end.insert(node_j);
         }
         uint32_t cur_len = len;
-        for(int i = 0; i < min((uint32_t)all_connect.size(),left_to_connect); i++){
+        for(uint i = 0; i < min((uint32_t)all_connect.size(),left_to_connect); i++){
             uint32_t node_i = all_connect[i].second.first;
             uint32_t node_j = all_connect[i].second.second;
             if(black_listed_beg.find(node_i) == black_listed_beg.end() && black_listed_end.find(node_j) == black_listed_end.end()){
-                bool found = false;
+                // bool found = false;
                 uint16_t idx_i = 65535;
                 uint16_t idx_j = 65535;
-                for(int cur_idx = 0; cur_idx < graph_connection.size(); cur_idx++){
+                for(uint cur_idx = 0; cur_idx < graph_connection.size(); cur_idx++){
                     if(find(graph_connection[cur_idx].begin(), graph_connection[cur_idx].end(), node_i)!=graph_connection[cur_idx].end()){
                         idx_i = cur_idx;
-                        found = true;
+                        // found = true;
                     }
                     if(find(graph_connection[cur_idx].begin(), graph_connection[cur_idx].end(), node_j)!=graph_connection[cur_idx].end()){
                         idx_j = cur_idx;
-                        found = true;
+                        // found = true;
                     }
                 }
                 if(idx_i == 65535 && idx_j == 65535){
@@ -9517,7 +9518,7 @@ vector<vector<uint32_t>> best_buddy_merge_final(bool** seen, float** best_buddy,
             }
         }
 
-        for(int i = 0; i<len; i++){
+        for(uint i = 0; i<len; i++){
             if(seen_node.find(i)==seen_node.end()){
                 vector<uint32_t> to_insert;
                 to_insert.push_back(i);

@@ -4,7 +4,7 @@
 #include <assert.h>
 #include "kthread.h" // multi-threading models: pipeline and multi-threaded for loop
 #include "yak-priv.h"
-#include "ketopt.h"
+// #include "ketopt.h"
 #include "bseq.h"
 #include <map>
 #include <vector>
@@ -287,7 +287,7 @@ static void tb_worker(void *_data, long k, int tid)
 				x[3] = x[3] >> 1 | (uint64_t)(1 - (c>>1)) << shift;
 			}
 			if (++l >= aux->k) {
-				int type = 0, c1, c2;
+				// int type = 0, c1, c2;
 				uint64_t y;
 				if (aux->ch->k < 32)
 					y = yak_hash64(x[0] < x[1]? x[0] : x[1], mask);
@@ -358,8 +358,9 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 		exit(1);
 	}
 
-	ketopt_t o = KETOPT_INIT;
-	int i, c;
+	// ketopt_t o = KETOPT_INIT;
+	int i;
+	// int c;
 	tb_shared_t aux;
 
 	memset(&aux, 0, sizeof(tb_shared_t));
@@ -398,7 +399,7 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 	map<int, uint64_t> id_lengths;
 	int ids = 0;
 	for(auto i: contig2_1_map){
-		for(int idx = 0; idx < names.size()/2; idx++){
+		for(uint idx = 0; idx < names.size()/2; idx++){
 			if(names[idx]==i.first){
 				unid_id[idx] = ids;
 				id_names[ids] = names[idx];
@@ -406,7 +407,7 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 				break;
 			}
 		}
-		for(int idx = names.size()/2; idx < names.size(); idx++){
+		for(uint idx = names.size()/2; idx < names.size(); idx++){
 			if(names[idx]==i.second){
 				unid_id[idx] = ids+1;
 				id_names[ids+1] = names[idx];
@@ -422,7 +423,7 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 	// 	printf("%d\t%d\n",i.first,id_lengths[i.second]);
 
 	// }
-	uint64_t overall_total_length = pl->tot_len;
+	// uint64_t overall_total_length = pl->tot_len;
 	// uint64_t support_count[unid_id.size()] = {0};
 	// memset(support_count,0,sizeof(support_count));
 	// uint64_t unsupport_count[unid_id.size()] = {0};
@@ -485,12 +486,12 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 
 	for(auto i: id_names){
 		string name = i.second;
-		uint64_t total_length = id_lengths[i.first];
+		// uint64_t total_length = id_lengths[i.first];
 		uint32_t total_vars = 0;
 		uint32_t switch_error_count = 0;
 		// uint64_t switch_error_length = 0;
 		uint32_t hamming_distance = 0;
-		uint32_t potiential_switch_count = 1;
+		// uint32_t potiential_switch_count = 1;
 		vector<uint32_t> sup_pos;
 		if(supported_position.find(i.first)!=supported_position.end()){
 			sup_pos = supported_position[i.first];
@@ -531,7 +532,7 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 		int kmer_count = 0;
 		bool init = false;
 		vector<pair<uint32_t,int>> condensed_counting;
-		int idx = 0;
+		uint idx = 0;
 		while(idx < unsupport_counting.size()){
 			if(!init){
 					init = true;
@@ -563,11 +564,11 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 					idx++;
 				}
 				if(first_start < cur_start-1){
-					for(int i = first_start; i <= cur_start; i++){
+					for(uint i = first_start; i <= cur_start; i++){
 						condensed_counting[i].second = 1;
 					}
 				}else{
-					for(int i = first_start; i <= cur_start; i++){
+					for(uint i = first_start; i <= cur_start; i++){
 						condensed_counting[i].second = -1;
 					}
 				}
@@ -577,7 +578,7 @@ void get_switch_error(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, s
 		}
 
 		if(condensed_counting.size()>0){
-			for(int p = 0; p < condensed_counting.size()-1; p++){
+			for(uint p = 0; p < condensed_counting.size()-1; p++){
 				if(condensed_counting[p].second > 0){
 					// printf("Switch at %"PRIu64", %d\n", condensed_counting[p].first, condensed_counting[p].second);
 					hamming_distance += 1;

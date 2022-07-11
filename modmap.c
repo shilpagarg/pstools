@@ -191,7 +191,7 @@ BOOL modsetMerge (Modset *ms1, Modset *ms2)
 void modsetSummary (Modset *ms, FILE *f)
 {
   seqhashReport (ms->hasher, f) ;
-  fprintf (f, "MS table bits %d size %llu number of entries %u",
+  fprintf (f, "MS table bits %d size %lu number of entries %u",
 	   ms->tableBits, ms->tableSize, ms->max) ;
   if (!ms->max) { fputc ('\n', f) ; return ; }
   U32 i, copy[4] ; copy[0] = copy[1] = copy[2] = copy[3] = 0 ;
@@ -202,10 +202,10 @@ void modsetSummary (Modset *ms, FILE *f)
       ++copy[msCopy(ms,i)] ;
     }
   U64 sum = 0, tot = 0 ;
-  for (i = 0 ; i < arrayMax(h) ; ++i) { sum += arr(h,i,U32) ; tot += i * arr(h,i,U32) ; }
+  for (int i = 0 ; i < arrayMax(h) ; ++i) { sum += arr(h,i,U32) ; tot += i * arr(h,i,U32) ; }
   I64 htot = tot / 2 ;
-  for (i = 0 ; i < arrayMax(h) ; ++i) { htot -= i*arr(h,i,U32) ; if (htot < 0) break ; }
-  fprintf (f, " total count %llu\nMS average depth %.1f N50 depth %u",
+  for (int i = 0 ; i < arrayMax(h) ; ++i) { htot -= i*arr(h,i,U32) ; if (htot < 0) break ; }
+  fprintf (f, " total count %lu\nMS average depth %.1f N50 depth %u",
 	   tot, tot / (double)sum , i) ;
   if (copy[0] < ms->max)
     fprintf (f, " copy0 %u copy1 %u copy2 %u copyM %u", copy[0], copy[1], copy[2], copy[3]) ;
@@ -233,7 +233,8 @@ typedef struct { U32 index ; U32 pos ; } Seed ;
 
 void referenceDestroy (Reference *ref)
 { free (ref->depth) ;
-  if (ref->loc) free (ref->loc) ; if (ref->rev) free (ref->rev) ;
+  if (ref->loc) free (ref->loc) ; 
+  if (ref->rev) free (ref->rev) ;
   free (ref->index) ; free (ref->offset) ; free (ref->id) ;
   dictDestroy (ref->dict) ; arrayDestroy (ref->len) ;
   free (ref) ;
@@ -249,12 +250,12 @@ void referencePack (Reference *ref)
   
   ref->rev = new (ref->size, U32) ;			/* now build rev and loc */
   ref->loc = new (ref->ms->max + 1, U32) ; ref->loc[0] = 0 ;
-  int i ;
-  for (i = 1 ; i <= ref->ms->max ; ++i)
+  // U32 i ;
+  for (U32 i = 1 ; i <= ref->ms->max ; ++i)
     { ref->loc[i] = ref->loc[i-1] + ref->depth[i-1] ; }
   memset (ref->depth, 0, ref->ms->size*sizeof(U32)) ; /* build this up again in loop below */
   U32 *ri = ref->index ;
-  for (i = 0 ; i < ref->max ; ++i, ++ri)
+  for (U32 i = 0 ; i < ref->max ; ++i, ++ri)
     ref->rev[ref->loc[*ri] + ref->depth[*ri]++] = i ;
 }
 
@@ -288,9 +289,9 @@ void referenceFastaRead (Reference *ref, char *filename, BOOL isAdd)
     }
   seqIOclose (si) ;
 
-  fprintf (outFile, "  %d hashes from %d reference sequences, total length %lld\n",
+  fprintf (outFile, "  %d hashes from %d reference sequences, total length %lu\n",
 	   ref->max, dictMax(ref->dict), totLen) ;
-  int i ; U32 *d = &ref->depth[1] ; U32 n1 = 0, n2 = 0, nM = 0 ;
+  U32 i, *d = &ref->depth[1] ; U32 n1 = 0, n2 = 0, nM = 0 ;
   for (i = 1 ; i <= ref->ms->max ; ++i, ++d)
     if (*d == 1) { msSetCopy1 (ref->ms, i) ; ++n1 ; }
     else if (*d == 2) { msSetCopy2 (ref->ms, i) ; ++n2 ; }

@@ -65,7 +65,7 @@ seq_mini_t* get_minimizer(string sequence,int k, int m){
 seq_mini_t* sub_minimizer(seq_mini_t* seq_mini, uint32_t start, uint32_t end){
     seq_mini_t* result = new seq_mini_t();
     bool contain = false;
-    for(int i = 0; i<seq_mini->minimizers.size(); i++){
+    for(uint i = 0; i<seq_mini->minimizers.size(); i++){
         if(!contain && start>=seq_mini->pos[i][0]){
             contain = true;
             result->pos.push_back(seq_mini->pos[i]);
@@ -94,7 +94,7 @@ map<uint32_t, seq_mini_t*> get_repeat_variant(map<uint32_t, seq_mini_t*> seq_min
     map<uint32_t, uint32_t> start;
     uint32_t size = UINT32_MAX;
     bool first = true;
-    uint32_t prev_start = 0;
+    // uint32_t prev_start = 0;
     for(auto x: seq_minis){
         if(x.second->pos.back().back() - x.second->pos.front().front() < size){
             size = x.second->pos.back().back() - x.second->pos.front().front();
@@ -168,7 +168,7 @@ map<uint32_t, seq_mini_t*> get_repeat_variant(map<uint32_t, seq_mini_t*> seq_min
 map<uint32_t, uint64_t> match_minimizers(seq_mini_t* read_mini, map<uint32_t, seq_mini_t*> node_minis){
     map<uint32_t, uint64_t> result;
     map<string, uint64_t> read_mini_bin;
-    for(int i = 0; i<read_mini->pos.size(); i++){
+    for(uint i = 0; i<read_mini->pos.size(); i++){
         if(read_mini_bin.find(read_mini->minimizers[i])==read_mini_bin.end()){
             read_mini_bin[read_mini->minimizers[i]] = 0;
         }
@@ -178,7 +178,7 @@ map<uint32_t, uint64_t> match_minimizers(seq_mini_t* read_mini, map<uint32_t, se
         result[node_mini.first] = 0;
         map<string, uint64_t> buf_read_mini_bin = read_mini_bin;
         map<string, uint64_t> node_mini_bin;
-        for(int i = 0; i<node_mini.second->pos.size(); i++){
+        for(uint i = 0; i<node_mini.second->pos.size(); i++){
             if(node_mini_bin.find(node_mini.second->minimizers[i])==node_mini_bin.end()){
                 node_mini_bin[node_mini.second->minimizers[i]] = 0;
             }
@@ -205,7 +205,7 @@ map<uint32_t, uint64_t> match_minimizers(seq_mini_t* read_mini, map<uint32_t, se
 map<string, double> profile_minimizer(seq_mini_t* to_profile){
     map<string, double> count;
     uint64_t total_num = 0;
-    for(int i = 0; i< to_profile->minimizers.size(); i++){
+    for(uint i = 0; i< to_profile->minimizers.size(); i++){
         if(count.find(to_profile->minimizers[i]) == count.end()){
             count[to_profile->minimizers[i]] = 0;
         }
@@ -235,7 +235,7 @@ double minimizer_match(map<string, double> mini_seq_1, map<string, double> mini_
 map<uint32_t, uint64_t> minimizers_match(seq_mini_t* read_mini, map<uint32_t, seq_mini_t*> node_minis){
     map<uint32_t, uint64_t> result;
     map<string, uint64_t> read_mini_bin;
-    for(int i = 0; i<read_mini->pos.size(); i++){
+    for(uint i = 0; i<read_mini->pos.size(); i++){
         if(read_mini_bin.find(read_mini->minimizers[i])==read_mini_bin.end()){
             read_mini_bin[read_mini->minimizers[i]] = 0;
         }
@@ -245,7 +245,7 @@ map<uint32_t, uint64_t> minimizers_match(seq_mini_t* read_mini, map<uint32_t, se
         result[node_mini.first] = 0;
         map<string, uint64_t> buf_read_mini_bin = read_mini_bin;
         map<string, uint64_t> node_mini_bin;
-        for(int i = 0; i<node_mini.second->pos.size(); i++){
+        for(uint i = 0; i<node_mini.second->pos.size(); i++){
             if(node_mini_bin.find(node_mini.second->minimizers[i])==node_mini_bin.end()){
                 node_mini_bin[node_mini.second->minimizers[i]] = 0;
             }

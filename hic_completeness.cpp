@@ -4,7 +4,7 @@
 #include <assert.h>
 #include "kthread.h" // multi-threading models: pipeline and multi-threaded for loop
 #include "yak-priv.h"
-#include "ketopt.h"
+// #include "ketopt.h"
 #include "bseq.h"
 #include <map>
 #include <vector>
@@ -69,7 +69,8 @@ static void tb_worker(void *_data, long k, int tid)
 	}
 	memset(b->s, 0, s->l_seq * sizeof(uint32_t));
 	for (i = l = 0, x[0] = x[1] = x[2] = x[3] = 0; i < s->l_seq; ++i) {
-		int flag, c = seq_nt4_table[(uint8_t)s->seq[i]];
+		// int flag;
+		int c = seq_nt4_table[(uint8_t)s->seq[i]];
 		if (c < 4) {
 			if (aux->ch->k < 32) {
 				x[0] = (x[0] << 2 | c) & mask;
@@ -81,7 +82,7 @@ static void tb_worker(void *_data, long k, int tid)
 				x[3] = x[3] >> 1 | (uint64_t)(1 - (c>>1)) << shift;
 			}
 			if (++l >= aux->k) {
-				int type = 0, c1, c2;
+				// int type = 0, c1, c2;
 				uint64_t y;
 				if (aux->ch->k < 32)
 					y = yak_hash64(x[0] < x[1]? x[0] : x[1], mask);
@@ -127,8 +128,8 @@ static void *tb_pipeline(void *shared, int step, void *_data)
 
 double main_completeness(yak_ch_t *ch, int n_threads, string file1, string file2)
 {
-	ketopt_t o = KETOPT_INIT;
-	int i, c, min_cnt = 2, mid_cnt = 5;
+	// ketopt_t o = KETOPT_INIT;
+	// int i, c, min_cnt = 2, mid_cnt = 5;
 	tb_shared_t aux;
 
 	memset(&aux, 0, sizeof(tb_shared_t));
@@ -148,7 +149,7 @@ double main_completeness(yak_ch_t *ch, int n_threads, string file1, string file2
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);
 	bseq_close(aux.fp);
-	for (i = 0; i < aux.n_threads; ++i) free(aux.buf[i].s);
+	for (int i = 0; i < aux.n_threads; ++i) free(aux.buf[i].s);
 	free(aux.buf);
 
 	aux.fp = bseq_open(file2.c_str());
@@ -159,7 +160,7 @@ double main_completeness(yak_ch_t *ch, int n_threads, string file1, string file2
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);
 	bseq_close(aux.fp);
-	for (i = 0; i < aux.n_threads; ++i) free(aux.buf[i].s);
+	for (int i = 0; i < aux.n_threads; ++i) free(aux.buf[i].s);
 	free(aux.buf);
 
 	return ((double)aux.appear_counting) / aux.total_counting * 100;

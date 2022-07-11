@@ -299,7 +299,7 @@ static void tb_worker(void *_data, long k, int tid)
 				x[3] = x[3] >> 1 | (uint64_t)(1 - (c>>1)) << shift;
 			}
 			if (++l >= aux->k) {
-				int type = 0, c1, c2;
+				// int type = 0, c1, c2; // unused
 				uint64_t y;
 				if (aux->ch->k < 32){
 					is_forward = x[0] < x[1];
@@ -367,8 +367,8 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 		exit(1);
 	}
 
-	ketopt_t o = KETOPT_INIT;
-	int i, c, min_cnt = 2, mid_cnt = 5;
+	// ketopt_t o = KETOPT_INIT; // unused
+	// int c, min_cnt = 2, mid_cnt = 5; // unused
 	tb_shared_t aux;
 
 	memset(&aux, 0, sizeof(tb_shared_t));
@@ -384,7 +384,7 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);
 	bseq_close(aux.fp);
-	for (i = 0; i < aux.n_threads; ++i){
+	for (int i = 0; i < aux.n_threads; ++i){
 		free(aux.buf[i].s);
 	}
 	free(aux.buf);
@@ -397,7 +397,7 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);
 	bseq_close(aux.fp);
-	for (i = 0; i < aux.n_threads; ++i){
+	for (int i = 0; i < aux.n_threads; ++i){
 		free(aux.buf[i].s);
 	}
 	free(aux.buf);
@@ -408,13 +408,13 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 	uint64_t success_counter_result = 0;
 	uint32_t** connections_forward;
 	CALLOC(connections_forward,pl->global_counter);
-	for(int i = 0; i< pl->global_counter; i++){
+	for(uint i = 0; i< pl->global_counter; i++){
 		CALLOC(connections_forward[i], pl->global_counter);
 		memset(connections_forward[i], 0, sizeof(connections_forward[i]));
 	}
 	uint32_t** connections_backward;
 	CALLOC(connections_backward,pl->global_counter);
-	for(int i = 0; i< pl->global_counter; i++){
+	for(uint i = 0; i< pl->global_counter; i++){
 		CALLOC(connections_backward[i], pl->global_counter);
 		memset(connections_backward[i], 0, sizeof(connections_backward[i]));
 	}
@@ -427,7 +427,7 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 	// printf("connections size: %ld;\n", sizeof(uint16_t)*pl->global_counter*pl->global_counter);
 	// printf("coverage size: %ld;\n",sizeof(uint16_t)*pl->global_counter);
 	std::vector<uint64_t> failed_matches;
-	const uint32_t max_count = -1;
+	// const uint32_t max_count = -1; // unused
 	
 	FILE* fp_temp = fopen("hic_name_connection.output","w");
 	
@@ -515,11 +515,11 @@ void do_mapping(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_fn2, char* o
 		// 	fprintf(fp, "%d\t%d\t%d\n", is_forward, backward[i], forward[i]);
 		// }
 		
-		for(int i = 0; i < pl->global_counter; i++){
+		for(uint i = 0; i < pl->global_counter; i++){
 			fprintf(fp,"M\t%d\t%s\n",i,(*pl->names)[i]);
 		}
-		for(int i = 0; i < pl->global_counter; i++){
-			for(int j = 0; j < pl->global_counter; j++){
+		for(uint i = 0; i < pl->global_counter; i++){
+			for(uint j = 0; j < pl->global_counter; j++){
 				if(connections_forward[i][j] > 0 || connections_backward[i][j] > 0){
 					if(i<j){
 						connections_forward[j][i] += connections_forward[i][j];

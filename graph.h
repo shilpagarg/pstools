@@ -170,8 +170,10 @@ int gfa_parse_S(asg_t *g, char *s)
 		}
 	}
     if (is_ok) { // all mandatory fields read
-		int l_aux, m_aux = 0, LN = -1;
-		uint8_t *aux = 0, *s_LN = 0;
+		// int l_aux, m_aux = 0; unused variables
+		int LN = -1;
+		// uint8_t *aux = 0; unused variable
+		uint8_t *s_LN = 0;
 		asg_seq_t *s;
 		if (s_LN && s_LN[0] == 'i') {
 			LN = *(int32_t*)(s_LN + 1);
@@ -179,7 +181,7 @@ int gfa_parse_S(asg_t *g, char *s)
 		if (seq == 0) {
 			if (LN >= 0) len = LN;
 		} else len = strlen(seq);
-		if (LN >= 0 && len != LN && gfa_verbose >= 2)
+		if (LN >= 0 && len != static_cast<unsigned int>(LN) && gfa_verbose >= 2) // if LN is >= 0, conversion to an unsigned number should not create problems
 			fprintf(stderr, "[W] for segment '%s', LN:i:%d tag is different from sequence length %d\n", seg, LN, len);
 		sid = gfa_add_seg(g, seg);
 		s = &g->seq[sid];
@@ -252,12 +254,13 @@ int gfa_parse_L(asg_t *g, char *s)
 	}
 	if (is_ok) {
 		uint32_t v, w;
-		int l_aux, m_aux = 0;
-		uint8_t *aux = 0;
-		asg_arc_t *arc;
+		// int l_aux, m_aux = 0; // unused variables
+		// uint8_t *aux = 0; // unused variables
+		// asg_arc_t *arc; // unused
 		v = gfa_add_seg(g, segv) << 1 | oriv;
 		w = gfa_add_seg(g, segw) << 1 | oriw;
-		arc = gfa_add_arc1(g, v, w, ov, ow, -1, 0);
+		// arc = // unused
+		gfa_add_arc1(g, v, w, ov, ow, -1, 0);
 	} else return -1;
 	return 0;
 }
@@ -399,9 +402,11 @@ uint32_t gfa_fix_symm_add(asg_t *g)
 				}
 			}
 			if (j == nw) {
-				asg_arc_t *arc_old = g->arc, *arc_new;
+				asg_arc_t *arc_old = g->arc;
+				// asg_arc_t *arc_new; // unused variable
 				// arc_new = gfa_add_arc1(g, avi->v^1, v^1, avi->ol, avi->ol, avi->link_id, 1);
-				arc_new = gfa_add_arc1(g, avi->v^1, v^1, avi->ol, avi->ol, '*', 1);
+				// arc_new =  // not used
+				gfa_add_arc1(g, avi->v^1, v^1, avi->ol, avi->ol, '*', 1);
 				if (arc_old != g->arc) av = asg_arc_a(g, v); // g->arc may be reallocated
 				// arc_new->rank = av[i].rank;
 			}
@@ -512,7 +517,7 @@ asg_t *gfa_read(const char *fn)
 	kstring_t s = {0,0,0}, fa_seq = {0,0,0};
 	kstream_t *ks;
 	int dret, is_fa = 0;
-	asg_seq_t *fa_seg = 0;
+	// asg_seq_t *fa_seg = 0; // unused variable
 	uint64_t lineno = 0;
 
 	fp = fn && strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(0, "r");

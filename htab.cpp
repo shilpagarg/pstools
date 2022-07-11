@@ -411,7 +411,8 @@ yak_ch_t *yak_ch_restore_core(yak_ch_t *ch0, const char *fn, int mode, ...)
 	FILE *fp;
 	uint32_t t[3];
 	char magic[4];
-	int i, j, absent, min_cnt = 0, mid_cnt = 0, mode_err = 0;
+	int i, absent, min_cnt = 0, mid_cnt = 0, mode_err = 0;
+	uint j;
 	uint64_t mask = (1ULL<<YAK_COUNTER_BITS) - 1, n_ins = 0, n_new = 0;
 	yak_ch_t *ch;
 
