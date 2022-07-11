@@ -48,16 +48,16 @@ typedef struct {
     set<uint32_t> ending_arcs;
 } bubble_t;
 
-typedef struct bubble_chain_t {
+typedef struct {
     uint32_t id;
     vector<bubble_t*> bubbles; //bubbles in order
     int *usl;  // unique sequence length of unique sequences between bubbles
-};
+} bubble_chain_t;
 
-typedef struct bubble_chain_graph_t {
+typedef struct {
     vector<uint32_t> normal_nodes;
     vector<bubble_chain_t*> condensed_bubble_chain;
-};
+} bubble_chain_graph_t;
 
 #define NORMAL_NODE 0;
 #define BUBBLE_END_BEGIN 1;
@@ -75,7 +75,7 @@ vector<uint32_t> get_sources(asg_t *g) {
 
 	uint32_t n_vtx = g->n_seq * 2;
     bool frontier_added[n_vtx];
-    for (int i=0; i<n_vtx; i++) {
+    for (uint i=0; i<n_vtx; i++) { // n_vtx is unsigned and i >= 0
         frontier_added[i] = false;
     }
     vector<uint32_t> frontier;
@@ -95,7 +95,7 @@ vector<uint32_t> get_sources(asg_t *g) {
         // add parents to frontier
         // uint32_t num_incoming_arcs = asg_arc_n(g, u^1);  // 1
         asg_arc_t *incoming_arcs_complement = asg_arc_a(g, u^1);  // incoming_arcs_complement[0].v^1 = 22;
-        for (int vi=0; vi<num_incoming_arcs; vi++) {
+        for (uint vi=0; vi<num_incoming_arcs; vi++) { // num_incoming_arcs is unsigned and vi >= 0
             int p = incoming_arcs_complement[vi].v^1;
             if (!frontier_added[p]) {
                 frontier.push_back(p);
@@ -106,7 +106,7 @@ vector<uint32_t> get_sources(asg_t *g) {
         // add children to frontier
         uint32_t num_outgoing_arcs = asg_arc_n(g, u);  // 2
         asg_arc_t *outgoing_arcs = asg_arc_a(g, u);  // p outgoing_arcs[0].v = 34; p outgoing_arcs[1].v = 37;
-        for (int vi=0; vi<num_outgoing_arcs; vi++) {
+        for (uint vi=0; vi<num_outgoing_arcs; vi++) { // num_incoming_arcs is unsigned and vi >= 0
             int c = outgoing_arcs[vi].v;
             if (!frontier_added[c]) {
                 frontier.push_back(c);
@@ -125,7 +125,7 @@ vector<uint32_t> get_topological_order(asg_t *g) {
 
 	uint32_t n_vtx = g->n_seq * 2;
     bool frontier_added[n_vtx], child_frontier_added[n_vtx];
-    for (int u=0; u<n_vtx; u++) {
+    for (uint u=0; u<n_vtx; u++) { // num_vtx is unsigned and u >= 0
         frontier_added[u] = false;
         child_frontier_added[u] = false;
     }
@@ -199,11 +199,11 @@ vector<uint32_t> get_bubble_ends(asg_t *g, vector<uint32_t> sources, vector<uint
 
     uint32_t n_vtx = g->n_seq * 2;
     bool seen[n_vtx], visited[n_vtx];
-    for (int u=0; u<n_vtx; u++) {
+    for (uint u=0; u<n_vtx; u++) { // n_vtx is unsigned and u >= 0
         seen[u] = false;
         visited[u] = false;
     }
-    for(int ui = 0; ui<sources.size(); ui++){
+    for(uint ui = 0; ui<sources.size(); ui++){ // sources.size() is unsigned and ui >= 0
         cout << "Source: " << sources[ui] << "\t" << g->seq[sources[ui]/2].name << endl;
 
     }
@@ -225,7 +225,8 @@ vector<uint32_t> get_bubble_ends(asg_t *g, vector<uint32_t> sources, vector<uint
                     bubble_beginnings->push_back(u);  // last one is meaningless/unpaired
                     cout << "Beginning:" << u << "\t" << g->seq[u/2].name<< endl;
                 }
-                bool sources_contains_u = find(sources.begin(), sources.end(), u) != sources.end();
+                // bool sources_contains_u = // sources_contains_u not used
+				find(sources.begin(), sources.end(), u) != sources.end();
                 if (num_incoming_arcs > 1 ) {
                     bubble_ends->push_back(u);  // first one is meaningless/unpaired
                     cout << "Ending:" << u << "\t" << g->seq[u/2].name<< endl;
@@ -235,14 +236,14 @@ vector<uint32_t> get_bubble_ends(asg_t *g, vector<uint32_t> sources, vector<uint
             // add children to frontier if they have no other unvisited parents
             // uint32_t num_outgoing_arcs = asg_arc_n(g, u);  // 2
             asg_arc_t *outgoing_arcs = asg_arc_a(g, u);  // p outgoing_arcs[0].v = 34; p outgoing_arcs[1].v = 37;
-            for (int vi=0; vi<num_outgoing_arcs; vi++) {
+            for (uint vi=0; vi<num_outgoing_arcs; vi++) { // num_outgoing_arcs is unsigned and vi >=0
                 int c = outgoing_arcs[vi].v;
 
                 uint32_t num_unvisited_wives = 0;
                 // uint32_t num_incoming_arcs = asg_arc_n(g, c^1);
                 num_incoming_arcs = asg_arc_n(g, c^1);
                 asg_arc_t *incoming_arcs_complement = asg_arc_a(g, c^1);
-                for (int viuj=0; viuj<num_incoming_arcs; viuj++) {
+                for (uint viuj=0; viuj<num_incoming_arcs; viuj++) {  // num_incoming_arcs is unsigned and viuj >=0
                     int w = incoming_arcs_complement[viuj].v^1;  // wives
                     if (!visited[w]) {
                         num_unvisited_wives++;
@@ -260,7 +261,7 @@ vector<uint32_t> get_bubble_ends(asg_t *g, vector<uint32_t> sources, vector<uint
         }
     }
     cout << "finish get bubble ends: "<< num_seen << endl;
-    for (int u=0; u<n_vtx; u++) {
+    for (uint u=0; u<n_vtx; u++) { // n_vtx is unsigned and u >= 0
         if(!visited[u]){
             cout <<"Unvisited: "<< u << endl;
         }
@@ -277,7 +278,7 @@ bubble_t* detect_bubble(asg_t *g, uint32_t source) {
     }
 
     bool seen[n_vtx], visited[n_vtx];
-    for (int u=0; u<n_vtx; u++) {
+    for (uint u=0; u<n_vtx; u++) { // n_vtx is unsigned and u >= 0
         seen[u] = false;
         visited[u] = false;
     }
@@ -305,7 +306,7 @@ bubble_t* detect_bubble(asg_t *g, uint32_t source) {
         // uint32_t num_outgoing_arcs = asg_arc_n(g, v);  // 2
         asg_arc_t *outgoing_arcs = asg_arc_a(g, v);  // p outgoing_arcs[0].v = 34; p outgoing_arcs[1].v = 37;
         set<uint32_t> edge_set;
-        for (int vi=0; vi<num_outgoing_arcs; vi++) {
+        for (uint vi=0; vi<num_outgoing_arcs; vi++) { //  // num_outgoing_arcs is unsigned and vi >=0
             uint32_t u = outgoing_arcs[vi].v;
             if(edge_set.insert(u).second){
                 if(u == v || u == (v^1) || visited[u^1] || u == source) {return nullptr;}
@@ -319,7 +320,7 @@ bubble_t* detect_bubble(asg_t *g, uint32_t source) {
                 bool has_unvisited_parents = false;
                 uint32_t num_incoming_arcs = asg_arc_n(g, u^1);
                 asg_arc_t *incoming_arcs_complement = asg_arc_a(g, u^1);
-                for (int viuj=0; viuj<num_incoming_arcs; viuj++) {
+                for (uint viuj=0; viuj<num_incoming_arcs; viuj++) {  // num_incoming_arcs is unsigned and viuj >=0
                     uint32_t p = (incoming_arcs_complement[viuj].v)^1;  // parent
                     if (!visited[p]) has_unvisited_parents = true;
                 }
@@ -334,7 +335,7 @@ bubble_t* detect_bubble(asg_t *g, uint32_t source) {
             uint32_t num_outgoing_arcs = asg_arc_n(g, t);
             if(num_outgoing_arcs > 0){
                 asg_arc_t *outgoing_arcs = asg_arc_a(g, t);
-                for(int vi=0; vi<num_outgoing_arcs; vi++){
+                for(uint vi=0; vi<num_outgoing_arcs; vi++){  // num_outgoing_arcs is unsigned and vi >=0
                     if(outgoing_arcs[vi].v == source){
                         return nullptr;
                     }
@@ -379,7 +380,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubble_chain_graph(asg_t *g, set<
                     if(flag){
                         break;
                     }
-                    for(int i = 0; i < num_outgoing_arcs; i++){
+                    for(uint i = 0; i < num_outgoing_arcs; i++){  // num_outgoing_arcs is unsigned and i >=0
                         if(b.second.find(outgoing_arcs[i].v)!=b.second.end()){
                             u = b.first;
                             flag = 2;
@@ -395,7 +396,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubble_chain_graph(asg_t *g, set<
                     current_map.insert({u,new_set});
                 }
                 if(arc_stack.size() > 0 ){
-                    for(int a = 0; a <arc_stack.size()-1; a++){
+                    for(uint a = 0; a <arc_stack.size()-1; a++){  // arc_stack.size() is unsigned and a >=0
                         current_map[u].insert(arc_stack[a]->v);
                     }
                 }
@@ -409,7 +410,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubble_chain_graph(asg_t *g, set<
                     current_map.insert({u,new_set});
                 }
                 if(arc_stack.size() > 0 ){
-                    for(int a = 0; a <arc_stack.size(); a++){
+                    for(uint a = 0; a <arc_stack.size(); a++){  // arc_stack.size() is unsigned and a >=0
                         current_map[u].insert(arc_stack[a]->v);
                     }
                 }
@@ -531,7 +532,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(string infile, asg_t **g_
         }
     }
 
-    for (int b=0; b<bubbles.size(); b++) {
+    for (uint b=0; b<bubbles.size(); b++) {  // bubbles.size() is unsigned and b >=0
         bubble_t* bubble = bubbles[b];
         uint32_t bubble_beginning = bubble->begNode;
         uint32_t bubble_end = bubble->endNode;
@@ -550,7 +551,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(string infile, asg_t **g_
             uint32_t u = node_stack.back();
             uint32_t vi = node_vi_stack.back();
             if (u==bubble_end) {
-                for (int ui=0; ui<node_stack.size(); ui++) {
+                for (uint ui=0; ui<node_stack.size(); ui++) {  // node_stack.size() is unsigned and ui >=0
                     // cout << g->seq[node_stack[ui]/2].name << " ";
                     if(ui==0 || ui == node_stack.size()-1){
                         if(node_type[node_stack[ui]] != 2){
@@ -617,7 +618,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(string infile, asg_t **g_
                 {
                 return lhs->starting_arcs.size() > rhs->starting_arcs.size();
                 });
-                for(int q = 0; q < bubbles.size(); q++){
+                for(uint q = 0; q < bubbles.size(); q++){  // bubbles.size() is unsigned and q >=0
                     bubble_t* bubble = bubbles[q];
                     if(bubble->begNode == i){
                         bool flag = false;
@@ -635,7 +636,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(string infile, asg_t **g_
                 {
                 return lhs->ending_arcs.size() > rhs->ending_arcs.size();
                 });
-                for(int q = 0; q < bubbles.size(); q++){
+                for(uint q = 0; q < bubbles.size(); q++){ // bubbles.size() is unsigned and q >=0
                     bubble_t* bubble = bubbles[q];
                     if(bubble->endNode == i){
                         bool flag = false;
@@ -876,7 +877,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(string infile, asg_t **g_
 
     for(auto path: pathes){
         set<uint32_t> to_insert;
-        for(int i = 0; i < path.size()-1; i++){
+        for(uint i = 0; i < path.size()-1; i++){ // path.size() is unsigned and i >=0
             to_insert.insert((*bubble_chain_begin_end_nodes_buf3)[path[i]][path[i+1]].begin(),(*bubble_chain_begin_end_nodes_buf3)[path[i]][path[i+1]].end());
         }
         if(to_insert.size()>=2){
@@ -990,7 +991,7 @@ int clean_graph(asg_t *g, string inFileName, string outFileName, map<string,stri
         }
     }
 
-    for (int b=0; b<bubbles.size(); b++) {
+    for (uint b=0; b<bubbles.size(); b++) { // bubbles.size() is unsigned and b >=0
         bubble_t* bubble = bubbles[b];
         uint32_t bubble_beginning = bubble->begNode;
         uint32_t bubble_end = bubble->endNode;
@@ -1009,7 +1010,7 @@ int clean_graph(asg_t *g, string inFileName, string outFileName, map<string,stri
             uint32_t u = node_stack.back();
             uint32_t vi = node_vi_stack.back();
             if (u==bubble_end) {
-                for (int ui=0; ui<node_stack.size(); ui++) {
+                for (uint ui=0; ui<node_stack.size(); ui++) { // node_stack.size() is unsigned and ui >=0
                     // cout << g->seq[node_stack[ui]/2].name << " ";
                     if(ui==0 || ui == node_stack.size()-1){
                         if(node_type[node_stack[ui]] != 2){
@@ -1076,7 +1077,7 @@ int clean_graph(asg_t *g, string inFileName, string outFileName, map<string,stri
                 {
                 return lhs->starting_arcs.size() > rhs->starting_arcs.size();
                 });
-                for(int q = 0; q < bubbles.size(); q++){
+                for(uint q = 0; q < bubbles.size(); q++){ // bubbles.size() is unsigned and q >=0
                     bubble_t* bubble = bubbles[q];
                     if(bubble->begNode == i){
                         bool flag = false;
@@ -1094,7 +1095,7 @@ int clean_graph(asg_t *g, string inFileName, string outFileName, map<string,stri
                 {
                 return lhs->ending_arcs.size() > rhs->ending_arcs.size();
                 });
-                for(int q = 0; q < bubbles.size(); q++){
+                for(uint q = 0; q < bubbles.size(); q++){ // bubbles.size() is unsigned and q >=0
                     bubble_t* bubble = bubbles[q];
                     if(bubble->endNode == i){
                         bool flag = false;
