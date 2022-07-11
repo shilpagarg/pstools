@@ -149,14 +149,23 @@ yak_ch_t *yak_count(const char *fn, const yak_copt_t *opt, yak_ch_t *h0)
 	pldat_t pl;
 	gzFile fp;
 	if ((fp = gzopen(fn, "r")) == 0) return 0;
-	pl.ks = kseq_init(fp);
-	pl.opt = opt;
-	if (h0) {
+	pl.ks = kseq_init(fp); 
+	/* pl.ks does the initial processing of the file, it is initialised here and will contain kstring_t name, comment, seq, qual; \
+							int last_char; */
+	pl.opt = opt; // pl.opt are the count programme options
+	if (h0) { 
+		/* h0 has type yak_ch_t which is 
+						int k, pre, n_hash, n_shift;
+						uint64_t tot;
+						yak_ch1_t *h;
+				h has type yak_ch1_t which is
+						struct yak_ht_t *h;
+						yak_bf_t *b; */
 		pl.h = h0, pl.create_new = 0;
 		assert(h0->k == opt->k && h0->pre == opt->pre);
 	} else {
-		pl.create_new = 1;
-		pl.h = yak_ch_init(opt->k, opt->pre, opt->bf_n_hash, opt->bf_shift);
+		pl.create_new = 1;  // h0 does not exist yet and needs to be created anew, so switch is set to 1 to report that later
+		pl.h = yak_ch_init(opt->k, opt->pre, opt->bf_n_hash, opt->bf_shift);  // we initialise pl.h to have the options specified on the command line
 	}
 	kt_pipeline(3, worker_pipeline, &pl, 3);
 	kseq_destroy(pl.ks);
