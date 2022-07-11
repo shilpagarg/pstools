@@ -299,7 +299,7 @@ static void tb_worker(void *_data, long k, int tid)
 				x[3] = x[3] >> 1 | (uint64_t)(1 - (c>>1)) << shift;
 			}
 			if (++l >= aux->k) {
-				int type = 0, c1, c2;
+				// int type = 0, c1, c2;
 				uint64_t y;
 				if (aux->ch->k < 32){
 					is_forward = x[0] < x[1];
@@ -381,8 +381,8 @@ void map_hic_to_haplo_kmers(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_
 		exit(1);
 	}
 
-	ketopt_t o = KETOPT_INIT;
-	int i, c, min_cnt = 2, mid_cnt = 5;
+	// ketopt_t o = KETOPT_INIT;
+	// int i, c, min_cnt = 2, mid_cnt = 5;
 	tb_shared_t aux;
 
 	memset(&aux, 0, sizeof(tb_shared_t));
@@ -399,7 +399,7 @@ void map_hic_to_haplo_kmers(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);
 	bseq_close(aux.fp);
-	for (i = 0; i < aux.n_threads; ++i){
+	for (int i = 0; i < aux.n_threads; ++i){
 		free(aux.buf[i].s);
 	}
 	free(aux.buf);
@@ -412,7 +412,7 @@ void map_hic_to_haplo_kmers(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_
 	aux.buf = (tb_buf_t*)calloc(aux.n_threads, sizeof(tb_buf_t));
 	kt_pipeline(2, tb_pipeline, &aux, 2);
 	bseq_close(aux.fp);
-	for (i = 0; i < aux.n_threads; ++i){
+	for (int i = 0; i < aux.n_threads; ++i){
 		free(aux.buf[i].s);
 	}
 	free(aux.buf);
@@ -424,12 +424,12 @@ void map_hic_to_haplo_kmers(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_
 	uint32_t** connections;
 
 	CALLOC(connections,pl->global_counter*2);
-	for(int i = 0; i< pl->global_counter*2; i++){
+	for(uint i = 0; i< pl->global_counter*2; i++){
 		CALLOC(connections[i], pl->global_counter*2);
 		memset(connections[i], 0, sizeof(connections[i]));
 	}
 	std::vector<uint64_t> failed_matches;
-	const uint32_t max_count = -1;
+	// const uint32_t max_count = -1;
 	
 	uint32_t counter_1 = 0;
 	uint32_t counter_2 = 0;
@@ -534,12 +534,12 @@ void map_hic_to_haplo_kmers(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_
 		}
 	}
 	// printf("%d,%d,%d,%d\n",counter_1,counter_2,counter_3,counter_4);
-	for(int i = 0; i < pl->global_counter*2; i++){
+	for(uint i = 0; i < pl->global_counter*2; i++){
 		double ratio_i = 1;
 		if(lengths[i>>1]<20000000){
 			ratio_i = 20000000.0/((double)lengths[i>>1]);
 		}
-		for(int j = 0; j < pl->global_counter*2; j++){
+		for(uint j = 0; j < pl->global_counter*2; j++){
 			double ratio_j = 1;
 			if(lengths[j>>1]<20000000){
 				ratio_j = 20000000.0/((double)lengths[j>>1]);
@@ -585,8 +585,8 @@ void map_hic_to_haplo_kmers(pldat_t* pl, bseq_file_t* hic_fn1, bseq_file_t* hic_
 		// 	uint32_t is_forward = forward[i] > backward[i] ? 1 : 0;
 		// 	fprintf(fp, "%d\t%d\t%d\n", is_forward, backward[i], forward[i]);
 		// }
-		for(int i = 0; i < pl->global_counter*2; i++){
-			for(int j = 0; j < pl->global_counter*2; j++){
+		for(uint i = 0; i < pl->global_counter*2; i++){
+			for(uint j = 0; j < pl->global_counter*2; j++){
 				if((i&2)==0){
 					connections[i][j] += connections[i^2][j^2];
 				}else{
