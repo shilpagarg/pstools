@@ -319,6 +319,7 @@ int main_resolve_haplotypes(int argc, char* argv[]) {
     char* output_directory = argv[o.ind+2];
     printf("start main\n");
     asg_t* graph = gfa_read(gfa_filename);
+	
 	asg_t** graph_ptr = (&graph);
 	// for(int i = 0; i<graph->n_seq; i++){
 	    // cout << graph->seq[0].len << "\t" << string(graph->seq[0].seq).length() << endl; 
@@ -368,6 +369,8 @@ int main_resolve_haplotypes(int argc, char* argv[]) {
     }
 	// gfa_destory(graph);
     map<string,string> excluded_nodes;
+	pair<vector<uint32_t>, vector<uint32_t>> sources_ends = get_sources(*graph_ptr);
+	
     map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph = get_bubbles(string(gfa_filename),graph_ptr,string(output_directory),connections_foward,connections_backward,(&excluded_nodes));
     get_haplotype_path(connections_foward, connections_backward, *graph_ptr, bubble_chain_graph, output_directory,n_threads,&excluded_nodes);
 
