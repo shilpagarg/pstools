@@ -4012,6 +4012,8 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
     map<uint32_t,bubble_t*>* node_bubble_map = s->p->node_bubble_map;
     uint32_t** connections_count = s->p->connections_count;
 
+    pair<vector<uint32_t>, vector<uint32_t>> sources_ends = get_sources(graph);
+
     // if(current_nodes.size()>4){
         set<bubble_t*> cur_bubbles;
         for(auto node:current_nodes){
@@ -4323,22 +4325,23 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
         // cout << bubble_connection.size() << "\t";
         // cout << bubble_path_id_1.size() << "\t";
         // cout << bubble_path_id_2.size() << endl;
-        // cout << "haplotype 1:" << endl;
+        cout << endl;
+	cout << "haplotype 1:";
         for(auto node: current_nodes){
             if(path_1_not_included.find(node)== path_1_not_included.end()){
                 path_1_included.insert(node);
-                // cout << graph->seq[node].name << ", ";
+                cout << graph->seq[node].name << ", ";
             }
         }
         cout << endl;
-        // cout << "haplotype 2:" << endl;
+        cout << "haplotype 2:";
         for(auto node: current_nodes){
             if(path_2_not_included.find(node)== path_2_not_included.end()){
                 path_2_included.insert(node);
-                // cout << graph->seq[node].name << ", ";
+                cout << graph->seq[node].name << ", ";
             }
         }
-
+	cout << endl;
         uint32_t intersect_len = 0;
         uint32_t total_len = 0;
         set<uint32_t> dif_nodes;
@@ -4386,7 +4389,9 @@ static void worker_for_single_step(void *data, long i, int tid) // callback for 
 
 void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connection_count_backward, asg_t *graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, char* output_directory, int n_threads, map<string, string>* excluded_nodes){
     set<uint32_t> existing_nodes;
-   
+
+    // connection_count_forward stores the index according to the line number in M lines
+   pair<vector<uint32_t>, vector<uint32_t>> sources_ends = get_sources(graph);
     cout << "Start get haplotypes" << endl;
     uint32_t **connections_count;
 	CALLOC(connections_count,graph->n_seq);
@@ -4425,6 +4430,69 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     }
     // free(connection_count_forward);
     // free(connection_count_backward);
+    //TODO: maybe there are some extra connections, because no three-way shake is done yet.
+vector<uint32_t> sources = sources_ends.first;
+vector<uint32_t> ends = sources_ends.second;
+asg_arc_t *a;
+int V = graph->n_seq*2; 
+bool *visited = new bool[V];
+        for(int i = 0; i < graph->n_seq*2; i++){
+        for(int j = 0; j < graph->n_seq*2; j++){
+             if (std::find (sources.begin(), sources.end(), i)!= sources.end() || std::find (ends.begin(), ends.end(), i)!= ends.end()
+             || std::find (sources.begin(), sources.end(), j)!= sources.end() || std::find (ends.begin(), ends.end(), j)!= ends.end())
+             {
+                // check if components are different by checking path between two nodes
+                
+                
+                for (int k = 0; k < V; k++)
+                    visited[k] = false;
+
+                vector<uint32_t> queue;
+                visited[i] = true;
+                queue.push_back(i);
+
+                while (!queue.empty())
+                    {
+                        // Dequeue a vertex from queue and print it
+                        uint32_t p = queue.back();
+                        queue.pop_back();
+                
+                        // Get all adjacent vertices of the dequeued vertex s
+                        // If a adjacent has not been visited, then mark it visited
+                        // and enqueue it
+                       int num_outgoing_arcs = asg_arc_n(graph, p);
+                        asg_arc_t *outgoing_arcs = asg_arc_a(graph, p);  // p outgoing_arcs[0].v = 34; p outgoing_arcs[1].v = 37;
+
+                    for (int vi=0; vi<num_outgoing_arcs; vi++) {
+            uint32_t u = outgoing_arcs[vi].v;
+            if (u==j)
+            { cout << "path found"; break;}
+                
+                            // Else, continue to do BFS
+                            if (!visited[u])
+                            {
+                                visited[u] = true;
+                                queue.push_back(u);
+                            }
+                        }
+
+                    }
+
+                if (visited[j] == false){
+                if (connections_count[i/2][j/2]>200){ // hard-coded value here... //TODO: check if i and j need to be divided by two.
+                cout <<"i am here" <<i << "\t" << j << endl;
+                a = gfa_add_arc1(graph, i, j, 0, 0, -1, 0);
+                }
+                    }
+     
+            
+
+             }
+          
+        }
+        }
+
+   gfa_finalize(graph);
 
     cout << "Complete connection table." << endl;
     uint32_t n_vtx = graph->n_seq * 2;
@@ -4525,7 +4593,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
                     nodes.insert(node);
                 }
             }
-            if(nodes.size()>12){
+            if(nodes.size()>3){
                 complex_bubbles.push_back(bubble);
             }else{
                 pure_bubbles.push_back(bubble);
@@ -4544,7 +4612,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
 
     // set<uint32_t> nodes;
     // set<uint32_t> double_nodes;
-    for(auto bubble: pure_bubbles){
+    for(auto bubble: complex_bubbles){
         set<set<uint32_t>> set_of_pathes;
         for(auto path: bubble->paths_nodes){
             set<uint32_t> buf_path;
@@ -4561,7 +4629,7 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
         }
         bubble->paths_nodes = vec_of_pathes;
     }
-    for(auto bubble: pure_bubbles){
+    for(auto bubble: complex_bubbles){
         for(int i = 0; i < bubble->paths_nodes.size(); i++){
             for(auto node: bubble->paths_nodes[i]){
                 node_bubble_map[node] = bubble;
