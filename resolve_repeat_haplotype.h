@@ -6,6 +6,7 @@
 #include <string.h>
 #include "paf.h"
 #include <map>
+#include <stack>
 #include "bubble_chain.h"
 #include <queue>
 #include <tuple>
@@ -4436,6 +4437,7 @@ vector<uint32_t> ends = sources_ends.second;
 asg_arc_t *a;
 int V = graph->n_seq*2; 
 bool *visited = new bool[V];
+int num_outgoing_arcs;
         for(int i = 0; i < graph->n_seq*2; i++){
         for(int j = 0; j < graph->n_seq*2; j++){
              if (std::find (sources.begin(), sources.end(), i)!= sources.end() || std::find (ends.begin(), ends.end(), i)!= ends.end()
@@ -4447,38 +4449,40 @@ bool *visited = new bool[V];
                 for (int k = 0; k < V; k++)
                     visited[k] = false;
 
-                vector<uint32_t> queue;
+                stack<uint32_t> stack;
+                stack.empty();
                 visited[i] = true;
-                queue.push_back(i);
+                stack.push(i);
 
-                while (!queue.empty())
+                while (!stack.empty())
                     {
                         // Dequeue a vertex from queue and print it
-                        uint32_t p = queue.back();
-                        queue.pop_back();
+                        uint32_t p = stack.top();
+                        stack.pop();
                 
                         // Get all adjacent vertices of the dequeued vertex s
                         // If a adjacent has not been visited, then mark it visited
                         // and enqueue it
-                       int num_outgoing_arcs = asg_arc_n(graph, p);
+                       num_outgoing_arcs = asg_arc_n(graph, p);
                         asg_arc_t *outgoing_arcs = asg_arc_a(graph, p);  // p outgoing_arcs[0].v = 34; p outgoing_arcs[1].v = 37;
 
                     for (int vi=0; vi<num_outgoing_arcs; vi++) {
             uint32_t u = outgoing_arcs[vi].v;
-            if (u==j)
-            { cout << "path found"; break;}
+            if (u==j || u/2==j/2 || u/2==j || u==j/2)
+            {                 
+                    visited[j] = true; stack.empty(); break;}
                 
                             // Else, continue to do BFS
                             if (!visited[u])
                             {
                                 visited[u] = true;
-                                queue.push_back(u);
+                                stack.push(u);
                             }
                         }
 
                     }
 
-                if (visited[j] == false){
+                if (visited[j] == false && num_outgoing_arcs>0){ //may be singletons are not allowed for now
                 if (connections_count[i/2][j/2]>200){ // hard-coded value here... //TODO: check if i and j need to be divided by two.
                 cout <<"i am here" <<i << "\t" << j << endl;
                 a = gfa_add_arc1(graph, i, j, 0, 0, -1, 0);
