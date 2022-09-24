@@ -4433,15 +4433,18 @@ void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connecti
     // free(connection_count_backward);
     //TODO: maybe there are some extra connections, because no three-way shake is done yet.
 vector<uint32_t> sources = sources_ends.first;
+
 vector<uint32_t> ends = sources_ends.second;
+
 asg_arc_t *a;
 int V = graph->n_seq*2; 
 bool *visited = new bool[V];
+
 int num_outgoing_arcs;
-        for(int i = 0; i < graph->n_seq*2; i++){
-        for(int j = 0; j < graph->n_seq*2; j++){
-             if (std::find (sources.begin(), sources.end(), i)!= sources.end() || std::find (ends.begin(), ends.end(), i)!= ends.end()
-             || std::find (sources.begin(), sources.end(), j)!= sources.end() || std::find (ends.begin(), ends.end(), j)!= ends.end())
+        for(int i = 0; i < graph->n_seq*2; i=i+2){
+        for(int j = 0; j < graph->n_seq*2; j=j+2){
+             if (std::find (sources.begin(), sources.end(), i)!= sources.end() || std::find (ends.begin(), ends.end(), i/2)!= ends.end()
+             || std::find (sources.begin(), sources.end(), j)!= sources.end() || std::find (ends.begin(), ends.end(), j/2)!= ends.end())
              {
                 // check if components are different by checking path between two nodes
                 
@@ -4453,6 +4456,7 @@ int num_outgoing_arcs;
                 stack.empty();
                 visited[i] = true;
                 stack.push(i);
+                stack.push(i+1);
 
                 while (!stack.empty())
                     {
@@ -4468,6 +4472,7 @@ int num_outgoing_arcs;
 
                     for (int vi=0; vi<num_outgoing_arcs; vi++) {
             uint32_t u = outgoing_arcs[vi].v;
+          // cout << "u" << "\t" << graph->seq[u/2].name << endl;
             if (u==j || u/2==j/2 || u/2==j || u==j/2)
             {                 
                     visited[j] = true; stack.empty(); break;}
@@ -4482,9 +4487,9 @@ int num_outgoing_arcs;
 
                     }
 
-                if (visited[j] == false && num_outgoing_arcs>0){ //may be singletons are not allowed for now
-                if (connections_count[i/2][j/2]>200){ // hard-coded value here... //TODO: check if i and j need to be divided by two.
-                cout <<"i am here" <<i << "\t" << j << endl;
+                if (visited[j] == false){ //may be singletons are not allowed for now
+                if (connections_count[i/2][j/2]>200 &&  graph->seq[i/2].len > 100000 &&  graph->seq[j/2].len > 100000){ // hard-coded value here... //TODO: check if i and j need to be divided by two.
+                cout <<"i am here " <<graph->seq[i/2].name << "," << graph->seq[j/2].name;
                 a = gfa_add_arc1(graph, i, j, 0, 0, -1, 0);
                 }
                     }

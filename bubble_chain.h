@@ -69,13 +69,26 @@ int clean_graph(asg_t *g, string inFileName, string outFileName, map<string,stri
  * Get the sources of a single component
  */
  
-vector<uint32_t> get_sources(asg_t *g) {
+ pair<vector<uint32_t>, vector<uint32_t>> get_sources(asg_t *g) {
     cout << "start source search" << endl;
     vector<uint32_t> sources;
+    vector<uint32_t> ends;
 
 	uint32_t n_vtx = g->n_seq * 2;
     bool frontier_added[n_vtx];
-    for (int i=0; i<n_vtx; i++) {
+        for (int i=0; i<n_vtx; i++) {
+                uint32_t num_incoming_arcs = asg_arc_n(g, i^1);  // 1
+        if (num_incoming_arcs == 0) {  // check if curr_v is a source by checking if no parents
+            sources.push_back(i);
+        }
+
+        uint32_t num_outgoing_arcs = asg_arc_n(g, i);  // 2
+        asg_arc_t *outgoing_arcs = asg_arc_a(g, i);  // p outgoing_arcs[0].v = 34; p outgoing_arcs[1].v = 37;
+        if (num_outgoing_arcs == 0) {  // check if curr_v is a end 
+            ends.push_back(i);
+        }
+    }
+/*     for (int i=0; i<n_vtx; i++) {
         frontier_added[i] = false;
     }
     vector<uint32_t> frontier;
@@ -106,6 +119,9 @@ vector<uint32_t> get_sources(asg_t *g) {
         // add children to frontier
         uint32_t num_outgoing_arcs = asg_arc_n(g, u);  // 2
         asg_arc_t *outgoing_arcs = asg_arc_a(g, u);  // p outgoing_arcs[0].v = 34; p outgoing_arcs[1].v = 37;
+        if (num_outgoing_arcs == 0) {  // check if curr_v is a end 
+            ends.push_back(u);
+        }
         for (int vi=0; vi<num_outgoing_arcs; vi++) {
             int c = outgoing_arcs[vi].v;
             if (!frontier_added[c]) {
@@ -113,9 +129,9 @@ vector<uint32_t> get_sources(asg_t *g) {
                 frontier_added[c] = true;
             }
         }
-    }
-    cout << "finish source search" << endl;
-    return sources;
+    } */
+    cout << "finish source and end search" << endl;
+    return {sources, ends};
 }
 
 vector<uint32_t> get_topological_order(asg_t *g) {
@@ -482,8 +498,8 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(string infile, asg_t **g_
     asg_t *g;
 	int ret = 1;
 	int counter = 0;
-    string outfile = string("pstools.clean_graph.temp.")+to_string(counter)+string(".out");
-	while(ret!=0){
+   // string outfile = string("pstools.clean_graph.temp.")+to_string(counter)+string(".out");
+/* 	while(ret!=0){
 		g = gfa_read(strdup(infile.c_str()));
     	ret = clean_graph(g,infile,outfile,excluded_nodes);
         // gfa_destory(g);
@@ -494,7 +510,7 @@ map<uint32_t,map<uint32_t,set<uint32_t>>>* get_bubbles(string infile, asg_t **g_
 			string rm_cmd = string("rm ") + string("pstools.clean_graph.temp.")+to_string(counter-2)+string(".out");
 			system(rm_cmd.c_str());
 		}
-	}
+	} */
     
     g = gfa_read(infile.c_str());
     (*g_ptr) = g;
