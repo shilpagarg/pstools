@@ -4402,15 +4402,20 @@ bool compareComp(uint32_t i,uint32_t j, uint32_t* nodeID_compID){
 	return i==j;
 }
 
-void connect(uint32_t u, uint32_t i,uint32_t* nodeID_compID){
+void connect(uint32_t u, uint32_t i,uint32_t* nodeID_compID,int V){
     u = findComp(u,nodeID_compID);
     i = findComp(i,nodeID_compID);
 
     if(u!=i){
      nodeID_compID[u]=i;
+     if(u%2==0 && u < V){
+       nodeID_compID[u+1]=nodeID_compID[u];
+     }else{
+     nodeID_compID[u-1]=nodeID_compID[u];
+     }
     }
-
 }
+
 
 void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connection_count_backward, asg_t *graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, char* output_directory, int n_threads, map<string, string>* excluded_nodes){
     set<uint32_t> existing_nodes;
@@ -4438,7 +4443,7 @@ for(uint32_t i = 0; i < graph->n_seq*2; i++){
 
     for (int vi=0; vi<num_outgoing_arcs; vi++) {
             uint32_t u = outgoing_arcs[vi].v;
-            connect(u,i,nodeID_compID);
+            connect(u,i,nodeID_compID,V);
     }
 }
     // map<uint32_t,map<uint32_t,uint32_t>> connections_count_forward;
@@ -4488,100 +4493,12 @@ bool *visited = new bool[V];
              if (std::find (sources.begin(), sources.end(), i)!= sources.end() || std::find (ends.begin(), ends.end(), i/2)!= ends.end()
              || std::find (sources.begin(), sources.end(), j)!= sources.end() || std::find (ends.begin(), ends.end(), j/2)!= ends.end())
              {
-                // check if components are different by checking path between two nodes
                 
                 
-                /* for (int k = 0; k < V; k++)
-                    visited[k] = false;
-
-                stack<uint32_t> stack2;
-                stack<uint32_t> stack1;
-                stack2.empty();                
-                stack1.empty();
-                elements_from_i.empty(); elements_from_j.empty();
-                v_intersection.empty();
-                visited[i] = true;
-                stack2.push(i);
-                stack2.push(i+1);
-                stack1.push(j);
-                stack1.push(j+1);
-                elements_from_i.push_back(i); elements_from_i.push_back(i+1);
-                elements_from_j.push_back(j); elements_from_j.push_back(j+1);
-                // loop on i
-                while (!stack2.empty())
-                    {
-                        // Dequeue a vertex from queue and print it
-                        uint32_t p = stack2.top();
-                        stack2.pop();
-                
-                        // Get all adjacent vertices of the dequeued vertex s
-                        // If a adjacent has not been visited, then mark it visited
-                        // and enqueue it
-                       num_outgoing_arcs = asg_arc_n(graph, p);
-                        asg_arc_t *outgoing_arcs = asg_arc_a(graph, p);  // p outgoing_arcs[0].v = 34; p outgoing_arcs[1].v = 37;
-
-                    for (int vi=0; vi<num_outgoing_arcs; vi++) {
-            uint32_t u = outgoing_arcs[vi].v;
-            elements_from_i.push_back(u);
-          // cout << "u" << "\t" << graph->seq[u/2].name << endl;
-            if (u==j || u/2==j/2 || u/2==j || u==j/2)
-            {                 
-                    visited[j] = true; stack2.empty(); break;}
-                
-                            // Else, continue to do BFS
-                            if (!visited[u])
-                            {
-                                visited[u] = true;
-                                stack2.push(u);
-                                
-                            }
-                        }
-
-                    }
-
-
-                while (!stack1.empty())
-                    {
-                        // Dequeue a vertex from queue and print it
-                        uint32_t p = stack1.top();
-                        stack1.pop();
-                
-                        // Get all adjacent vertices of the dequeued vertex s
-                        // If a adjacent has not been visited, then mark it visited
-                        // and enqueue it
-                       num_outgoing_arcs = asg_arc_n(graph, p);
-                        asg_arc_t *outgoing_arcs = asg_arc_a(graph, p);  // p outgoing_arcs[0].v = 34; p outgoing_arcs[1].v = 37;
-
-                    for (int vi=0; vi<num_outgoing_arcs; vi++) {
-            uint32_t u = outgoing_arcs[vi].v;
-            elements_from_j.push_back(u);
-          // cout << "u" << "\t" << graph->seq[u/2].name << endl;
-               
-                            // Else, continue to do BFS
-                            if (!visited[u])
-                            {
-                                visited[u] = true;
-                                stack1.push(u);
-                                
-                            }
-
-
-                    }
-                    }
-
-std::sort(elements_from_j.begin(), elements_from_j.end());
-     std::sort(elements_from_i.begin(), elements_from_i.end());
-     std::set_intersection(elements_from_i.begin(), elements_from_i.end(),
-                           elements_from_j.begin(), elements_from_j.end(),
-                           std::back_inserter(v_intersection)); */
-               // cout << i << "\t" << j << endl;
-               // if (visited[j] == false && v_intersection.empty()){ //may be singletons are not allowed for now
-               // if (v_intersection.empty()){
                 if (!compareComp(i,j, nodeID_compID)){
                 if (connections_count[i/2][j/2]>200 &&  graph->seq[i/2].len > 100000 &&  graph->seq[j/2].len > 100000 ){ // hard-coded value here... //TODO: check if i and j need to be divided by two.
-                cout <<"i am here " <<graph->seq[i/2].name << "," << graph->seq[j/2].name;
+                cout <<"different components: " <<graph->seq[i/2].name << "," << graph->seq[j/2].name << endl;
 
-                cout << "aadaskjdakjsdhkjs";
                 a = gfa_add_arc1(graph, i, j, 0, 0, -1, 0);
                 }
                     }
