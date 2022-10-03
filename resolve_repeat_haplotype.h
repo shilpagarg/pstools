@@ -3800,6 +3800,7 @@ typedef struct { // global data structure for kt_pipeline()
 	asg_t* graph;
     map<uint32_t,bubble_t*>* node_bubble_map;
     uint32_t** connections_count;
+    vector<bubble_t*> complex_bubbles;
     map<uint32_t,set<uint32_t>>* node_path_id_map;
 } shared_data;
 
@@ -4005,6 +4006,7 @@ string get_haplotype_sequence(asg_t* graph, set<uint32_t> set_of_nodes, uint32_t
     // cout << to_print.str();
     return result.str();
 }
+
 
 static void worker_for_single_step(void *data, long i, int tid) // callback for kt_for()
 {
@@ -4416,6 +4418,89 @@ void connect(uint32_t u, uint32_t i,uint32_t* nodeID_compID,int V){
     }
 }
 
+static void worker_for_single_step_gen(void *data, long i, int tid){
+    // CHECK IF DIVIDE by TWO is required and odd even nodes
+    // node_bubble_map need to fixed and long-range allele between bubbles
+step_data *s = (step_data*)data;
+asg_t* graph = s->p->graph;
+uint32_t** connections_count = s->p->connections_count;
+pair<vector<uint32_t>, vector<uint32_t>> sources_ends = get_sources(graph);
+vector<bubble_t*> bubbles = s->p->complex_bubbles;
+vector<uint32_t>  path_1_included;
+vector<uint32_t>  path_2_included;
+map<uint32_t,bubble_t*>* node_bubble_map = s->p->node_bubble_map;
+vector<uint32_t> sources = sources_ends.first;
+
+int V = graph->n_seq*2;
+bool *visited = new bool[V];
+
+for (auto i:sources){
+for (int k = 0; k < V; k++)
+    visited[k] = false;
+stack<uint32_t> stack1;
+stack1.push(i);
+path_1_included.empty();
+path_1_included.push_back(i); //check here that the current source goes in
+uint32_t num_outgoing_arcs;
+int cost=0;
+int u;
+uint32_t prev_allbub = i;
+
+while (!stack1.empty())
+{
+uint32_t p = stack1.top();
+stack1.pop();
+u =p;
+if(node_bubble_map->find(u)!=node_bubble_map->end()){
+    bubble_t* bubb = (*node_bubble_map)[u];
+    visited[u] = true;
+    int c=0;
+    int key =0;
+    for (int all=0; all< bubb->paths.size();all++)
+    {
+        uint32_t id = bubb->paths[all][0]->v;
+        if (connections_count[prev_allbub/2][id/2] > c){
+            c = connections_count[u/2][id/2]; // TODO: make sure check with alleles with previous bubble/half bubble
+            key = all;
+        }
+        prev_allbub = bubb->paths[key][0]->v;
+
+    }
+
+    cost=cost+c;
+    //put bubble allele in haplotype path
+    for(int h =0; h<bubb->paths[key].size(); h++){
+        path_1_included.push_back(bubb->paths[key][h]->v);
+        visited[bubb->paths[key][h]->v] = true;
+        u = bubb->paths[key][h]->v;
+    }   
+stack1.push(u);
+}
+
+//if not a bubble
+else if(!visited[u]){
+    visited[u] = true;
+    
+    num_outgoing_arcs = asg_arc_n(graph, u);
+asg_arc_t *outgoing_arcs = asg_arc_a(graph, u);  
+
+u = outgoing_arcs[0].v;
+path_1_included.push_back(u);
+stack1.push(u);
+
+}
+
+}
+
+cout << endl;
+cout << "haplotype 1:" << cost << endl;
+        for(auto node: path_1_included){
+                cout << graph->seq[node/2].name << ", ";
+            }
+}  
+   
+
+}
 
 void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connection_count_backward, asg_t *graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, char* output_directory, int n_threads, map<string, string>* excluded_nodes){
     set<uint32_t> existing_nodes;
@@ -4488,7 +4573,7 @@ asg_arc_t *a;
 bool *visited = new bool[V];
 
 
-        for(int i = 0; i < graph->n_seq*2; i=i+2){
+       for(int i = 0; i < graph->n_seq*2; i=i+2){
         for(int j = 0; j < graph->n_seq*2; j=j+2){
              if (std::find (sources.begin(), sources.end(), i)!= sources.end() || std::find (ends.begin(), ends.end(), i/2)!= ends.end()
              || std::find (sources.begin(), sources.end(), j)!= sources.end() || std::find (ends.begin(), ends.end(), j/2)!= ends.end())
@@ -4659,6 +4744,10 @@ std::cout.flush();
         }
     }
 
+    for(auto bubble: complex_bubbles){
+               node_bubble_map[bubble->begNode] = bubble;
+    }
+
     cout << "Bubbles Retrieved" << endl;
 
     // map<uint32_t,map<uint32_t,uint32_t>> cnt_count_branches;
@@ -4702,6 +4791,7 @@ std::cout.flush();
     shared_data shared;
     shared.graph = graph;
     shared.connections_count = connections_count;
+    shared.complex_bubbles = complex_bubbles;
     shared.node_path_id_map = &node_path_id_map;
     shared.node_bubble_map = &node_bubble_map;
     step_data step;
@@ -4774,7 +4864,7 @@ std::cout.flush();
     step.node_positions = (map<uint32_t,uint32_t>*)calloc(step.beg_node->size()*2,sizeof(map<uint32_t,uint32_t>));
 
 
-    kt_for(n_threads, worker_for_single_step , &step, step.beg_node->size());
+    kt_for(n_threads, worker_for_single_step_gen , &step, step.beg_node->size());
     // for(auto bubble: pure_bubbles){
     //     cout << "Bubble: " << graph->seq[bubble->begNode>>1].name << " to " << graph->seq[bubble->endNode>>1].name << endl;
     //     for(auto path: bubble->paths_nodes){
