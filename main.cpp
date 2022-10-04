@@ -415,24 +415,29 @@ int main_haplotype_scaffold(int argc, char* argv[]) {
     ifstream inHaploFile(haploFile);
 	string line;
 	string name;
+	string origname;
 	string sequence;
 	uint32_t id = 0;
 	while (getline(inHaploFile, line)){
         istringstream iss1(line);
 		iss1 >> name;
+		origname =name;
 		name = name.substr(1,name.size()-6);
 		getline(inHaploFile, line);
         istringstream iss2(line);
 		iss2 >> sequence;
-		if(id%2 == 0){
-			contig_id[name] = (id>>1);
-			id_contig[id>>1] = name;
+		if(origname.find("hap1") != std::string::npos){
+			id_contig[id] = name;
 			contig_hap1s[name] = sequence;
 			contig_lengths[name] = sequence.size();
-		}else{
-			contig_hap2s[name] = sequence;
+			contig_id[name] = id; // why size of contig_id is more than id_contig?????
+			id++;
 		}
-		id++;
+		if(origname.find("hap2") != std::string::npos){
+			contig_hap2s[name] = sequence;
+
+		}
+
 	}
 
 

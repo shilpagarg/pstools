@@ -6186,7 +6186,11 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         }
                     }
                 }
-                inside_connections.push_back(total_connection/connection_counter);
+                if (total_connection!=0 && connection_counter!=0){
+                float f =total_connection/connection_counter;
+                inside_connections.push_back(static_cast<uint32_t>(f));
+                }else
+                inside_connections.push_back(0);
             }else{
                 inside_connections.push_back(0);
             }
@@ -6360,7 +6364,11 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         }
                     }
                 }
-                inside_connections.push_back(total_connection/connection_counter);
+                if (total_connection!=0 && connection_counter!=0){
+                float f =total_connection/connection_counter;
+                inside_connections.push_back(static_cast<uint32_t>(f));
+                }else
+                inside_connections.push_back(0);
                 // inside_connections.push_back(total_connection);
             }else{
                 inside_connections.push_back(0);
@@ -8414,7 +8422,11 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         }
                     }
                 }
-                inside_connections.push_back(total_connection/connection_counter);
+                if (total_connection!=0 && connection_counter!=0){
+                float f =total_connection/connection_counter;
+                inside_connections.push_back(static_cast<uint32_t>(f));
+                }else
+                inside_connections.push_back(0);
                 // inside_connections.push_back(total_connection);
             }else{
                 inside_connections.push_back(0);
@@ -8592,7 +8604,11 @@ new_scaffold_result = vector<vector<uint32_t>>();
                         total_connection+=max_count;
                         connection_counter++;
                     }
-                    inside_connections.push_back(total_connection/connection_counter);
+                if (total_connection!=0 && connection_counter!=0){
+                float f =total_connection/connection_counter;
+                inside_connections.push_back(static_cast<uint32_t>(f));
+                }else
+                inside_connections.push_back(0);
                 }else{
                     inside_connections.push_back(0);
                 }
