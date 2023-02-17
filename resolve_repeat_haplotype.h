@@ -18,48 +18,61 @@
 #include "minimap.h"
 #include "modmap.c"
 #include "kthread.h"
+#include <algorithm>
+
 using namespace std;
-vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len);
-vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections, bool check_identity);
-vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint32_t>> order_input, vector<uint32_t>* orientation_result, vector<uint32_t>* haplo_result);
-vector<vector<uint32_t>> ordered_breaking(uint32_t** connect_num,vector<vector<uint32_t>> order_result, vector<uint32_t> orientation_result, vector<uint32_t> haplo_result);
-vector<vector<uint32_t>> best_buddy_merge_final(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections);
+vector<vector<uint32_t>> best_buddy_separate(bool **seen, float **best_buddy, uint32_t **connect_num, uint32_t len);
+vector<vector<uint32_t>> best_buddy_merge(bool **seen, float **best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections, bool check_identity);
+vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint32_t>> order_input, vector<uint32_t> *orientation_result, vector<uint32_t> *haplo_result);
+vector<vector<uint32_t>> ordered_breaking(uint32_t **connect_num, vector<vector<uint32_t>> order_result, vector<uint32_t> orientation_result, vector<uint32_t> haplo_result);
+vector<vector<uint32_t>> best_buddy_merge_final(bool **seen, float **best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections);
 
-size_t stringCount(const std::string& referenceString,
-                   const std::string& subString) {
+size_t stringCount(const std::string &referenceString,
+                   const std::string &subString)
+{
 
-  const size_t step = subString.size();
+    const size_t step = subString.size();
 
-  size_t count(0);
-  size_t pos(0) ;
+    size_t count(0);
+    size_t pos(0);
 
-  while( (pos=referenceString.find(subString, pos)) !=std::string::npos) {
-    pos +=step;
-    ++count ;
-  }
+    while ((pos = referenceString.find(subString, pos)) != std::string::npos)
+    {
+        pos += step;
+        ++count;
+    }
 
-  return count;
+    return count;
 }
 
-void draw_graph(uint32_t len, bool** seen, float** best_buddy, map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation, set<uint32_t> seen_node, uint32_t iteration, string output_dir, asg_t *graph, vector<uint32_t> beg_node, vector<uint32_t> end_node){
-    string output_directory = output_dir+string("/best_buddy_graph");
+void draw_graph(uint32_t len, bool **seen, float **best_buddy, map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation, set<uint32_t> seen_node, uint32_t iteration, string output_dir, asg_t *graph, vector<uint32_t> beg_node, vector<uint32_t> end_node)
+{
+    string output_directory = output_dir + string("/best_buddy_graph");
     mkdir(output_directory.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-    ofstream main_graph(output_directory+string("/") + string("graph_")+to_string(iteration) + string(".gfa"));
-    for(auto a: seen_node){
-        main_graph << "S\t" << string(graph->seq[beg_node[a]>>1].name) + string("_") + string(graph->seq[end_node[a]>>1].name) << "\t" << "*" <<endl;
+    ofstream main_graph(output_directory + string("/") + string("graph_") + to_string(iteration) + string(".gfa"));
+    for (auto a : seen_node)
+    {
+        main_graph << "S\t" << string(graph->seq[beg_node[a] >> 1].name) + string("_") + string(graph->seq[end_node[a] >> 1].name) << "\t"
+                   << "*" << endl;
     }
-    for(auto a: connection_relation){
-        for(auto b: a.second){
-            main_graph << "L\t" << string(graph->seq[beg_node[a.first]>>1].name) + string("_") + string(graph->seq[end_node[a.first]>>1].name) << "\t"<< (b.second.second.first%2==0 ? "+" : "-") << "\t" << string(graph->seq[beg_node[b.first]>>1].name) + string("_") + string(graph->seq[end_node[b.first]>>1].name) << "\t" << (b.second.second.second%2==0 ? "+" : "-") << "\t"  << "0M\t" <<endl;
+    for (auto a : connection_relation)
+    {
+        for (auto b : a.second)
+        {
+            main_graph << "L\t" << string(graph->seq[beg_node[a.first] >> 1].name) + string("_") + string(graph->seq[end_node[a.first] >> 1].name) << "\t" << (b.second.second.first % 2 == 0 ? "+" : "-") << "\t" << string(graph->seq[beg_node[b.first] >> 1].name) + string("_") + string(graph->seq[end_node[b.first] >> 1].name) << "\t" << (b.second.second.second % 2 == 0 ? "+" : "-") << "\t"
+                       << "0M\t" << endl;
         }
     }
     main_graph.close();
     ofstream outFileBestBuddy;
-    outFileBestBuddy.open(output_directory+string("/") + string("best_buddy_")+to_string(iteration) + string(".txt"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < len; i++){
-        for(int j = 0; j < len; j++){
-            if(best_buddy[i][j]>0){
-                outFileBestBuddy << (i>>2) << "_haplo_" << (i>>1)%2+1 << (i%2==0?"+":"-") << "\t" << (j>>2) << "_haplo_" << (j>>1)%2+1 << (j%2==0?"+":"-") << "\t" << best_buddy[i][j] << endl;
+    outFileBestBuddy.open(output_directory + string("/") + string("best_buddy_") + to_string(iteration) + string(".txt"), ofstream::out | ofstream::trunc);
+    for (int i = 0; i < len; i++)
+    {
+        for (int j = 0; j < len; j++)
+        {
+            if (best_buddy[i][j] > 0)
+            {
+                outFileBestBuddy << (i >> 2) << "_haplo_" << (i >> 1) % 2 + 1 << (i % 2 == 0 ? "+" : "-") << "\t" << (j >> 2) << "_haplo_" << (j >> 1) % 2 + 1 << (j % 2 == 0 ? "+" : "-") << "\t" << best_buddy[i][j] << endl;
             }
         }
     }
@@ -67,159 +80,226 @@ void draw_graph(uint32_t len, bool** seen, float** best_buddy, map<uint32_t, map
     outFileBestBuddy.close();
 }
 
-void update_best_buddy_haplo(bool** seen, float** best_buddy, uint32_t** connections,uint32_t len){
-	for(int i = 0; i < len*4; i++){
-		for(int j = 0; j < len*4; j++){
-			uint32_t num = connections[i][j];
-			if(!seen[i][j] && num > 0){
+void update_best_buddy_haplo(bool **seen, float **best_buddy, uint32_t **connections, uint32_t len)
+{
+    for (int i = 0; i < len * 4; i++)
+    {
+        for (int j = 0; j < len * 4; j++)
+        {
+            uint32_t num = connections[i][j];
+            if (!seen[i][j] && num > 0)
+            {
                 bool greatest = true;
-                for(int buf_i = 0; buf_i < 4; buf_i++){
-                    for(int buf_j = 0; buf_j < 4; buf_j++){
-                        if(num < connections[(i>>2)+buf_i][(j>>2)+buf_j]){
+                for (int buf_i = 0; buf_i < 4; buf_i++)
+                {
+                    for (int buf_j = 0; buf_j < 4; buf_j++)
+                    {
+                        if (num < connections[(i >> 2) + buf_i][(j >> 2) + buf_j])
+                        {
                             greatest = false;
                             break;
                         }
                     }
                 }
-                if(greatest){
+                if (greatest)
+                {
                     uint32_t max_other = 0;
-                    for(int p = 0; p < len*4; p++){
-                        for(int i_s = 0; i_s < 4; i_s++){
-                            if((p>>2)!=(j>>2)){
-                                uint32_t cur_num = connections[i_s+((i>>2)<<2)][p];
-                                if(!seen[i_s+((i>>2)<<2)][p] && cur_num > max_other){
+                    for (int p = 0; p < len * 4; p++)
+                    {
+                        for (int i_s = 0; i_s < 4; i_s++)
+                        {
+                            if ((p >> 2) != (j >> 2))
+                            {
+                                uint32_t cur_num = connections[i_s + ((i >> 2) << 2)][p];
+                                if (!seen[i_s + ((i >> 2) << 2)][p] && cur_num > max_other)
+                                {
                                     max_other = cur_num;
                                 }
                             }
                         }
                     }
 
-                    for(int p = 0; p < len*4; p++){
-                        for(int j_s = 0; j_s < 4; j_s++){
-                            if((p>>2)!=(i>>2)){
-                                uint32_t cur_num = connections[p][j_s+((j>>2)<<2)];
-                                if(!seen[p][j_s+((j>>2)<<2)] && cur_num > max_other){
+                    for (int p = 0; p < len * 4; p++)
+                    {
+                        for (int j_s = 0; j_s < 4; j_s++)
+                        {
+                            if ((p >> 2) != (i >> 2))
+                            {
+                                uint32_t cur_num = connections[p][j_s + ((j >> 2) << 2)];
+                                if (!seen[p][j_s + ((j >> 2) << 2)] && cur_num > max_other)
+                                {
                                     max_other = cur_num;
                                 }
                             }
                         }
                     }
 
-                    if(max_other>0){
-                        best_buddy[i][j] = ((float)num)/max_other;
-                    }else{
+                    if (max_other > 0)
+                    {
+                        best_buddy[i][j] = ((float)num) / max_other;
+                    }
+                    else
+                    {
                         best_buddy[i][j] = 2;
                     }
-                }else{
-				    best_buddy[i][j] = 0;
                 }
-			}else{
-				best_buddy[i][j] = 0;
-			}
-		}
-	}
+                else
+                {
+                    best_buddy[i][j] = 0;
+                }
+            }
+            else
+            {
+                best_buddy[i][j] = 0;
+            }
+        }
+    }
 }
 
-void update_best_buddy_haplo_general(bool** seen, float** best_buddy, uint32_t** connections,uint32_t len){
-	for(int i = 0; i < len; i++){
-		for(int j = 0; j < len; j++){
-			uint32_t num = connections[i][j];
-			if(!seen[i][j] && num > 0){
-				uint32_t max_other = 0;
-				for(int p = 0; p < len; p++){
-                    if(p!=j){
+void update_best_buddy_haplo_general(bool **seen, float **best_buddy, uint32_t **connections, uint32_t len)
+{
+    for (int i = 0; i < len; i++)
+    {
+        for (int j = 0; j < len; j++)
+        {
+            uint32_t num = connections[i][j];
+            if (!seen[i][j] && num > 0)
+            {
+                uint32_t max_other = 0;
+                for (int p = 0; p < len; p++)
+                {
+                    if (p != j)
+                    {
                         uint32_t cur_num = connections[i][p];
-                        if(!seen[i][p] && cur_num > max_other){
+                        if (!seen[i][p] && cur_num > max_other)
+                        {
                             max_other = cur_num;
                         }
                     }
-				}
+                }
 
-				for(int p = 0; p < len; p++){
-                    if(p!=i){
+                for (int p = 0; p < len; p++)
+                {
+                    if (p != i)
+                    {
                         uint32_t cur_num = connections[p][i];
-                        if(!seen[p][i] && cur_num > max_other){
+                        if (!seen[p][i] && cur_num > max_other)
+                        {
                             max_other = cur_num;
                         }
                     }
-				}
+                }
 
-				if(max_other>0){
-					best_buddy[i][j] = ((float)num)/max_other;
-				}else{
-					best_buddy[i][j] = 2;
-				}
-			}else{
-				best_buddy[i][j] = 0;
-			}
-		}
-	}
+                if (max_other > 0)
+                {
+                    best_buddy[i][j] = ((float)num) / max_other;
+                }
+                else
+                {
+                    best_buddy[i][j] = 2;
+                }
+            }
+            else
+            {
+                best_buddy[i][j] = 0;
+            }
+        }
+    }
 }
 
-
-string complement(string unitig){
+string complement(string unitig)
+{
     stringstream result;
     int c = 0;
-    while(c < unitig.size()){
+    while (c < unitig.size())
+    {
         char current = unitig[c];
-        if(current == 'A'){
+        if (current == 'A')
+        {
             result << 'T';
-        }else if(current == 'T'){
+        }
+        else if (current == 'T')
+        {
             result << 'A';
-        }else if(current == 'C'){
+        }
+        else if (current == 'C')
+        {
             result << 'G';
-        }else if(current == 'G'){
+        }
+        else if (current == 'G')
+        {
             result << 'C';
-        }else{
+        }
+        else
+        {
             result << 'N';
         }
         c++;
     }
     string result_str = result.str();
-    reverse(result_str.begin(),result_str.end());
+    reverse(result_str.begin(), result_str.end());
     return result_str;
 }
-string translate(string unitig, uint32_t start, string cs_tag){
+string translate(string unitig, uint32_t start, string cs_tag)
+{
     stringstream result;
     char cur_operator;
     char current_char;
     int c = 0;
     int u = start;
 
-    while(c < cs_tag.size()){
+    while (c < cs_tag.size())
+    {
         current_char = cs_tag[c];
-        if(current_char == ':' || current_char == '*' || current_char == '=' || current_char == '+' || current_char == '-'){
+        if (current_char == ':' || current_char == '*' || current_char == '=' || current_char == '+' || current_char == '-')
+        {
             cur_operator = current_char;
             c++;
-        }else{
-            if(cur_operator == '='){
-                while(cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n'){
-                    result << (char)(cs_tag[c]-32);
+        }
+        else
+        {
+            if (cur_operator == '=')
+            {
+                while (cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n')
+                {
+                    result << (char)(cs_tag[c] - 32);
                     c++;
                     u++;
                 }
-            }else if(cur_operator == ':'){
+            }
+            else if (cur_operator == ':')
+            {
                 stringstream current_num;
-                while(isdigit(cs_tag[c])){
+                while (isdigit(cs_tag[c]))
+                {
                     current_num << cs_tag[c];
                     c++;
                 }
                 int counter = stoi(current_num.str());
-                for(int i = 0; i < counter; i++){
+                for (int i = 0; i < counter; i++)
+                {
                     result << unitig[u];
                     u++;
                 }
-            }else if(cur_operator == '*'){
-                c+=2;
+            }
+            else if (cur_operator == '*')
+            {
+                c += 2;
                 u++;
-                result << (char)(cs_tag[c-1]-32);
-            }else if(cur_operator == '+'){
-                while(cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n'){
-                    result << (char)(cs_tag[c]-32);
+                result << (char)(cs_tag[c - 1] - 32);
+            }
+            else if (cur_operator == '+')
+            {
+                while (cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n')
+                {
+                    result << (char)(cs_tag[c] - 32);
                     c++;
                 }
-            }else if(cur_operator == '-'){
-                while(cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n'){
+            }
+            else if (cur_operator == '-')
+            {
+                while (cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n')
+                {
                     c++;
                     u++;
                 }
@@ -229,11 +309,12 @@ string translate(string unitig, uint32_t start, string cs_tag){
     return result.str();
 }
 
-
-set<string> find_variant(string unitig, uint32_t start, string cs_tag, int kmer_l){
-    int pre = (kmer_l/2);
+set<string> find_variant(string unitig, uint32_t start, string cs_tag, int kmer_l)
+{
+    int pre = (kmer_l / 2);
     int post = pre;
-    if(kmer_l%2 == 1){
+    if (kmer_l % 2 == 1)
+    {
         post++;
     }
     char cur_operator;
@@ -243,80 +324,115 @@ set<string> find_variant(string unitig, uint32_t start, string cs_tag, int kmer_
     set<string> results = set<string>();
     stringstream buf;
 
-    while(c < cs_tag.size()){
+    while (c < cs_tag.size())
+    {
         current_char = cs_tag[c];
-        if(current_char == ':' || current_char == '*' || current_char == '=' || current_char == '+' || current_char == '-'){
+        if (current_char == ':' || current_char == '*' || current_char == '=' || current_char == '+' || current_char == '-')
+        {
             cur_operator = current_char;
             c++;
-        }else{
-            if(cur_operator == '='){
-                while(cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n'){
+        }
+        else
+        {
+            if (cur_operator == '=')
+            {
+                while (cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n')
+                {
                     c++;
                     u++;
                 }
-            }else if(cur_operator == ':'){
+            }
+            else if (cur_operator == ':')
+            {
                 stringstream current_num;
-                while(isdigit(cs_tag[c])){
+                while (isdigit(cs_tag[c]))
+                {
                     current_num << cs_tag[c];
                     c++;
                 }
                 int counter = stoi(current_num.str());
-                u+=counter;
-            }else if(cur_operator == '*'){
-                c+=2;
-                if(u>=pre && u+post <= unitig.length()){
-                    results.insert(unitig.substr(u-pre,kmer_l));
-                }else if(u >= pre){
-                    results.insert(unitig.substr(unitig.length() - kmer_l,kmer_l));
-                }else{
-                    results.insert(unitig.substr(0,kmer_l));
+                u += counter;
+            }
+            else if (cur_operator == '*')
+            {
+                c += 2;
+                if (u >= pre && u + post <= unitig.length())
+                {
+                    results.insert(unitig.substr(u - pre, kmer_l));
+                }
+                else if (u >= pre)
+                {
+                    results.insert(unitig.substr(unitig.length() - kmer_l, kmer_l));
+                }
+                else
+                {
+                    results.insert(unitig.substr(0, kmer_l));
                 }
                 u++;
-            }else if(cur_operator == '-'){
-                if(u>=pre && u+post <= unitig.length()){
-                    results.insert(unitig.substr(u-pre,kmer_l));
-                }else if(u >= pre){
-                    results.insert(unitig.substr(unitig.length() - kmer_l,kmer_l));
-                }else{
-                    results.insert(unitig.substr(0,kmer_l));
+            }
+            else if (cur_operator == '-')
+            {
+                if (u >= pre && u + post <= unitig.length())
+                {
+                    results.insert(unitig.substr(u - pre, kmer_l));
                 }
-                while(cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n'){
+                else if (u >= pre)
+                {
+                    results.insert(unitig.substr(unitig.length() - kmer_l, kmer_l));
+                }
+                else
+                {
+                    results.insert(unitig.substr(0, kmer_l));
+                }
+                while (cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n')
+                {
                     c++;
                 }
-            }else if(cur_operator == '+'){
+            }
+            else if (cur_operator == '+')
+            {
                 buf = stringstream();
-                while(cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n'){
+                while (cs_tag[c] == 'a' || cs_tag[c] == 'c' || cs_tag[c] == 'g' || cs_tag[c] == 't' || cs_tag[c] == 'n')
+                {
                     c++;
                     u++;
                     buf << cs_tag[c];
                 }
                 string buffer = buf.str();
-                if(buffer.length()>kmer_l){
+                if (buffer.length() > kmer_l)
+                {
                     int buf_u = u - buffer.length();
-                    while(buf_u+pre <= u && u+post < unitig.length()){
-                        results.insert(unitig.substr(buf_u,kmer_l));
+                    while (buf_u + pre <= u && u + post < unitig.length())
+                    {
+                        results.insert(unitig.substr(buf_u, kmer_l));
                         buf_u += kmer_l;
                     }
 
-                    if(u>buffer.length()+post){
-                        results.insert(unitig.substr(u-buffer.length()-post,kmer_l));
-                    }else{
-                        results.insert(unitig.substr(0,kmer_l));
+                    if (u > buffer.length() + post)
+                    {
+                        results.insert(unitig.substr(u - buffer.length() - post, kmer_l));
                     }
-                }else{
-                    if(u>buffer.length()+1+(kmer_l-buffer.length())/2){
-                        results.insert(unitig.substr(u-buffer.length()-1-(kmer_l-buffer.length())/2,kmer_l));
-                    }else{
-                        results.insert(unitig.substr(0,kmer_l));
+                    else
+                    {
+                        results.insert(unitig.substr(0, kmer_l));
                     }
                 }
-
+                else
+                {
+                    if (u > buffer.length() + 1 + (kmer_l - buffer.length()) / 2)
+                    {
+                        results.insert(unitig.substr(u - buffer.length() - 1 - (kmer_l - buffer.length()) / 2, kmer_l));
+                    }
+                    else
+                    {
+                        results.insert(unitig.substr(0, kmer_l));
+                    }
+                }
             }
         }
     }
     return results;
 }
-
 
 // void get_identity_score(string cstag, uint32_t* mismatches, uint32_t* matches, uint32_t* insertions, uint32_t* deletions){
 //     *mismatches = 0;
@@ -365,23 +481,21 @@ set<string> find_variant(string unitig, uint32_t start, string cs_tag, int kmer_
 //     }
 // }
 
-
-
-
-
-typedef struct {
+typedef struct
+{
     string qn;
-	uint32_t tn;
-	uint32_t qs;
+    uint32_t tn;
+    uint32_t qs;
     uint32_t ql, qe, tl, ts, te;
-	uint32_t ml, bl;
+    uint32_t ml, bl;
     string seq;
 } paf_rec_str_t;
 
-paf_rec_str_t remove_redundent_info(paf_rec_t r, map<string, uint32_t>* name_index_mapping){
+paf_rec_str_t remove_redundent_info(paf_rec_t r, map<string, uint32_t> *name_index_mapping)
+{
     paf_rec_str_t x;
     x.tn = (*name_index_mapping)[r.tn] << 1;
-    x.tn = r.rev? x.tn^1 : x.tn;
+    x.tn = r.rev ? x.tn ^ 1 : x.tn;
     x.qs = r.qs;
     x.ml = r.ml;
     x.bl = r.bl;
@@ -391,64 +505,69 @@ paf_rec_str_t remove_redundent_info(paf_rec_t r, map<string, uint32_t>* name_ind
     x.ts = r.ts;
     x.te = r.te;
     x.qn = string(r.qn);
-    if(r.seq[0] == ':' || r.seq[0] == '+' || r.seq[0] == '-' || r.seq[0] == '*' || r.seq[0] == '='){
+    if (r.seq[0] == ':' || r.seq[0] == '+' || r.seq[0] == '-' || r.seq[0] == '*' || r.seq[0] == '=')
+    {
         x.seq = string(r.seq);
     }
     return x;
 }
 
-map<string, uint32_t>* name2idx(asg_t* graph){
-    map<string,uint32_t>* result = new map<string,uint32_t>();
-    for(uint32_t i = 0; i < graph->n_seq; i++){
+map<string, uint32_t> *name2idx(asg_t *graph)
+{
+    map<string, uint32_t> *result = new map<string, uint32_t>();
+    for (uint32_t i = 0; i < graph->n_seq; i++)
+    {
         (*result)[string(graph->seq[i].name)] = i;
     }
     return result;
 }
 
-
-class repeat_resolver{
-    public:
-        // asg_t* graph;
-        // FILE *paf_file;
-        // struct access *paf_index;
-        // mutex* paf_read_mutex = new mutex();
-        map<string, uint32_t>* name_index_mapping;
-        vector<vector<paf_rec_str_t>>* get_records_from_paf_file(paf_reader reader, char* filename);
-        vector<vector<uint32_t>>* count_support_reads_for_branches(vector<vector<paf_rec_str_t>>* ordered_records  \
-                                                                        ,map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph \
-                                                                        ,asg_t* graph);
-        map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* check_for_same_pos(vector<vector<paf_rec_str_t>>* ordered_records, asg_t* graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph);
-        map<uint32_t, vector<uint32_t>> checkForMatch(map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeating_nodes, asg_t* graph);
-        map<uint32_t, vector<uint32_t>> aligning_for_variantion(map<set<uint32_t>,map<map<uint32_t,string>,string>>* repeating_nodes, asg_t* graph);
-        set<vector<uint32_t>>* cover_gaps_in_long_path(vector<vector<uint32_t>>* supported_pathes);
-        set<vector<uint32_t>>* merge_long_pathes(set<vector<uint32_t>>* path_set);
-        set<vector<uint32_t>>* recover_unlinearized_branches(set<vector<uint32_t>>* path_set, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph);
-        map<string, vector<vector<paf_rec_str_t>*>*> get_queries_with_duplicated_matches(map<string, vector<paf_rec_str_t>*> unordered_records_by_query_name);
-        vector<vector<uint32_t>> detect_cycles_in_graph(vector<uint32_t> duplicated_nodes, asg_t* graph);
-        void save_pathes_to_file(set<vector<uint32_t>>* set_of_pathes, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, asg_t* graph, string output_directory);
-
-
+class repeat_resolver
+{
+public:
+    // asg_t* graph;
+    // FILE *paf_file;
+    // struct access *paf_index;
+    // mutex* paf_read_mutex = new mutex();
+    map<string, uint32_t> *name_index_mapping;
+    vector<vector<paf_rec_str_t>> *get_records_from_paf_file(paf_reader reader, char *filename);
+    vector<vector<uint32_t>> *count_support_reads_for_branches(vector<vector<paf_rec_str_t>> *ordered_records, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph, asg_t *graph);
+    map<set<uint32_t>, vector<vector<paf_rec_str_t>>> *check_for_same_pos(vector<vector<paf_rec_str_t>> *ordered_records, asg_t *graph, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph);
+    map<uint32_t, vector<uint32_t>> checkForMatch(map<set<uint32_t>, vector<vector<paf_rec_str_t>>> *repeating_nodes, asg_t *graph);
+    map<uint32_t, vector<uint32_t>> aligning_for_variantion(map<set<uint32_t>, map<map<uint32_t, string>, string>> *repeating_nodes, asg_t *graph);
+    set<vector<uint32_t>> *cover_gaps_in_long_path(vector<vector<uint32_t>> *supported_pathes);
+    set<vector<uint32_t>> *merge_long_pathes(set<vector<uint32_t>> *path_set);
+    set<vector<uint32_t>> *recover_unlinearized_branches(set<vector<uint32_t>> *path_set, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph);
+    map<string, vector<vector<paf_rec_str_t> *> *> get_queries_with_duplicated_matches(map<string, vector<paf_rec_str_t> *> unordered_records_by_query_name);
+    vector<vector<uint32_t>> detect_cycles_in_graph(vector<uint32_t> duplicated_nodes, asg_t *graph);
+    void save_pathes_to_file(set<vector<uint32_t>> *set_of_pathes, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph, asg_t *graph, string output_directory);
 };
 
-vector<vector<paf_rec_str_t>>* repeat_resolver::get_records_from_paf_file(paf_reader reader, char* filename){
+vector<vector<paf_rec_str_t>> *repeat_resolver::get_records_from_paf_file(paf_reader reader, char *filename)
+{
     paf_file_t *paf_file;
     paf_file = reader.paf_open(filename);
 
-    if (paf_file == NULL) {
+    if (paf_file == NULL)
+    {
         cout << "Error: failed to read PAF file." << endl;
-    }else{
+    }
+    else
+    {
         cout << "PAF file read." << endl;
     }
     paf_rec_t r;
-    map<string, vector<paf_rec_str_t>*> unordered_records_by_query_name;
-    vector<vector<paf_rec_str_t>>* result = new vector<vector<paf_rec_str_t>>();
+    map<string, vector<paf_rec_str_t> *> unordered_records_by_query_name;
+    vector<vector<paf_rec_str_t>> *result = new vector<vector<paf_rec_str_t>>();
     cout << "start read paf file." << endl;
     bool first_map = true;
     int total_count = 0;
     int long_count = 0;
-	while (reader.paf_read(paf_file, &r) >= 0) {
+    while (reader.paf_read(paf_file, &r) >= 0)
+    {
         total_count++;
-        if(r.ql >= 10000){
+        if (r.ql >= 10000)
+        {
             long_count++;
             // cout << r.qn << "\t";
             // cout << r.ql << "\t";
@@ -463,67 +582,82 @@ vector<vector<paf_rec_str_t>>* repeat_resolver::get_records_from_paf_file(paf_re
             // cout << r.bl << "\t";
             // // Mapping Quality is not parsed
             // cout << endl;
-            if(unordered_records_by_query_name[r.qn]==nullptr){
+            if (unordered_records_by_query_name[r.qn] == nullptr)
+            {
                 unordered_records_by_query_name[r.qn] = new vector<paf_rec_str_t>;
             }
             unordered_records_by_query_name[r.qn]->push_back(remove_redundent_info(r, this->name_index_mapping));
         }
-	}
-    for(auto a:unordered_records_by_query_name){
-        sort(a.second->begin(), a.second->end(), [ ]( const auto& lhs, const auto& rhs )
-        {
-        return lhs.qs < rhs.qs;
-        });
+    }
+    for (auto a : unordered_records_by_query_name)
+    {
+        sort(a.second->begin(), a.second->end(), [](const auto &lhs, const auto &rhs)
+             { return lhs.qs < rhs.qs; });
         result->push_back(*a.second);
         free(a.second);
     }
-    cout << "Total records: " << total_count <<endl;
-    cout <<"Long records: " << long_count << endl;
+    cout << "Total records: " << total_count << endl;
+    cout << "Long records: " << long_count << endl;
     cout << "Percentage: " << ((double)long_count / (double)total_count) * 100 << "%" << endl;
-	reader.paf_close(paf_file);
+    reader.paf_close(paf_file);
     return result;
 }
 
-
-map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeat_resolver::check_for_same_pos(vector<vector<paf_rec_str_t>>* ordered_records, asg_t* graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph){
-    set<uint32_t>* nodes_to_begin_end = new set<uint32_t>[graph->n_seq*2];
-    for(auto loop_begin: *bubble_chain_graph){
-        for(auto loop_end: loop_begin.second){
-            if(loop_end.second.size()>1){
-                for(auto node: loop_end.second){
+map<set<uint32_t>, vector<vector<paf_rec_str_t>>> *repeat_resolver::check_for_same_pos(vector<vector<paf_rec_str_t>> *ordered_records, asg_t *graph, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph)
+{
+    set<uint32_t> *nodes_to_begin_end = new set<uint32_t>[graph->n_seq * 2];
+    for (auto loop_begin : *bubble_chain_graph)
+    {
+        for (auto loop_end : loop_begin.second)
+        {
+            if (loop_end.second.size() > 1)
+            {
+                for (auto node : loop_end.second)
+                {
                     // cout << node;
-                    nodes_to_begin_end[node].insert(loop_begin.first>>1);
-                    nodes_to_begin_end[node].insert(loop_end.first>>1);
-                    nodes_to_begin_end[node^1].insert(loop_begin.first>>1);
-                    nodes_to_begin_end[node^1].insert(loop_end.first>>1);
+                    nodes_to_begin_end[node].insert(loop_begin.first >> 1);
+                    nodes_to_begin_end[node].insert(loop_end.first >> 1);
+                    nodes_to_begin_end[node ^ 1].insert(loop_begin.first >> 1);
+                    nodes_to_begin_end[node ^ 1].insert(loop_end.first >> 1);
                 }
             }
         }
     }
-    for(int i = 0; i<graph->n_seq*2; i++){
-        if(nodes_to_begin_end[i].size() == 0){
+    for (int i = 0; i < graph->n_seq * 2; i++)
+    {
+        if (nodes_to_begin_end[i].size() == 0)
+        {
             nodes_to_begin_end[i].insert(i);
         }
     }
-    map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeating_nodes = new map<set<uint32_t>, vector<vector<paf_rec_str_t>>>();
-    map<set<uint32_t>,vector<vector<paf_rec_str_t>>> buf_repeating_nodes = map<set<uint32_t>, vector<vector<paf_rec_str_t>>>();
-    for(auto record: *ordered_records){
+    map<set<uint32_t>, vector<vector<paf_rec_str_t>>> *repeating_nodes = new map<set<uint32_t>, vector<vector<paf_rec_str_t>>>();
+    map<set<uint32_t>, vector<vector<paf_rec_str_t>>> buf_repeating_nodes = map<set<uint32_t>, vector<vector<paf_rec_str_t>>>();
+    for (auto record : *ordered_records)
+    {
         bool begin = true;
         int start = 0;
         set<uint32_t> current_result;
         set<set<uint32_t>> begin_end_set;
-        for(auto query: record){
-            if(begin){
+        for (auto query : record)
+        {
+            if (begin)
+            {
                 start = query.qs;
                 current_result.insert(query.tn);
                 begin_end_set.insert(nodes_to_begin_end[query.tn]);
                 begin = false;
-            }else{
-                if(query.qs == start){
+            }
+            else
+            {
+                if (query.qs == start)
+                {
                     current_result.insert(query.tn);
                     begin_end_set.insert(nodes_to_begin_end[query.tn]);
-                }else{
-                    if(current_result.size() > 1 && begin_end_set.size() > 1){ //begin_end_set.size() > 1 ?
+                }
+                else
+                {
+                    if (current_result.size() > 1 && begin_end_set.size() > 1)
+                    { // begin_end_set.size() > 1 ?
 
                         // bool flag = true;
                         // for(auto res: current_result){
@@ -544,13 +678,15 @@ map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeat_resolver::check_for_sam
                         //     cout << endl;
                         // }
 
-
-                        if(buf_repeating_nodes.find(current_result)==buf_repeating_nodes.end()){
+                        if (buf_repeating_nodes.find(current_result) == buf_repeating_nodes.end())
+                        {
                             buf_repeating_nodes[current_result] = vector<vector<paf_rec_str_t>>();
                         }
                         vector<paf_rec_str_t> buf;
-                        for(auto buffer: record){
-                            if(buffer.qs == start){
+                        for (auto buffer : record)
+                        {
+                            if (buffer.qs == start)
+                            {
                                 buf.push_back(buffer);
                             }
                         }
@@ -621,35 +757,41 @@ map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeat_resolver::check_for_sam
     //     // cout << endl;
     // }
     // free(nodes_to_begin_end);
-    for(auto x: buf_repeating_nodes){
-        if(x.second.size()>2){
+    for (auto x : buf_repeating_nodes)
+    {
+        if (x.second.size() > 2)
+        {
             (*repeating_nodes)[x.first] = x.second;
         }
     }
     return repeating_nodes;
 }
 
-
-map<uint32_t, vector<uint32_t>> repeat_resolver::checkForMatch(map<set<uint32_t>,vector<vector<paf_rec_str_t>>>* repeating_nodes, asg_t* graph){
+map<uint32_t, vector<uint32_t>> repeat_resolver::checkForMatch(map<set<uint32_t>, vector<vector<paf_rec_str_t>>> *repeating_nodes, asg_t *graph)
+{
     map<uint32_t, map<string, double>> sequence_minimizers;
     map<set<uint32_t>, map<uint32_t, uint32_t>> result;
     map<uint32_t, vector<uint32_t>> substitution_relation;
     map<uint32_t, uint32_t> substitution_relation_reversed;
-    map<set<uint32_t>,map<map<uint32_t,string>,string>>* to_align_new = new map<set<uint32_t>,map<map<uint32_t,string>,string>>();
-    for(auto x: *repeating_nodes){
-        (*to_align_new)[x.first] = map<map<uint32_t,string>,string>();
+    map<set<uint32_t>, map<map<uint32_t, string>, string>> *to_align_new = new map<set<uint32_t>, map<map<uint32_t, string>, string>>();
+    for (auto x : *repeating_nodes)
+    {
+        (*to_align_new)[x.first] = map<map<uint32_t, string>, string>();
         result[x.first] = map<uint32_t, uint32_t>();
-        for(auto y: x.first){
+        for (auto y : x.first)
+        {
             sequence_minimizers[y] = map<string, double>();
             result[x.first][y] = 0;
         }
     }
-    for(auto x: sequence_minimizers){
-        string current_seq = string(graph->seq[x.first>>1].seq);
-        if(x.first%2==1){
+    for (auto x : sequence_minimizers)
+    {
+        string current_seq = string(graph->seq[x.first >> 1].seq);
+        if (x.first % 2 == 1)
+        {
             current_seq = complement(current_seq);
         }
-        seq_mini_t* buf_minis = get_minimizer(current_seq, 31 ,17);
+        seq_mini_t *buf_minis = get_minimizer(current_seq, 31, 17);
         sequence_minimizers[x.first] = profile_minimizer(buf_minis);
         free(buf_minis);
         // vector<minimizer_profile_t> minimizer_profile = profile_minimizer(sequence_minimizers[x.first]);
@@ -667,30 +809,37 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::checkForMatch(map<set<uint32_t>
         // }
         // cout << graph->seq[x.first>>1].name << " max mini: " << max_mini << "," <<" percentage: " << ((double)max_count / (double)total) * 100 << " against "<< ((double)1 / (double)num_bin) * 100 << endl;
     }
-    for(auto x: *repeating_nodes){
+    for (auto x : *repeating_nodes)
+    {
         map<uint32_t, map<string, double>> full_sequence_minis;
-        for(auto node: x.first){
+        for (auto node : x.first)
+        {
             full_sequence_minis[node] = sequence_minimizers[node];
             // cout << graph->seq[node>>1].name << "\t";
         }
         // cout << endl;
-        for(auto query: x.second){
-            map<uint32_t,string> current_sub_map = map<uint32_t,string>();
+        for (auto query : x.second)
+        {
+            map<uint32_t, string> current_sub_map = map<uint32_t, string>();
             vector<string> read_sequences;
             string read_sequence_max;
             map<uint32_t, map<string, double>> sub_sequence_minis;
             uint32_t end = UINT32_MAX;
-            for(auto record: query){
-                if(record.qe < end){
+            for (auto record : query)
+            {
+                if (record.qe < end)
+                {
                     end = record.qe;
                 }
             }
 
-            for(auto record: query){
+            for (auto record : query)
+            {
                 uint32_t buf_end = record.te;
                 uint32_t buf_start = record.ts;
-                string current_unitig_seq = graph->seq[record.tn>>1].seq;
-                if(record.tn%2==1){
+                string current_unitig_seq = graph->seq[record.tn >> 1].seq;
+                if (record.tn % 2 == 1)
+                {
                     uint32_t buf_length = record.tl;
                     uint32_t buffer_end = buf_length - buf_start;
                     buf_start = buf_length - buf_end;
@@ -701,39 +850,49 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::checkForMatch(map<set<uint32_t>
                 // sub_sequence_minis[record.tn] = sub_minimizer(full_sequence_minis[record.tn], buf_start, buf_end);
                 // cout << "Total length " << record.tl << ": " << "start at " << record.ts << ", end at: " << record.te << endl;
 
-                current_sub_map[record.tn] = string(current_unitig_seq,buf_start,buf_end);
+                current_sub_map[record.tn] = string(current_unitig_seq, buf_start, buf_end);
                 // current_sub_map[record.tn] = current_unitig_seq;
-                if(record.tn % 2 == 0){
-                    read_sequences.push_back(translate(graph->seq[record.tn>>1].seq, buf_start , record.seq));
-                }else{
-                    read_sequences.push_back(translate(complement(graph->seq[record.tn>>1].seq), buf_start , record.seq));
+                if (record.tn % 2 == 0)
+                {
+                    read_sequences.push_back(translate(graph->seq[record.tn >> 1].seq, buf_start, record.seq));
+                }
+                else
+                {
+                    read_sequences.push_back(translate(complement(graph->seq[record.tn >> 1].seq), buf_start, record.seq));
                 }
                 // cout << buf_start << " to " << buf_end << ": " << buf_end - buf_start << endl;
                 // cout << sub_sequence_minis[record.tn]->pos.front()[0] << " to " << sub_sequence_minis[record.tn]->pos.back()[1] << ": " << sub_sequence_minis[record.tn]->pos.back()[1] - sub_sequence_minis[record.tn]->pos.front()[0] << endl;
             }
-            for(auto seq: read_sequences){
-                if(seq.size()>read_sequence_max.size()){
+            for (auto seq : read_sequences)
+            {
+                if (seq.size() > read_sequence_max.size())
+                {
                     read_sequence_max = seq;
                 }
             }
             (*to_align_new)[x.first][current_sub_map] = read_sequence_max;
-            seq_mini_t* read_minimizer = get_minimizer(read_sequence_max, 31 ,17);
+            seq_mini_t *read_minimizer = get_minimizer(read_sequence_max, 31, 17);
             map<string, double> read_minimizer_profile = profile_minimizer(read_minimizer);
             map<uint32_t, double> minimizer_match_result;
-            for(auto xx: sub_sequence_minis){
-                minimizer_match_result[xx.first] = minimizer_match(read_minimizer_profile,xx.second);
+            for (auto xx : sub_sequence_minis)
+            {
+                minimizer_match_result[xx.first] = minimizer_match(read_minimizer_profile, xx.second);
             }
             // map<uint32_t, uint64_t> match_result = match_minimizers(read_minimizer, sub_sequence_minis);
             double max_val = 0;
-            for(auto res: minimizer_match_result){
+            for (auto res : minimizer_match_result)
+            {
                 // cout << graph->seq[res.first>>1].name << ": " << res.second << endl;
-                if(res.second > max_val){
+                if (res.second > max_val)
+                {
                     max_val = res.second;
                 }
             }
-            for(auto res: minimizer_match_result){
+            for (auto res : minimizer_match_result)
+            {
                 result[x.first][res.first] += 1;
-                if(res.second <= max_val * 0.9){
+                if (res.second <= max_val * 0.9)
+                {
                     result[x.first][res.first] -= 1;
                 }
             }
@@ -804,31 +963,40 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::checkForMatch(map<set<uint32_t>
     //     cout << endl;
     // }
 
-    for(auto res: result){
+    for (auto res : result)
+    {
         bool solvable = true;
         uint32_t max_val = 0;
         uint32_t max_result;
-        for(auto buf: res.first){
-            cout << graph->seq[buf>>1].name << "\t";
+        for (auto buf : res.first)
+        {
+            cout << graph->seq[buf >> 1].name << "\t";
         }
         // cout << endl;
-        for(auto x: res.second){
-            if(x.second > max_val){
+        for (auto x : res.second)
+        {
+            if (x.second > max_val)
+            {
                 max_val = x.second;
                 max_result = x.first;
             }
             // cout << graph->seq[x.first>>1].name << ": " << x.second <<"\t" << endl;
         }
-        for(auto x: res.second){
-            if(x.first!=max_result && (double)x.second>=((double)max_val)*0.8){
+        for (auto x : res.second)
+        {
+            if (x.first != max_result && (double)x.second >= ((double)max_val) * 0.8)
+            {
                 solvable = false;
             }
             // cout << graph->seq[x.first>>1].name << ": " << x.second <<"\t" << endl;
         }
-        if(!solvable){
+        if (!solvable)
+        {
             cout << "Unsolvable" << endl;
-        }else{
-            cout << "Solveable: " << graph->seq[max_result>>1].name << endl;
+        }
+        else
+        {
+            cout << "Solveable: " << graph->seq[max_result >> 1].name << endl;
             to_align_new->erase(res.first);
         }
         // for(auto x:res.second){
@@ -839,88 +1007,109 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::checkForMatch(map<set<uint32_t>
     return substitution_relation;
 }
 
-map<uint32_t, vector<uint32_t>> repeat_resolver::aligning_for_variantion(map<set<uint32_t>,map<map<uint32_t,string>,string>>* repeating_nodes, asg_t* graph){
+map<uint32_t, vector<uint32_t>> repeat_resolver::aligning_for_variantion(map<set<uint32_t>, map<map<uint32_t, string>, string>> *repeating_nodes, asg_t *graph)
+{
     mm_idxopt_t iopt;
-	mm_mapopt_t mopt;
-	mopt.min_cnt = 500;
-	int n_threads = 3;
-	mm_verbose = 2; // disable message output to stderr
-	mm_set_opt(0, &iopt, &mopt);
-	mopt.flag |= MM_F_CIGAR; // perform alignment
-	mopt.flag |= MM_F_OUT_CS; // perform alignment
-    params.k = 31 ;
-    params.w = 31 ;
-    params.s = 7 ;
-    params.B = 28 ;
-    for(auto repeats: *repeating_nodes){
+    mm_mapopt_t mopt;
+    mopt.min_cnt = 500;
+    int n_threads = 3;
+    mm_verbose = 2; // disable message output to stderr
+    mm_set_opt(0, &iopt, &mopt);
+    mopt.flag |= MM_F_CIGAR;  // perform alignment
+    mopt.flag |= MM_F_OUT_CS; // perform alignment
+    params.k = 31;
+    params.w = 31;
+    params.s = 7;
+    params.B = 28;
+    for (auto repeats : *repeating_nodes)
+    {
         set<uint32_t> nodes = repeats.first;
-        map<map<uint32_t,string>,string> queries = repeats.second;
-        for(auto query: queries){
+        map<map<uint32_t, string>, string> queries = repeats.second;
+        for (auto query : queries)
+        {
             // for(auto buf: queries){
             //     cout << buf.second.length() << "\t";
             // }
             // cout << endl;
 
-
-            Seqhash *hasher = seqhashCreate (params.k, params.w, params.s) ;
+            Seqhash *hasher = seqhashCreate(params.k, params.w, params.s);
             // cout << "factor1 " << hasher->factor1 << endl;
             // cout << "shift1 " << hasher->shift1 << endl;
             // cout << "factor2 " << hasher->factor2 << endl;
             // cout << "shift2 " << hasher->shift2 << endl;
-            Modset *ms = modsetCreate (hasher, params.B, 0) ;
-            Reference *ref = referenceCreate (ms, 1 << 26) ;
-            string totLen = 0 ;
-            int id ;
-            dictAdd (ref->dict, strdup("query_sequence"), &id);
-            array (ref->len, id, int) = query.second.length() ;
-            totLen += query.second.length() ;
-            char* seq_str = strdup(query.second.c_str());
-            SeqhashRCiterator *mi = modRCiterator (ref->ms->hasher, seq_str, query.second.length()) ;
-            U64 hash ; int pos ;
-            while (modRCnext (mi, &hash, &pos, 0))
-            { U32 index = modsetIndexFind (ref->ms, hash, TRUE) ;
-            if (index)
-                { if (ref->max+1 >= ref->size) die ("reference size overflow") ;
-                ref->index[ref->max] = index ;
-                ++ref->depth[index] ;
-                ref->offset[ref->max] = pos ;
-                ref->id[ref->max] = id ;
-                ++ref->max ;
+            Modset *ms = modsetCreate(hasher, params.B, 0);
+            Reference *ref = referenceCreate(ms, 1 << 26);
+            string totLen = 0;
+            int id;
+            dictAdd(ref->dict, strdup("query_sequence"), &id);
+            array(ref->len, id, int) = query.second.length();
+            totLen += query.second.length();
+            char *seq_str = strdup(query.second.c_str());
+            SeqhashRCiterator *mi = modRCiterator(ref->ms->hasher, seq_str, query.second.length());
+            U64 hash;
+            int pos;
+            while (modRCnext(mi, &hash, &pos, 0))
+            {
+                U32 index = modsetIndexFind(ref->ms, hash, TRUE);
+                if (index)
+                {
+                    if (ref->max + 1 >= ref->size)
+                        die("reference size overflow");
+                    ref->index[ref->max] = index;
+                    ++ref->depth[index];
+                    ref->offset[ref->max] = pos;
+                    ref->id[ref->max] = id;
+                    ++ref->max;
                 }
             }
-            seqhashRCiteratorDestroy (mi) ;
+            seqhashRCiteratorDestroy(mi);
 
             // fprintf (stdout, "  %d hashes from %d reference sequences, total length %lld\n",
             //     ref->max, dictMax(ref->dict), totLen) ;
-            int i ; U32 *d = &ref->depth[1] ; U32 n1 = 0, n2 = 0, nM = 0 ;
-            for (i = 1 ; i <= ref->ms->max ; ++i, ++d)
-                if (*d == 1) { msSetCopy1 (ref->ms, i) ; ++n1 ; }
-                else if (*d == 2) { msSetCopy2 (ref->ms, i) ; ++n2 ; }
-                else { msSetCopyM (ref->ms, i) ; ++nM ; }
-            modsetPack (ref->ms) ;
-            referencePack (ref) ;
+            int i;
+            U32 *d = &ref->depth[1];
+            U32 n1 = 0, n2 = 0, nM = 0;
+            for (i = 1; i <= ref->ms->max; ++i, ++d)
+                if (*d == 1)
+                {
+                    msSetCopy1(ref->ms, i);
+                    ++n1;
+                }
+                else if (*d == 2)
+                {
+                    msSetCopy2(ref->ms, i);
+                    ++n2;
+                }
+                else
+                {
+                    msSetCopyM(ref->ms, i);
+                    ++nM;
+                }
+            modsetPack(ref->ms);
+            referencePack(ref);
             // cout << ref->dict->size << endl;
-
-
 
             map<uint32_t, set<string>> all_unique_kmers = map<uint32_t, set<string>>();
 
-
-            for(auto node : query.first){
-                const char* buf = node.second.c_str();
-                const char** buf_seq = const_cast<const char**>(&buf);
-                const char** buf_name = const_cast<const char**>(&graph->seq[node.first>>1].name);
+            for (auto node : query.first)
+            {
+                const char *buf = node.second.c_str();
+                const char **buf_seq = const_cast<const char **>(&buf);
+                const char **buf_name = const_cast<const char **>(&graph->seq[node.first >> 1].name);
                 mm_idx_t *this_node = mm_idx_str(iopt.w, iopt.k, iopt.flag, iopt.bucket_bits, 1, buf_seq, buf_name);
 
                 mm_tbuf_t *tbuf = mm_tbuf_init();
                 mm_mapopt_update(&mopt, this_node);
-                for(auto other_node: query.first){
-                    if(other_node != node){
+                for (auto other_node : query.first)
+                {
+                    if (other_node != node)
+                    {
                         int j, i, n_reg;
                         // cout << graph->seq[other_node.first>>1].name << ((other_node.first%2==1) ? "-" : "+") << "\t";
                         // cout << graph->seq[node.first>>1].name << ((node.first%2==1) ? "-" : "+") << endl;
-                        mm_reg1_t *reg = mm_map(this_node, other_node.second.length(), other_node.second.c_str(), &n_reg, tbuf, &mopt, graph->seq[other_node.first>>1].name);
-                        for (j = 0; j < n_reg; ++j) { // traverse hits and print them out
+                        mm_reg1_t *reg = mm_map(this_node, other_node.second.length(), other_node.second.c_str(), &n_reg, tbuf, &mopt, graph->seq[other_node.first >> 1].name);
+                        for (j = 0; j < n_reg; ++j)
+                        { // traverse hits and print them out
                             mm_reg1_t *r = &reg[j];
                             assert(r->p); // with MM_F_CIGAR, this should not be NULL
                             // printf("%s\t%d\t%d\t%d\t%c\t", graph->seq[other_node.first>>1].name, other_node.second.length(), r->qs, r->qe, "+-"[r->rev]);
@@ -929,16 +1118,19 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::aligning_for_variantion(map<set
                             char *buf = NULL;
                             void *km = NULL;
                             int max_len = 0;
-                            int result = mm_gen_cs(km,&buf,&max_len,const_cast<const mm_idx_t*>(this_node),const_cast<const mm_reg1_t*>(r),other_node.second.c_str(),1);
+                            int result = mm_gen_cs(km, &buf, &max_len, const_cast<const mm_idx_t *>(this_node), const_cast<const mm_reg1_t *>(r), other_node.second.c_str(), 1);
                             stringstream res = stringstream();
-                            for(int i = 0 ; i < result; i++){
-                                res << *(buf+i);
+                            for (int i = 0; i < result; i++)
+                            {
+                                res << *(buf + i);
                             }
                             // cout << res.str() << endl;
-                            set<string> unique_kmers = find_variant(other_node.second,  r->qs,  res.str(), 31);
-                            for(auto k: unique_kmers){
+                            set<string> unique_kmers = find_variant(other_node.second, r->qs, res.str(), 31);
+                            for (auto k : unique_kmers)
+                            {
                                 // cout << k << endl;
-                                if(all_unique_kmers.find(other_node.first)==all_unique_kmers.end()){
+                                if (all_unique_kmers.find(other_node.first) == all_unique_kmers.end())
+                                {
                                     all_unique_kmers[other_node.first] = set<string>();
                                 }
                                 all_unique_kmers[other_node.first].insert(k);
@@ -978,19 +1170,24 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::aligning_for_variantion(map<set
             //         (arrayMax(seeds)-missed)/(double)(arrayMax(seeds))) ;
             // }
 
-            map<uint32_t, float> kmer_appearance_count = map<uint32_t,float>();
-            for(auto counting: all_unique_kmers){
+            map<uint32_t, float> kmer_appearance_count = map<uint32_t, float>();
+            for (auto counting : all_unique_kmers)
+            {
                 uint32_t counter = 0;
-                for(auto k_mer: counting.second){
-                    SeqhashRCiterator *mi_buf = modRCiterator (ref->ms->hasher, strdup(k_mer.c_str()), 31);
-                    U64 hash ; int pos ;
+                for (auto k_mer : counting.second)
+                {
+                    SeqhashRCiterator *mi_buf = modRCiterator(ref->ms->hasher, strdup(k_mer.c_str()), 31);
+                    U64 hash;
+                    int pos;
                     // int buf_counter = 0;
-                    while(modRCnext (mi_buf, &hash, &pos, 0)){
+                    while (modRCnext(mi_buf, &hash, &pos, 0))
+                    {
                         // buf_counter++;
-                        U32 index = modsetIndexFind (ref->ms, hash, FALSE) ;
+                        U32 index = modsetIndexFind(ref->ms, hash, FALSE);
                         // cout << index << endl;
                         // assert(index);
-                        if(index){
+                        if (index)
+                        {
                             counter++;
                         }
                     }
@@ -998,23 +1195,26 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::aligning_for_variantion(map<set
                     // cout << k_mer.length()<< endl;
                     // cout << buf_counter << endl;
                     // assert(buf_counter<=1);
-
                 }
-                kmer_appearance_count[counting.first] = ((float)counter)/counting.second.size();
+                kmer_appearance_count[counting.first] = ((float)counter) / counting.second.size();
             }
 
             float buff_max_num = 0;
-            for(auto buff: kmer_appearance_count){
-                cout << graph->seq[buff.first>>1].name << "\t";
-                if(buff.second>buff_max_num){
+            for (auto buff : kmer_appearance_count)
+            {
+                cout << graph->seq[buff.first >> 1].name << "\t";
+                if (buff.second > buff_max_num)
+                {
                     buff_max_num = buff.second;
                 }
             }
             cout << endl;
 
-            for(auto buff: kmer_appearance_count){
-                cout << graph->seq[buff.first>>1].name << "\t" << (float)((int)(buff.second*10000))/100 << "% ";
-                if(buff_max_num >= buff.second-0.000001 && buff_max_num <= buff.second+0.00001){
+            for (auto buff : kmer_appearance_count)
+            {
+                cout << graph->seq[buff.first >> 1].name << "\t" << (float)((int)(buff.second * 10000)) / 100 << "% ";
+                if (buff_max_num >= buff.second - 0.000001 && buff_max_num <= buff.second + 0.00001)
+                {
                     cout << "\tMax!!!";
                 }
                 cout << endl;
@@ -1024,14 +1224,19 @@ map<uint32_t, vector<uint32_t>> repeat_resolver::aligning_for_variantion(map<set
     return map<uint32_t, vector<uint32_t>>();
 }
 
-vector<vector<uint32_t>>* repeat_resolver::count_support_reads_for_branches(vector<vector<paf_rec_str_t>>* ordered_records, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, asg_t* graph){
-    vector<uint32_t>* nodes_to_begin_end = new vector<uint32_t>[graph->n_seq*2];
+vector<vector<uint32_t>> *repeat_resolver::count_support_reads_for_branches(vector<vector<paf_rec_str_t>> *ordered_records, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph, asg_t *graph)
+{
+    vector<uint32_t> *nodes_to_begin_end = new vector<uint32_t>[graph->n_seq * 2];
     map<vector<uint32_t>, int> edge_counting;
-    vector<vector<uint32_t>>* edge_counting_filtered = new vector<vector<uint32_t>>();
-    for(auto loop_begin: *bubble_chain_graph){
-        for(auto loop_end: loop_begin.second){
-            if(loop_end.second.size()>1){
-                for(auto node: loop_end.second){
+    vector<vector<uint32_t>> *edge_counting_filtered = new vector<vector<uint32_t>>();
+    for (auto loop_begin : *bubble_chain_graph)
+    {
+        for (auto loop_end : loop_begin.second)
+        {
+            if (loop_end.second.size() > 1)
+            {
+                for (auto node : loop_end.second)
+                {
                     // cout << node;
                     nodes_to_begin_end[node].push_back(loop_begin.first);
                     nodes_to_begin_end[node].push_back(loop_end.first);
@@ -1039,7 +1244,8 @@ vector<vector<uint32_t>>* repeat_resolver::count_support_reads_for_branches(vect
             }
         }
     }
-    for(auto i : *ordered_records){
+    for (auto i : *ordered_records)
+    {
         queue<uint32_t> supporting_branches;
         // set<uint32_t> observed_chains;
         uint32_t prev_begin = 0;
@@ -1048,27 +1254,32 @@ vector<vector<uint32_t>>* repeat_resolver::count_support_reads_for_branches(vect
         uint32_t this_begin = 0;
         uint32_t this_end = 0;
         bool invalid = false;
-        for(int a = 0; a < i.size(); a ++ ){
-            if(prev_start == i[a].qs){
+        for (int a = 0; a < i.size(); a++)
+        {
+            if (prev_start == i[a].qs)
+            {
                 continue;
             }
             prev_start = i[a].qs;
-            if(invalid){
+            if (invalid)
+            {
                 break;
             }
-            if(nodes_to_begin_end[i[a].tn].size() != 0){
+            if (nodes_to_begin_end[i[a].tn].size() != 0)
+            {
                 this_begin = nodes_to_begin_end[i[a].tn][0];
                 this_end = nodes_to_begin_end[i[a].tn][1];
 
-                            // cout << graph->seq[this_begin>>1].name << " " << graph->seq[this_end>>1].name << endl;
-                                // if(this_begin!=this_end && !observed_chains.insert(this_begin>>1).second ){
-                                // }else
-                if (a==0||((this_begin) == (prev_end))){
+                // cout << graph->seq[this_begin>>1].name << " " << graph->seq[this_end>>1].name << endl;
+                // if(this_begin!=this_end && !observed_chains.insert(this_begin>>1).second ){
+                // }else
+                if (a == 0 || ((this_begin) == (prev_end)))
+                {
                     // if(supporting_branches.size() == 0){
-                        supporting_branches.push(this_begin);
+                    supporting_branches.push(this_begin);
                     // }
                     // if(this_end != this_begin){
-                        supporting_branches.push(this_end);
+                    supporting_branches.push(this_end);
                     // }
                 }
                 prev_begin = this_begin;
@@ -1077,65 +1288,80 @@ vector<vector<uint32_t>>* repeat_resolver::count_support_reads_for_branches(vect
             // assert(found);
         }
         vector<uint32_t> current_result;
-        while(!supporting_branches.empty()){
+        while (!supporting_branches.empty())
+        {
             current_result.push_back(supporting_branches.front());
             supporting_branches.pop();
         }
-        if(current_result.size() > 0){
+        if (current_result.size() > 0)
+        {
             vector<uint32_t> current_result_reversed;
-            for(auto a: current_result){
-                current_result_reversed.push_back(a^1);
+            for (auto a : current_result)
+            {
+                current_result_reversed.push_back(a ^ 1);
             }
             reverse(current_result_reversed.begin(), current_result_reversed.end());
-            if(edge_counting.find(current_result)==edge_counting.end()){
+            if (edge_counting.find(current_result) == edge_counting.end())
+            {
                 edge_counting[current_result] = 0;
             }
             edge_counting[current_result]++;
-            if(edge_counting.find(current_result_reversed)==edge_counting.end()){
+            if (edge_counting.find(current_result_reversed) == edge_counting.end())
+            {
                 edge_counting[current_result_reversed] = 0;
             }
             edge_counting[current_result_reversed]++;
         }
     }
-    for(auto a: edge_counting){
+    for (auto a : edge_counting)
+    {
         // if(a.second>4 || (a.second>1 && a.first.size() > 2)){
-        if(a.second>=1 || (a.second>=1 && a.first.size() >= 1)){
+        if (a.second >= 1 || (a.second >= 1 && a.first.size() >= 1))
+        {
             edge_counting_filtered->push_back(a.first);
         }
     }
-    sort(edge_counting_filtered->begin(), edge_counting_filtered->end(), [ ]( const auto& lhs, const auto& rhs )
-    {
-        return lhs.size() < rhs.size();
-    });
+    sort(edge_counting_filtered->begin(), edge_counting_filtered->end(), [](const auto &lhs, const auto &rhs)
+         { return lhs.size() < rhs.size(); });
     return edge_counting_filtered;
 }
 
-set<vector<uint32_t>>* repeat_resolver::cover_gaps_in_long_path(vector<vector<uint32_t>>* supported_pathes){
+set<vector<uint32_t>> *repeat_resolver::cover_gaps_in_long_path(vector<vector<uint32_t>> *supported_pathes)
+{
     set<vector<uint32_t>> short_edges;
     set<vector<uint32_t>> used_edges;
-    set<vector<uint32_t>>* result = new set<vector<uint32_t>>();
+    set<vector<uint32_t>> *result = new set<vector<uint32_t>>();
 
-    for(auto b : *supported_pathes){
-        if(b.size()==2){
+    for (auto b : *supported_pathes)
+    {
+        if (b.size() == 2)
+        {
             short_edges.insert(b);
-        }else{
+        }
+        else
+        {
             uint32_t prev_beg;
             uint32_t prev_end;
             uint32_t this_beg;
             uint32_t this_end;
             vector<uint32_t> current_result;
             bool valid = true;
-            for(int a = 0; a < b.size()/2; a++){
-                this_beg = b[a*2];
-                this_end = b[a*2+1];
-                if(a != 0 && this_beg != prev_end){
+            for (int a = 0; a < b.size() / 2; a++)
+            {
+                this_beg = b[a * 2];
+                this_end = b[a * 2 + 1];
+                if (a != 0 && this_beg != prev_end)
+                {
                     vector<uint32_t> wrapper;
                     wrapper.push_back(prev_end);
                     wrapper.push_back(this_beg);
-                    if(short_edges.find(wrapper) != short_edges.end()){
+                    if (short_edges.find(wrapper) != short_edges.end())
+                    {
                         current_result.push_back(prev_end);
                         current_result.push_back(this_beg);
-                    }else{
+                    }
+                    else
+                    {
                         valid = false;
                         break;
                     }
@@ -1145,37 +1371,45 @@ set<vector<uint32_t>>* repeat_resolver::cover_gaps_in_long_path(vector<vector<ui
                 current_result.push_back(this_beg);
                 current_result.push_back(this_end);
             }
-            if(valid){
-                for(int a = 0; a < current_result.size()/2; a++){
+            if (valid)
+            {
+                for (int a = 0; a < current_result.size() / 2; a++)
+                {
                     vector<uint32_t> wrapper;
-                    wrapper.push_back(current_result[a*2]);
-                    wrapper.push_back(current_result[a*2+1]);
+                    wrapper.push_back(current_result[a * 2]);
+                    wrapper.push_back(current_result[a * 2 + 1]);
                     used_edges.insert(wrapper);
-                    wrapper[0] = current_result[a*2+1]^1;
-                    wrapper[1] = current_result[a*2]^1;
+                    wrapper[0] = current_result[a * 2 + 1] ^ 1;
+                    wrapper[1] = current_result[a * 2] ^ 1;
                     used_edges.insert(wrapper);
                 }
                 vector<uint32_t> current_result_reversed = current_result;
-                for(int a = 0; a < current_result_reversed.size(); a++){
+                for (int a = 0; a < current_result_reversed.size(); a++)
+                {
                     current_result_reversed[a] = current_result_reversed[a] ^ 1;
                 }
                 reverse(current_result_reversed.begin(), current_result_reversed.end());
-                if(result->find(current_result_reversed)==result->end() && result->find(current_result) == result->end()){
+                if (result->find(current_result_reversed) == result->end() && result->find(current_result) == result->end())
+                {
                     result->insert(current_result);
                     result->insert(current_result_reversed);
                 }
             }
         }
     }
-    for(auto a: short_edges){
-        if(used_edges.find(a) == used_edges.end()){
+    for (auto a : short_edges)
+    {
+        if (used_edges.find(a) == used_edges.end())
+        {
             vector<uint32_t> current_result = a;
             vector<uint32_t> current_result_reversed = current_result;
-            for(int b = 0; b < current_result_reversed.size(); b++){
-                    current_result_reversed[b] = current_result_reversed[b] ^ 1;
-                }
+            for (int b = 0; b < current_result_reversed.size(); b++)
+            {
+                current_result_reversed[b] = current_result_reversed[b] ^ 1;
+            }
             reverse(current_result_reversed.begin(), current_result_reversed.end());
-            if(result->find(current_result_reversed)==result->end() && result->find(current_result) == result->end()){
+            if (result->find(current_result_reversed) == result->end() && result->find(current_result) == result->end())
+            {
                 result->insert(current_result);
             }
         }
@@ -1183,73 +1417,92 @@ set<vector<uint32_t>>* repeat_resolver::cover_gaps_in_long_path(vector<vector<ui
     return result;
 }
 
-set<vector<uint32_t>>* repeat_resolver::merge_long_pathes(set<vector<uint32_t>>* path_set){
-    map<vector<uint32_t>,vector<vector<uint32_t>>> start_map;
-    map<vector<uint32_t>,vector<vector<uint32_t>>> end_map;
+set<vector<uint32_t>> *repeat_resolver::merge_long_pathes(set<vector<uint32_t>> *path_set)
+{
+    map<vector<uint32_t>, vector<vector<uint32_t>>> start_map;
+    map<vector<uint32_t>, vector<vector<uint32_t>>> end_map;
     set<vector<uint32_t>> extended_path;
     set<set<uint32_t>> buffer_result;
-    set<vector<uint32_t>>* result = new set<vector<uint32_t>>();
-    set<vector<uint32_t>>* final_result = new set<vector<uint32_t>>();
-    for(auto b : *path_set){
-        if(b.size()>2){
+    set<vector<uint32_t>> *result = new set<vector<uint32_t>>();
+    set<vector<uint32_t>> *final_result = new set<vector<uint32_t>>();
+    for (auto b : *path_set)
+    {
+        if (b.size() > 2)
+        {
             vector<uint32_t> start_wrapper;
             vector<uint32_t> end_wrapper;
             start_wrapper.push_back(b[0]);
             start_wrapper.push_back(b[1]);
-            end_wrapper.push_back(b[b.size()-2]);
-            end_wrapper.push_back(b[b.size()-1]);
-            if(start_map.find(start_wrapper)==start_map.end()){
+            end_wrapper.push_back(b[b.size() - 2]);
+            end_wrapper.push_back(b[b.size() - 1]);
+            if (start_map.find(start_wrapper) == start_map.end())
+            {
                 start_map[start_wrapper] = vector<vector<uint32_t>>();
             }
-            if(end_map.find(end_wrapper)==end_map.end()){
+            if (end_map.find(end_wrapper) == end_map.end())
+            {
                 end_map[end_wrapper] = vector<vector<uint32_t>>();
             }
             start_map[start_wrapper].push_back(b);
             end_map[end_wrapper].push_back(b);
         }
     }
-    for(auto iterate_starts: start_map){
-        if(end_map.find(iterate_starts.first)!=end_map.end()){
+    for (auto iterate_starts : start_map)
+    {
+        if (end_map.find(iterate_starts.first) != end_map.end())
+        {
             vector<vector<uint32_t>> beginnings = iterate_starts.second;
             vector<vector<uint32_t>> endings = end_map[iterate_starts.first];
-            for(auto begin: beginnings){
+            for (auto begin : beginnings)
+            {
                 extended_path.insert(begin);
-                for(auto end: endings){
+                for (auto end : endings)
+                {
                     extended_path.insert(end);
                     vector<uint32_t> extended_result = end;
-                    for(int i=2; i<begin.size(); i++){
+                    for (int i = 2; i < begin.size(); i++)
+                    {
                         extended_result.push_back(begin[i]);
                     }
                     vector<uint32_t> extended_result_reversed = extended_result;
-                    for(int a = 0; a < extended_result_reversed.size(); a++){
+                    for (int a = 0; a < extended_result_reversed.size(); a++)
+                    {
                         extended_result_reversed[a] = extended_result_reversed[a] ^ 1;
                     }
                     reverse(extended_result_reversed.begin(), extended_result_reversed.end());
-                    if(result->find(extended_result_reversed)==result->end() && result->find(extended_result) == result->end()){
+                    if (result->find(extended_result_reversed) == result->end() && result->find(extended_result) == result->end())
+                    {
                         result->insert(extended_result);
                     }
                 }
             }
         }
     }
-    for(auto b : *path_set){
-        if(b.size()>2 && extended_path.find(b)==extended_path.end()){
+    for (auto b : *path_set)
+    {
+        if (b.size() > 2 && extended_path.find(b) == extended_path.end())
+        {
             vector<uint32_t> extended_result_reversed = b;
-            for(int a = 0; a < extended_result_reversed.size(); a++){
+            for (int a = 0; a < extended_result_reversed.size(); a++)
+            {
                 extended_result_reversed[a] = extended_result_reversed[a] ^ 1;
             }
             reverse(extended_result_reversed.begin(), extended_result_reversed.end());
-            if(result->find(extended_result_reversed)==result->end() && result->find(b) == result->end()){
+            if (result->find(extended_result_reversed) == result->end() && result->find(b) == result->end())
+            {
                 result->insert(b);
             }
         }
     }
-    for(auto b: *result){
+    for (auto b : *result)
+    {
         set<uint32_t> current_set;
-        for(auto a: b){
-            current_set.insert(a>>1);
+        for (auto a : b)
+        {
+            current_set.insert(a >> 1);
         }
-        if(buffer_result.insert(current_set).second){
+        if (buffer_result.insert(current_set).second)
+        {
             final_result->insert(b);
         }
     }
@@ -1257,19 +1510,24 @@ set<vector<uint32_t>>* repeat_resolver::merge_long_pathes(set<vector<uint32_t>>*
     return final_result;
 }
 
-set<vector<uint32_t>>* repeat_resolver::recover_unlinearized_branches(set<vector<uint32_t>>* path_set, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph){
-    set<vector<uint32_t>>* result = new set<vector<uint32_t>>();
-    map<uint32_t,map<uint32_t,set<uint32_t>>> begin_end_map = *bubble_chain_graph;
-    map<uint32_t,map<uint32_t,set<uint32_t>>> end_begin_map;
-    for(auto begin: begin_end_map){
-        for(auto end: begin_end_map){
-            if(end_begin_map.find(end.first)==end_begin_map.end()){
+set<vector<uint32_t>> *repeat_resolver::recover_unlinearized_branches(set<vector<uint32_t>> *path_set, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph)
+{
+    set<vector<uint32_t>> *result = new set<vector<uint32_t>>();
+    map<uint32_t, map<uint32_t, set<uint32_t>>> begin_end_map = *bubble_chain_graph;
+    map<uint32_t, map<uint32_t, set<uint32_t>>> end_begin_map;
+    for (auto begin : begin_end_map)
+    {
+        for (auto end : begin_end_map)
+        {
+            if (end_begin_map.find(end.first) == end_begin_map.end())
+            {
                 end_begin_map[end.first] = map<uint32_t, set<uint32_t>>();
             }
             end_begin_map[end.first][begin.first] = begin_end_map[begin.first][end.first];
         }
     }
-    for(auto p: *path_set){
+    for (auto p : *path_set)
+    {
         vector<uint32_t> current_result = p;
         // uint32_t counting = current_result.size();
         set<uint32_t> begin_expand_set;
@@ -1277,13 +1535,18 @@ set<vector<uint32_t>>* repeat_resolver::recover_unlinearized_branches(set<vector
         set<uint32_t> expanded_begin_set;
         set<uint32_t> expanded_end_set;
         begin_expand_set.insert(p[0]);
-        end_expand_set.insert(p[p.size()-1]);
-        while(begin_expand_set.size()!=0){
+        end_expand_set.insert(p[p.size() - 1]);
+        while (begin_expand_set.size() != 0)
+        {
             set<uint32_t> new_begin_expand_set;
-            for(auto begin: begin_expand_set){
-                if(end_begin_map[begin].size()!=0){
-                    for(auto x: end_begin_map[begin]){
-                        if(x.second.size() > 0 && expanded_begin_set.insert(x.first).second){
+            for (auto begin : begin_expand_set)
+            {
+                if (end_begin_map[begin].size() != 0)
+                {
+                    for (auto x : end_begin_map[begin])
+                    {
+                        if (x.second.size() > 0 && expanded_begin_set.insert(x.first).second)
+                        {
                             new_begin_expand_set.insert(x.first);
                             current_result.push_back(x.first);
                             current_result.push_back(begin);
@@ -1293,12 +1556,17 @@ set<vector<uint32_t>>* repeat_resolver::recover_unlinearized_branches(set<vector
             }
             begin_expand_set = new_begin_expand_set;
         }
-        while(end_expand_set.size()!=0){
+        while (end_expand_set.size() != 0)
+        {
             set<uint32_t> new_end_expand_set;
-            for(auto end: end_expand_set){
-                if(begin_end_map[end].size()!=0){
-                    for(auto x: begin_end_map[end]){
-                        if(x.second.size() > 0 && expanded_end_set.insert(x.first).second){
+            for (auto end : end_expand_set)
+            {
+                if (begin_end_map[end].size() != 0)
+                {
+                    for (auto x : begin_end_map[end])
+                    {
+                        if (x.second.size() > 0 && expanded_end_set.insert(x.first).second)
+                        {
                             new_end_expand_set.insert(x.first);
                             current_result.push_back(end);
                             current_result.push_back(x.first);
@@ -1314,90 +1582,105 @@ set<vector<uint32_t>>* repeat_resolver::recover_unlinearized_branches(set<vector
     return result;
 }
 
-void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<paf_rec_str_t>>* ordered_records, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, asg_t* graph){
+void get_seperate_haplotype(set<vector<uint32_t>> *set_of_pathes, vector<vector<paf_rec_str_t>> *ordered_records, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph, asg_t *graph)
+{
     mm_idxopt_t iopt;
-	mm_mapopt_t mopt;
-	mopt.min_cnt = 500;
-	int n_threads = 3;
-	mm_verbose = 2; // disable message output to stderr
-	mm_set_opt(0, &iopt, &mopt);
-	mopt.flag |= MM_F_CIGAR; // perform alignment
-	mopt.flag |= MM_F_OUT_CS; // perform alignment
-    params.k = 31 ;
-    params.w = 31 ;
-    params.s = 7 ;
-    params.B = 28 ;
-    Seqhash *hasher = seqhashCreate (params.k, params.w, params.s) ;
+    mm_mapopt_t mopt;
+    mopt.min_cnt = 500;
+    int n_threads = 3;
+    mm_verbose = 2; // disable message output to stderr
+    mm_set_opt(0, &iopt, &mopt);
+    mopt.flag |= MM_F_CIGAR;  // perform alignment
+    mopt.flag |= MM_F_OUT_CS; // perform alignment
+    params.k = 31;
+    params.w = 31;
+    params.s = 7;
+    params.B = 28;
+    Seqhash *hasher = seqhashCreate(params.k, params.w, params.s);
 
     // set<vector<uint32_t>> bubbles = set<vector<uint32_t>>();
     // set<set<uint32_t>> bubble_nodes = set<set<uint32_t>>();
     // map<uint32_t, set<string>> node_support_reads = map<uint32_t, set<string>>();
-    map<uint32_t, map<U64,uint32_t>> node_discrimitive_kmers = map<uint32_t, map<U64,uint32_t>>();
+    map<uint32_t, map<U64, uint32_t>> node_discrimitive_kmers = map<uint32_t, map<U64, uint32_t>>();
     map<string, vector<paf_rec_str_t>> name_rec = map<string, vector<paf_rec_str_t>>();
     map<set<uint32_t>, set<string>> path_suppport_reads = map<set<uint32_t>, set<string>>();
     map<uint32_t, set<set<uint32_t>>> node_path_map = map<uint32_t, set<set<uint32_t>>>();
 
-    for(auto rec: (*ordered_records)){
+    for (auto rec : (*ordered_records))
+    {
         name_rec[rec[0].qn] = rec;
     }
 
-	uint32_t n_vtx = graph->n_seq * 2;
+    uint32_t n_vtx = graph->n_seq * 2;
     int node_type[n_vtx];
 
-    vector<bubble_t*> bubbles_bubbles;
+    vector<bubble_t *> bubbles_bubbles;
 
-    for(uint32_t i=0; i<n_vtx; i++){
+    for (uint32_t i = 0; i < n_vtx; i++)
+    {
         node_type[i] = 0;
-        bubble_t* result = detect_bubble(graph, i);
-        if(result!=nullptr){
+        bubble_t *result = detect_bubble(graph, i);
+        if (result != nullptr)
+        {
             result->id = i;
             bubbles_bubbles.push_back(result);
         }
     }
 
-    for (int b=0; b<bubbles_bubbles.size(); b++) {
-        bubble_t* bubble = bubbles_bubbles[b];
+    for (int b = 0; b < bubbles_bubbles.size(); b++)
+    {
+        bubble_t *bubble = bubbles_bubbles[b];
         uint32_t bubble_beginning = bubble->begNode;
         uint32_t bubble_end = bubble->endNode;
 
         // cout << "start get bubble paths from " << g->seq[bubble_beginning/2].name<< " to " << g->seq[bubble_end/2].name << endl;
 
-        vector<asg_arc_t*> arc_stack;
-        vector<uint32_t> node_stack;  // DFS
+        vector<asg_arc_t *> arc_stack;
+        vector<uint32_t> node_stack; // DFS
         vector<uint32_t> node_vi_stack;
         node_stack.push_back(bubble_beginning);
         node_vi_stack.push_back(0);
         int stack_count = 0;
         uint32_t lastNode = bubble_beginning;
-        while(!node_stack.empty()) {
+        while (!node_stack.empty())
+        {
             uint32_t u = node_stack.back();
             uint32_t vi = node_vi_stack.back();
-            if (u==bubble_end) {
-                for (int ui=0; ui<node_stack.size(); ui++) {
+            if (u == bubble_end)
+            {
+                for (int ui = 0; ui < node_stack.size(); ui++)
+                {
                     // cout << g->seq[node_stack[ui]/2].name << " ";
-                    if(ui==0 || ui == node_stack.size()-1){
-                        if(node_type[node_stack[ui]] != 2){
+                    if (ui == 0 || ui == node_stack.size() - 1)
+                    {
+                        if (node_type[node_stack[ui]] != 2)
+                        {
                             node_type[node_stack[ui]] = BUBBLE_END_BEGIN;
                         }
-                    }else{
+                    }
+                    else
+                    {
                         node_type[node_stack[ui]] = BUBBLE_INSIDE;
                     }
                 }
-                stack_count ++;
+                stack_count++;
                 // cout << endl;
                 set<uint32_t> buf_path_node = set<uint32_t>();
-                for(auto arc_buf: arc_stack){
+                for (auto arc_buf : arc_stack)
+                {
                     // if(arc_buf->v!=bubble->endNode){
-                        buf_path_node.insert(arc_buf->v);
-                        node_discrimitive_kmers[arc_buf->v] = map<U64, uint32_t>();
+                    buf_path_node.insert(arc_buf->v);
+                    node_discrimitive_kmers[arc_buf->v] = map<U64, uint32_t>();
                     // }
                 }
                 buf_path_node.insert(bubble->begNode);
                 buf_path_node.insert(bubble->endNode);
                 node_discrimitive_kmers[bubble->begNode] = map<U64, uint32_t>();
                 node_discrimitive_kmers[bubble->endNode] = map<U64, uint32_t>();
-                for(auto buf_node: buf_path_node){
-                    if(node_path_map.find(buf_node)==node_path_map.end()){
+                for (auto buf_node : buf_path_node)
+                {
+                    if (node_path_map.find(buf_node) == node_path_map.end())
+                    {
                         node_path_map[buf_node] = set<set<uint32_t>>();
                     }
                     node_path_map[buf_node].insert(buf_path_node);
@@ -1415,14 +1698,17 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
             }
 
             uint32_t num_outgoing_arcs = asg_arc_n(graph, u);
-            if (vi < num_outgoing_arcs) {
+            if (vi < num_outgoing_arcs)
+            {
                 asg_arc_t *outgoing_arcs = asg_arc_a(graph, u);
                 uint32_t v = outgoing_arcs[vi].v;
                 node_vi_stack.back()++;
                 arc_stack.push_back(outgoing_arcs + vi);
                 node_stack.push_back(v);
                 node_vi_stack.push_back(0);
-            } else {
+            }
+            else
+            {
                 arc_stack.pop_back();
                 node_stack.pop_back();
                 node_vi_stack.pop_back();
@@ -1433,22 +1719,28 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
         // cout << "finish get bubble paths from " << bubble_beginning << " to " << bubble_end << endl;
     }
 
-    vector<bubble_t*> bubbles_pure;
-    vector<bubble_t*> complex_bubbles;
+    vector<bubble_t *> bubbles_pure;
+    vector<bubble_t *> complex_bubbles;
 
-
-    for(auto bubble: bubbles_bubbles){
+    for (auto bubble : bubbles_bubbles)
+    {
         // if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2 && bubble->paths_nodes.size()>24){
-        if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2){
+        if (node_type[bubble->begNode] != 2 && node_type[bubble->endNode] != 2)
+        {
             set<uint32_t> nodes;
-            for(auto path:bubble->paths_nodes){
-                for(auto node: path){
+            for (auto path : bubble->paths_nodes)
+            {
+                for (auto node : path)
+                {
                     nodes.insert(node);
                 }
             }
-            if(nodes.size()>12){
+            if (nodes.size() > 12)
+            {
                 complex_bubbles.push_back(bubble);
-            }else{
+            }
+            else
+            {
                 bubbles_pure.push_back(bubble);
             }
             // cout << endl;
@@ -1458,29 +1750,38 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
             //     }
             //     cout << endl;
             // }
-        }else{
+        }
+        else
+        {
             delete bubble;
         }
     }
 
-    map<uint32_t,uint32_t> nodes_count;
-    for(auto bubble: complex_bubbles){
+    map<uint32_t, uint32_t> nodes_count;
+    for (auto bubble : complex_bubbles)
+    {
         set<uint32_t> nodes;
-        for(auto path:bubble->paths_nodes){
-            for(auto node: path){
-                nodes.insert(node>>1);
-                nodes_count[node>>1] = 0;
+        for (auto path : bubble->paths_nodes)
+        {
+            for (auto node : path)
+            {
+                nodes.insert(node >> 1);
+                nodes_count[node >> 1] = 0;
             }
         }
     }
-    for(auto record: *ordered_records){
-        for(auto single_record: record){
-            if(nodes_count.find(single_record.tn>>1)!=nodes_count.end()){
-                nodes_count[single_record.tn>>1]++;
+    for (auto record : *ordered_records)
+    {
+        for (auto single_record : record)
+        {
+            if (nodes_count.find(single_record.tn >> 1) != nodes_count.end())
+            {
+                nodes_count[single_record.tn >> 1]++;
             }
         }
     }
-    for(auto bubble: complex_bubbles){
+    for (auto bubble : complex_bubbles)
+    {
         cout << endl;
         set<uint32_t> nodes;
         set<uint32_t> double_nodes;
@@ -1489,23 +1790,30 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
         map<vector<uint32_t>, vector<set<U64>>> node_discrimitive_kmers = map<vector<uint32_t>, vector<set<U64>>>();
         map<string, vector<uint32_t>> reads_support_path = map<string, vector<uint32_t>>();
         map<uint32_t, set<string>> node_support_reads = map<uint32_t, set<string>>();
-        for(auto path:bubble->paths_nodes){
-            for(auto node: path){
-                nodes.insert(node>>1);
+        for (auto path : bubble->paths_nodes)
+        {
+            for (auto node : path)
+            {
+                nodes.insert(node >> 1);
                 double_nodes.insert(node);
-                double_nodes.insert(node^1);
+                double_nodes.insert(node ^ 1);
                 // nodes_count[node>>1] = 0;
             }
         }
-        for(auto node: nodes){
+        for (auto node : nodes)
+        {
             cout << graph->seq[node].name << "\t" << nodes_count[node] << endl;
         }
         cout << endl;
 
-        for(auto record: *ordered_records){
-            for(auto single_record: record){
-                if(double_nodes.find(single_record.tn)!=double_nodes.end()){
-                    if(node_query_set.find(single_record.tn)==node_query_set.end()){
+        for (auto record : *ordered_records)
+        {
+            for (auto single_record : record)
+            {
+                if (double_nodes.find(single_record.tn) != double_nodes.end())
+                {
+                    if (node_query_set.find(single_record.tn) == node_query_set.end())
+                    {
                         node_query_set[single_record.tn] = set<string>();
                     }
                     node_query_set[single_record.tn].insert(single_record.qn);
@@ -1513,31 +1821,34 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
             }
         }
 
-        for(auto x: double_nodes){
+        for (auto x : double_nodes)
+        {
             // cout << graph->seq[x>>1].name << " " << (x%2==0 ? "+" : "-") << endl;
-            for(auto y: double_nodes){
-                if(x!=y && x!=(y^1) && x>y){
-                    string x_seq = string(graph->seq[x>>1].seq);
-                    uint32_t x_len = graph->seq[x>>1].len;
-                    if(x%2==1){
+            for (auto y : double_nodes)
+            {
+                if (x != y && x != (y ^ 1) && x > y)
+                {
+                    string x_seq = string(graph->seq[x >> 1].seq);
+                    uint32_t x_len = graph->seq[x >> 1].len;
+                    if (x % 2 == 1)
+                    {
                         x_seq = complement(string(x_seq));
                     }
-                    string y_seq = string(graph->seq[y>>1].seq);
-                    uint32_t y_len = graph->seq[y>>1].len;
-                    if(y%2==1){
+                    string y_seq = string(graph->seq[y >> 1].seq);
+                    uint32_t y_len = graph->seq[y >> 1].len;
+                    if (y % 2 == 1)
+                    {
                         y_seq = complement(string(y_seq));
                     }
 
                     // x_seq = string("CCCCGCCCCGAAGCGCCCGCGTTGCGGTGGTTCATTTCTTCGCTTGCCCACTGGGCCTGGCAGCCTTCCGGCCCGTGGTCGTGCCTTGGCAGTCCCGCAC");
                     // y_seq = string("CCCCGCCCCGATGCCCCCGCGTTGCGGTGGTTCATTTCTTCGCTTGCCCACTGGGCCTGGCAGCCTTCCGGCCCGTGGTCGTGCCTTGGCAGTCCCGCAC");
 
-
                     // const char** buf_seq = const_cast<const char**>(&(x_seq.c_str()));
                     // const char** buf_name = const_cast<const char**>(&graph->seq[node.first>>1].name);
                     // mm_idx_t *this_node = mm_idx_str(iopt.w, iopt.k, iopt.flag, iopt.bucket_bits, 1, buf_seq, buf_name);
                     // mm_tbuf_t *tbuf = mm_tbuf_init();
                     // mm_mapopt_update(&mopt, this_node);
-
 
                     vector<uint32_t> bufff = vector<uint32_t>();
                     vector<uint32_t> bufff_count = vector<uint32_t>();
@@ -1547,87 +1858,94 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
                     bufff_count.push_back(0);
                     bubbles_counting[bufff] = bufff_count;
 
-
-                    Modset *ms_x = modsetCreate (hasher, params.B, 0) ;
-                    Reference *ref_x = referenceCreate (ms_x, 1 << 26) ;
-                    int id_x ;
-                    dictAdd (ref_x->dict, strdup("query_sequence"), &id_x);
-                    array (ref_x->len, id_x, int) = x_len ;
-                    SeqhashRCiterator *mi_x = modRCiterator (hasher, strdup(x_seq.c_str()), x_len) ;
-                    U64 hash_x ; int pos_x ;
-                    while (modRCnext (mi_x, &hash_x, &pos_x, 0))
-                    { U32 index = modsetIndexFind (ref_x->ms, hash_x, TRUE) ;
-                    if (index)
-                        { if (ref_x->max+1 >= ref_x->size) die ("reference size overflow") ;
-                        ref_x->index[ref_x->max] = index ;
-                        ++ref_x->depth[index] ;
-                        ref_x->offset[ref_x->max] = pos_x ;
-                        ref_x->id[ref_x->max] = id_x ;
-                        ++ref_x->max ;
+                    Modset *ms_x = modsetCreate(hasher, params.B, 0);
+                    Reference *ref_x = referenceCreate(ms_x, 1 << 26);
+                    int id_x;
+                    dictAdd(ref_x->dict, strdup("query_sequence"), &id_x);
+                    array(ref_x->len, id_x, int) = x_len;
+                    SeqhashRCiterator *mi_x = modRCiterator(hasher, strdup(x_seq.c_str()), x_len);
+                    U64 hash_x;
+                    int pos_x;
+                    while (modRCnext(mi_x, &hash_x, &pos_x, 0))
+                    {
+                        U32 index = modsetIndexFind(ref_x->ms, hash_x, TRUE);
+                        if (index)
+                        {
+                            if (ref_x->max + 1 >= ref_x->size)
+                                die("reference size overflow");
+                            ref_x->index[ref_x->max] = index;
+                            ++ref_x->depth[index];
+                            ref_x->offset[ref_x->max] = pos_x;
+                            ref_x->id[ref_x->max] = id_x;
+                            ++ref_x->max;
                         }
                     }
-                    seqhashRCiteratorDestroy (mi_x) ;
+                    seqhashRCiteratorDestroy(mi_x);
                     // int i_x ; U32 *d_x = &ref_x->depth[1] ;
                     // for (i_x = 1 ; i_x <= ref_x->ms->max ; ++i_x, ++d_x)
                     //     if (*d_x == 1) { msSetCopy1 (ref_x->ms, i_x) ; }
                     //     else if (*d_x == 2) { msSetCopy2 (ref_x->ms, i_x) ; }
                     //     else { msSetCopyM (ref_x->ms, i_x) ; }
 
-
-
-                    Modset *ms_y = modsetCreate (hasher, params.B, 0) ;
-                    Reference *ref_y = referenceCreate (ms_y, 1 << 26) ;
-                    int id_y ;
-                    dictAdd (ref_y->dict, strdup("query_sequence"), &id_y);
-                    array (ref_y->len, id_y, int) = y_len ;
-                    SeqhashRCiterator *mi_y = modRCiterator (hasher, strdup(y_seq.c_str()), y_len) ;
-                    U64 hash_y ; int pos_y ;
-                    while (modRCnext (mi_y, &hash_y, &pos_y, 0))
-                    { U32 index = modsetIndexFind (ref_y->ms, hash_y, TRUE) ;
-                    if (index)
-                        { if (ref_y->max+1 >= ref_y->size) die ("reference size overflow") ;
-                        ref_y->index[ref_y->max] = index ;
-                        ++ref_y->depth[index] ;
-                        ref_y->offset[ref_y->max] = pos_y ;
-                        ref_y->id[ref_y->max] = id_y ;
-                        ++ref_y->max ;
+                    Modset *ms_y = modsetCreate(hasher, params.B, 0);
+                    Reference *ref_y = referenceCreate(ms_y, 1 << 26);
+                    int id_y;
+                    dictAdd(ref_y->dict, strdup("query_sequence"), &id_y);
+                    array(ref_y->len, id_y, int) = y_len;
+                    SeqhashRCiterator *mi_y = modRCiterator(hasher, strdup(y_seq.c_str()), y_len);
+                    U64 hash_y;
+                    int pos_y;
+                    while (modRCnext(mi_y, &hash_y, &pos_y, 0))
+                    {
+                        U32 index = modsetIndexFind(ref_y->ms, hash_y, TRUE);
+                        if (index)
+                        {
+                            if (ref_y->max + 1 >= ref_y->size)
+                                die("reference size overflow");
+                            ref_y->index[ref_y->max] = index;
+                            ++ref_y->depth[index];
+                            ref_y->offset[ref_y->max] = pos_y;
+                            ref_y->id[ref_y->max] = id_y;
+                            ++ref_y->max;
                         }
                     }
-                    seqhashRCiteratorDestroy (mi_y) ;
+                    seqhashRCiteratorDestroy(mi_y);
                     // int i_y ; U32 *d_y = &ref_y->depth[1] ;
                     // for (i_y = 1 ; i_y <= ref_y->ms->max ; ++i_y, ++d_y)
                     //     if (*d_y == 1) { msSetCopy1 (ref_y->ms, i_y) ; }
                     //     else if (*d_y == 2) { msSetCopy2 (ref_y->ms, i_y) ; }
                     //     else { msSetCopyM (ref_y->ms, i_y) ; }
 
-
                     set<U64> y_discrimitive_kmers = set<U64>();
                     set<U64> x_discrimitive_kmers = set<U64>();
 
-                    SeqhashRCiterator *mi_query_y = modRCiterator (hasher, strdup(y_seq.c_str()), y_len) ;
-                    SeqhashRCiterator *mi_query_x = modRCiterator (hasher, strdup(x_seq.c_str()), x_len) ;
+                    SeqhashRCiterator *mi_query_y = modRCiterator(hasher, strdup(y_seq.c_str()), y_len);
+                    SeqhashRCiterator *mi_query_x = modRCiterator(hasher, strdup(x_seq.c_str()), x_len);
 
-                    U64 hash_query_x ; int pos_query_x ;
-                    while (modRCnext (mi_query_x, &hash_query_x, &pos_query_x, 0))
-                    { U32 index = modsetIndexFind (ref_y->ms, hash_query_x, FALSE) ;
-                    if (!index)
+                    U64 hash_query_x;
+                    int pos_query_x;
+                    while (modRCnext(mi_query_x, &hash_query_x, &pos_query_x, 0))
+                    {
+                        U32 index = modsetIndexFind(ref_y->ms, hash_query_x, FALSE);
+                        if (!index)
                         {
                             x_discrimitive_kmers.insert(hash_query_x);
                         }
                     }
-                    seqhashRCiteratorDestroy (mi_query_x) ;
+                    seqhashRCiteratorDestroy(mi_query_x);
 
-                    U64 hash_query_y ; int pos_query_y ;
-                    while (modRCnext (mi_query_y, &hash_query_y, &pos_query_y, 0))
-                    { U32 index = modsetIndexFind (ref_x->ms, hash_query_y, FALSE) ;
-                    if (!index)
+                    U64 hash_query_y;
+                    int pos_query_y;
+                    while (modRCnext(mi_query_y, &hash_query_y, &pos_query_y, 0))
+                    {
+                        U32 index = modsetIndexFind(ref_x->ms, hash_query_y, FALSE);
+                        if (!index)
                         {
                             y_discrimitive_kmers.insert(hash_query_y);
                         }
                     }
-                    seqhashRCiteratorDestroy (mi_query_y) ;
-                    cout << graph->seq[x>>1].name << " " << x_discrimitive_kmers.size() << " against "  << graph->seq[y>>1].name << " " << y_discrimitive_kmers.size() << endl;
-
+                    seqhashRCiteratorDestroy(mi_query_y);
+                    cout << graph->seq[x >> 1].name << " " << x_discrimitive_kmers.size() << " against " << graph->seq[y >> 1].name << " " << y_discrimitive_kmers.size() << endl;
 
                     modsetDestroy(ms_x);
                     referenceDestroy(ref_x);
@@ -1641,68 +1959,87 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
         }
 
         vector<vector<paf_rec_str_t>> filtered_ordered_records;
-        for(auto query_path: *ordered_records){
+        for (auto query_path : *ordered_records)
+        {
             vector<paf_rec_str_t> fake_query_path = query_path;
             paf_rec_str_t fake_final;
-            fake_final.qs = query_path[-1].qs+100000;
+            fake_final.qs = query_path[-1].qs + 100000;
             fake_query_path.push_back(fake_final);
             uint32_t current_pos = query_path[0].qs;
             vector<paf_rec_str_t> current_result;
             vector<paf_rec_str_t> whole_result;
-            for(auto single_query: query_path){
-                if(double_nodes.find(single_query.tn)!=double_nodes.end()){
-                    if(single_query.qs>current_pos+5000){
+            for (auto single_query : query_path)
+            {
+                if (double_nodes.find(single_query.tn) != double_nodes.end())
+                {
+                    if (single_query.qs > current_pos + 5000)
+                    {
                         current_pos = single_query.qs;
-                        if(current_result.size()>1){
-                            //TODO:: Implement here!
+                        if (current_result.size() > 1)
+                        {
+                            // TODO:: Implement here!
                             map<uint32_t, set<U64>> current_node_kmers;
                             map<uint32_t, set<U64>> current_full_node_kmers;
                             paf_rec_str_t max_query = current_result[0];
-                            for(auto buf_query: current_result){
+                            for (auto buf_query : current_result)
+                            {
                                 current_full_node_kmers[buf_query.tn] = set<U64>();
-                                if(buf_query.qe - buf_query.qs > max_query.qe - buf_query.qs){
+                                if (buf_query.qe - buf_query.qs > max_query.qe - buf_query.qs)
+                                {
                                     max_query = buf_query;
                                 }
                             }
 
-                            for(auto node_1: current_full_node_kmers){
-                                for(auto node_2: current_full_node_kmers){
+                            for (auto node_1 : current_full_node_kmers)
+                            {
+                                for (auto node_2 : current_full_node_kmers)
+                                {
                                     vector<uint32_t> buf_pair;
-                                    buf_pair.push_back(max(node_1.first,node_2.first));
-                                    buf_pair.push_back(min(node_1.first,node_2.first));
-                                    if(node_discrimitive_kmers.find(buf_pair)!=node_discrimitive_kmers.end()){
-                                        for(auto kmer: node_discrimitive_kmers[buf_pair][0]){
-                                            current_full_node_kmers[max(node_1.first,node_2.first)].insert(kmer);
+                                    buf_pair.push_back(max(node_1.first, node_2.first));
+                                    buf_pair.push_back(min(node_1.first, node_2.first));
+                                    if (node_discrimitive_kmers.find(buf_pair) != node_discrimitive_kmers.end())
+                                    {
+                                        for (auto kmer : node_discrimitive_kmers[buf_pair][0])
+                                        {
+                                            current_full_node_kmers[max(node_1.first, node_2.first)].insert(kmer);
                                         }
-                                        for(auto kmer: node_discrimitive_kmers[buf_pair][1]){
-                                            current_full_node_kmers[min(node_1.first,node_2.first)].insert(kmer);
+                                        for (auto kmer : node_discrimitive_kmers[buf_pair][1])
+                                        {
+                                            current_full_node_kmers[min(node_1.first, node_2.first)].insert(kmer);
                                         }
                                     }
                                 }
                             }
-                            for(auto node_1: current_full_node_kmers){
+                            for (auto node_1 : current_full_node_kmers)
+                            {
                                 set<U64> filtered_kmers;
-                                for(auto kmer: node_1.second){
+                                for (auto kmer : node_1.second)
+                                {
                                     bool appear = false;
-                                    for(auto node_2: current_full_node_kmers){
-                                        if(node_1.first!=node_2.first){
+                                    for (auto node_2 : current_full_node_kmers)
+                                    {
+                                        if (node_1.first != node_2.first)
+                                        {
                                             appear = appear || node_2.second.find(kmer) != node_2.second.end();
                                         }
-                                        if(appear){
+                                        if (appear)
+                                        {
                                             break;
                                         }
                                     }
-                                    if(!appear){
+                                    if (!appear)
+                                    {
                                         filtered_kmers.insert(kmer);
                                     }
                                 }
                                 current_node_kmers[node_1.first] = filtered_kmers;
                             }
 
-                            string node_seq_str = string(graph->seq[max_query.tn>>1].seq);
+                            string node_seq_str = string(graph->seq[max_query.tn >> 1].seq);
                             uint32_t buf_start = max_query.ts;
                             uint32_t buf_end = max_query.te;
-                            if(max_query.tn%2==1){
+                            if (max_query.tn % 2 == 1)
+                            {
                                 node_seq_str = complement(node_seq_str);
                                 uint32_t buf_length = max_query.tl;
                                 uint32_t buffer_end = buf_length - buf_start;
@@ -1710,26 +2047,30 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
                                 buf_end = buffer_end;
                             }
 
-                            string query_sequence = translate(node_seq_str,buf_start,max_query.seq);
-                            Modset *ms_query = modsetCreate (hasher, params.B, 0) ;
-                            Reference *ref_query = referenceCreate (ms_query, 1 << 26) ;
-                            int id_query ;
-                            dictAdd (ref_query->dict, strdup("query_sequence"), &id_query);
-                            array (ref_query->len, id_query, int) = query_sequence.length() ;
-                            SeqhashRCiterator *mi_query = modRCiterator (hasher, strdup(query_sequence.c_str()), query_sequence.length()) ;
-                            U64 hash_query ; int pos_query ;
-                            while (modRCnext (mi_query, &hash_query, &pos_query, 0))
-                            { U32 index = modsetIndexFind (ref_query->ms, hash_query, TRUE) ;
-                            if (index)
-                                { if (ref_query->max+1 >= ref_query->size) die ("reference size overflow") ;
-                                ref_query->index[ref_query->max] = index ;
-                                ++ref_query->depth[index] ;
-                                ref_query->offset[ref_query->max] = pos_query ;
-                                ref_query->id[ref_query->max] = id_query ;
-                                ++ref_query->max ;
+                            string query_sequence = translate(node_seq_str, buf_start, max_query.seq);
+                            Modset *ms_query = modsetCreate(hasher, params.B, 0);
+                            Reference *ref_query = referenceCreate(ms_query, 1 << 26);
+                            int id_query;
+                            dictAdd(ref_query->dict, strdup("query_sequence"), &id_query);
+                            array(ref_query->len, id_query, int) = query_sequence.length();
+                            SeqhashRCiterator *mi_query = modRCiterator(hasher, strdup(query_sequence.c_str()), query_sequence.length());
+                            U64 hash_query;
+                            int pos_query;
+                            while (modRCnext(mi_query, &hash_query, &pos_query, 0))
+                            {
+                                U32 index = modsetIndexFind(ref_query->ms, hash_query, TRUE);
+                                if (index)
+                                {
+                                    if (ref_query->max + 1 >= ref_query->size)
+                                        die("reference size overflow");
+                                    ref_query->index[ref_query->max] = index;
+                                    ++ref_query->depth[index];
+                                    ref_query->offset[ref_query->max] = pos_query;
+                                    ref_query->id[ref_query->max] = id_query;
+                                    ++ref_query->max;
                                 }
                             }
-                            seqhashRCiteratorDestroy (mi_query) ;
+                            seqhashRCiteratorDestroy(mi_query);
                             // int i_query ; U32 *d_query = &ref_query->depth[1] ;
                             // for (i_query = 1 ; i_query <= ref_query->ms->max ; ++i_query, ++d_query)
                             //     if (*d_query == 1) { msSetCopy1 (ref_query->ms, i_query) ; }
@@ -1737,73 +2078,93 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
                             //     else { msSetCopyM (ref_query->ms, i_query) ; }
                             map<uint32_t, float> node_support_ratio;
 
-                            for(auto current_node: current_node_kmers){
+                            for (auto current_node : current_node_kmers)
+                            {
                                 uint32_t current_kmer_appear_count = 0;
-                                for(auto kmer: current_node.second){
-                                    if(modsetIndexFind (ref_query->ms, kmer, FALSE)!=0){
+                                for (auto kmer : current_node.second)
+                                {
+                                    if (modsetIndexFind(ref_query->ms, kmer, FALSE) != 0)
+                                    {
                                         current_kmer_appear_count++;
                                     }
                                 }
-                                if(current_kmer_appear_count==0){
+                                if (current_kmer_appear_count == 0)
+                                {
                                     node_support_ratio[current_node.first] = 0;
-                                }else{
-                                    node_support_ratio[current_node.first] = ((float)current_kmer_appear_count)/((float)current_node.second.size());
                                 }
-                                cout << graph->seq[current_node.first>>1].name << "\t" <<  current_kmer_appear_count << "\t" <<  current_node.second.size() << ";\t";
+                                else
+                                {
+                                    node_support_ratio[current_node.first] = ((float)current_kmer_appear_count) / ((float)current_node.second.size());
+                                }
+                                cout << graph->seq[current_node.first >> 1].name << "\t" << current_kmer_appear_count << "\t" << current_node.second.size() << ";\t";
                             }
                             cout << endl;
 
                             float max_ratio = 0;
-                            for(auto buf_node: node_support_ratio){
-                                if(buf_node.second>max_ratio){
+                            for (auto buf_node : node_support_ratio)
+                            {
+                                if (buf_node.second > max_ratio)
+                                {
                                     max_ratio = buf_node.second;
                                 }
                             }
                             set<uint32_t> valid_nodes;
-                            for(auto buf_node: node_support_ratio){
-                                if(buf_node.second>=0.99*max_ratio && max_ratio!=0){
+                            for (auto buf_node : node_support_ratio)
+                            {
+                                if (buf_node.second >= 0.99 * max_ratio && max_ratio != 0)
+                                {
                                     valid_nodes.insert(buf_node.first);
                                 }
                             }
-                            for(auto buf_result: current_result){
-                                if(valid_nodes.find(buf_result.tn)!=valid_nodes.end()){
+                            for (auto buf_result : current_result)
+                            {
+                                if (valid_nodes.find(buf_result.tn) != valid_nodes.end())
+                                {
                                     whole_result.push_back(buf_result);
                                 }
                             }
                             modsetDestroy(ms_query);
                             referenceDestroy(ref_query);
-
-
-
-                        }else if(current_result.size()==1){
+                        }
+                        else if (current_result.size() == 1)
+                        {
                             whole_result.push_back(current_result[0]);
                         }
                         current_result = vector<paf_rec_str_t>();
                         current_result.push_back(single_query);
-                    }else{
+                    }
+                    else
+                    {
                         current_result.push_back(single_query);
                     }
                 }
             }
 
-            if(whole_result.size()>1){
-                for(auto query: query_path){
-                    cout << graph->seq[query.tn>>1].name << ",\t";
+            if (whole_result.size() > 1)
+            {
+                for (auto query : query_path)
+                {
+                    cout << graph->seq[query.tn >> 1].name << ",\t";
                 }
                 cout << endl;
-                for(auto query: whole_result){
-                    cout << graph->seq[query.tn>>1].name << ",\t";
+                for (auto query : whole_result)
+                {
+                    cout << graph->seq[query.tn >> 1].name << ",\t";
                 }
                 cout << endl;
 
                 filtered_ordered_records.push_back(whole_result);
             }
-            for(auto buf_single_record: whole_result){
-                if(double_nodes.find(buf_single_record.tn)!=double_nodes.end()){
-                    if(node_support_reads.find(buf_single_record.tn)==node_support_reads.end()){
+            for (auto buf_single_record : whole_result)
+            {
+                if (double_nodes.find(buf_single_record.tn) != double_nodes.end())
+                {
+                    if (node_support_reads.find(buf_single_record.tn) == node_support_reads.end())
+                    {
                         node_support_reads[buf_single_record.tn] = set<string>();
                     }
-                    if(reads_support_path.find(buf_single_record.qn)==reads_support_path.end()){
+                    if (reads_support_path.find(buf_single_record.qn) == reads_support_path.end())
+                    {
                         reads_support_path[buf_single_record.qn] = vector<uint32_t>();
                     }
                     node_support_reads[buf_single_record.tn].insert(buf_single_record.qn);
@@ -1825,16 +2186,21 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
 
         cout << endl;
         cout << endl;
-        for(auto node: node_support_reads){
-            if(node.second.size()>1){
-                cout << graph->seq[node.first>>1].name << "\t" << node.second.size() << endl;
+        for (auto node : node_support_reads)
+        {
+            if (node.second.size() > 1)
+            {
+                cout << graph->seq[node.first >> 1].name << "\t" << node.second.size() << endl;
             }
         }
 
-        for(auto read: reads_support_path){
-            if(read.second.size()>1){
-                for(auto node: read.second){
-                    cout << graph->seq[node>>1].name << ", ";
+        for (auto read : reads_support_path)
+        {
+            if (read.second.size() > 1)
+            {
+                for (auto node : read.second)
+                {
+                    cout << graph->seq[node >> 1].name << ", ";
                 }
                 cout << endl;
             }
@@ -1862,63 +2228,82 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
 
         map<uint32_t, map<uint32_t, uint32_t>> node_connections;
         map<vector<uint32_t>, uint32_t> connection_count;
-        for(auto node: node_support_reads){
-            node_connections[node.first] = map<uint32_t,uint32_t>();
-            node_connections[node.first^1] = map<uint32_t,uint32_t>();
-            for(auto node_2: node_support_reads){
-                if(node.first!=node_2.first && node.first!=(node_2.first^1)){
+        for (auto node : node_support_reads)
+        {
+            node_connections[node.first] = map<uint32_t, uint32_t>();
+            node_connections[node.first ^ 1] = map<uint32_t, uint32_t>();
+            for (auto node_2 : node_support_reads)
+            {
+                if (node.first != node_2.first && node.first != (node_2.first ^ 1))
+                {
                     node_connections[node.first][node_2.first] = 0;
                     vector<uint32_t> buf_to_insert;
-                    buf_to_insert.push_back(max(node.first,node_2.first));
-                    buf_to_insert.push_back(min(node.first,node_2.first));
-                    connection_count[buf_to_insert]=0;
-                    node_connections[node.first^1][node_2.first^1] = 0;
+                    buf_to_insert.push_back(max(node.first, node_2.first));
+                    buf_to_insert.push_back(min(node.first, node_2.first));
+                    connection_count[buf_to_insert] = 0;
+                    node_connections[node.first ^ 1][node_2.first ^ 1] = 0;
                     vector<uint32_t> buf_to_insert_2;
-                    buf_to_insert_2.push_back(max(node.first,node_2.first)^1);
-                    buf_to_insert_2.push_back(min(node.first,node_2.first)^1);
-                    connection_count[buf_to_insert_2]=0;
+                    buf_to_insert_2.push_back(max(node.first, node_2.first) ^ 1);
+                    buf_to_insert_2.push_back(min(node.first, node_2.first) ^ 1);
+                    connection_count[buf_to_insert_2] = 0;
                 }
             }
         }
-        for(auto read: reads_support_path){
-            for(auto node_1: read.second){
-                for(auto node_2: read.second){
-                    if(node_1!=node_2 && node_1!=(node_2^1)){
+        for (auto read : reads_support_path)
+        {
+            for (auto node_1 : read.second)
+            {
+                for (auto node_2 : read.second)
+                {
+                    if (node_1 != node_2 && node_1 != (node_2 ^ 1))
+                    {
                         bool linear = false;
-                        for(auto path: bubble->paths_nodes){
+                        for (auto path : bubble->paths_nodes)
+                        {
                             bool found1 = false;
                             bool found1_c = false;
                             bool found2 = false;
                             bool found2_c = false;
-                            for(auto node: path){
-                                if(node_1==node){
+                            for (auto node : path)
+                            {
+                                if (node_1 == node)
+                                {
                                     found1 = true;
-                                }else if(node_2==node){
+                                }
+                                else if (node_2 == node)
+                                {
                                     found2 = true;
-                                }else if((node_1^1)==node){
+                                }
+                                else if ((node_1 ^ 1) == node)
+                                {
                                     found1_c = true;
-                                }else if((node_2^1)==node){
+                                }
+                                else if ((node_2 ^ 1) == node)
+                                {
                                     found2_c = true;
                                 }
-                                if((found1 && found2)||(found1_c && found2_c)){
+                                if ((found1 && found2) || (found1_c && found2_c))
+                                {
                                     linear = true;
                                     break;
                                 }
                             }
-                            if(linear){
+                            if (linear)
+                            {
                                 break;
                             }
                         }
-                        if(linear){
+                        if (linear)
+                        {
                             node_connections[node_1][node_2]++;
                             vector<uint32_t> buf_to_insert;
-                            buf_to_insert.push_back(max(node_1,node_2));
-                            buf_to_insert.push_back(min(node_1,node_2));
+                            buf_to_insert.push_back(max(node_1, node_2));
+                            buf_to_insert.push_back(min(node_1, node_2));
                             connection_count[buf_to_insert]++;
-                            node_connections[node_1^1][node_2^1]++;
+                            node_connections[node_1 ^ 1][node_2 ^ 1]++;
                             vector<uint32_t> buf_to_insert_2;
-                            buf_to_insert_2.push_back(max(node_1,node_2)^1);
-                            buf_to_insert_2.push_back(min(node_1,node_2)^1);
+                            buf_to_insert_2.push_back(max(node_1, node_2) ^ 1);
+                            buf_to_insert_2.push_back(min(node_1, node_2) ^ 1);
                             connection_count[buf_to_insert_2]++;
                         }
                     }
@@ -1940,50 +2325,65 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
 
         set<set<uint32_t>> set_of_path;
         uint32_t round = 10;
-        while(round--){
+        while (round--)
+        {
             map<uint32_t, set<vector<uint32_t>>> count_connection;
             uint32_t max_count = 0;
-            for(auto connection: connection_count){
-                if(connection.second>0){
-                    if(count_connection.find(connection.second)==count_connection.end()){
+            for (auto connection : connection_count)
+            {
+                if (connection.second > 0)
+                {
+                    if (count_connection.find(connection.second) == count_connection.end())
+                    {
                         count_connection[connection.second] = set<vector<uint32_t>>();
                     }
                     count_connection[connection.second].insert(connection.first);
                     max_count = max(max_count, connection.second);
-                    cout << graph->seq[connection.first[0]>>1].name << ", " << graph->seq[connection.first[1]>>1].name << "\t" << connection.second << endl;
+                    cout << graph->seq[connection.first[0] >> 1].name << ", " << graph->seq[connection.first[1] >> 1].name << "\t" << connection.second << endl;
                 }
             }
             uint32_t min_flow = 10000;
             set<uint32_t> current_path;
-            for(uint32_t i = max_count; i > 2; i--){
-                if(count_connection.find(i)!=count_connection.end()){
-                    for(auto connection: count_connection[i]){
-                        if(current_path.size()==0){
-                            current_path.insert(connection[0]>>1);
-                            current_path.insert(connection[1]>>1);
-                            min_flow = min(min_flow,i);
-                        }else{
+            for (uint32_t i = max_count; i > 2; i--)
+            {
+                if (count_connection.find(i) != count_connection.end())
+                {
+                    for (auto connection : count_connection[i])
+                    {
+                        if (current_path.size() == 0)
+                        {
+                            current_path.insert(connection[0] >> 1);
+                            current_path.insert(connection[1] >> 1);
+                            min_flow = min(min_flow, i);
+                        }
+                        else
+                        {
                             set<uint32_t> buf_new_path = current_path;
                             // if(buf_new_path.find(connection[0]>>1)!=buf_new_path.end() || buf_new_path.find(connection[1]>>1)!=buf_new_path.end()){
-                                buf_new_path.insert(connection[0]>>1);
-                                buf_new_path.insert(connection[1]>>1);
+                            buf_new_path.insert(connection[0] >> 1);
+                            buf_new_path.insert(connection[1] >> 1);
                             // }
                             bool valid = false;
-                            for(auto path: bubble->paths_nodes){
+                            for (auto path : bubble->paths_nodes)
+                            {
                                 bool linear = true;
-                                for(auto node: buf_new_path){
-                                    if(path.find(node<<1)==path.end() && path.find((node<<1)^1)==path.end()){
+                                for (auto node : buf_new_path)
+                                {
+                                    if (path.find(node << 1) == path.end() && path.find((node << 1) ^ 1) == path.end())
+                                    {
                                         linear = false;
                                     }
                                 }
-                                if(linear){
+                                if (linear)
+                                {
                                     valid = true;
                                     break;
                                 }
                             }
 
-                            if(valid){
-                                min_flow = min(min_flow,i);
+                            if (valid)
+                            {
+                                min_flow = min(min_flow, i);
                                 current_path = buf_new_path;
                             }
                         }
@@ -1991,45 +2391,63 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
                 }
             }
             set_of_path.insert(current_path);
-            for(auto node_1: current_path){
-                for(auto node_2: current_path){
+            for (auto node_1 : current_path)
+            {
+                for (auto node_2 : current_path)
+                {
                     vector<uint32_t> buf_to_insert_1;
-                    buf_to_insert_1.push_back(max(node_1<<1,node_2<<1));
-                    buf_to_insert_1.push_back(min(node_1<<1,node_2<<1));
-                    if(connection_count.find(buf_to_insert_1)!=connection_count.end()){
-                        if(connection_count[buf_to_insert_1] > min_flow){
-                            connection_count[buf_to_insert_1]-=min_flow;
-                        }else{
+                    buf_to_insert_1.push_back(max(node_1 << 1, node_2 << 1));
+                    buf_to_insert_1.push_back(min(node_1 << 1, node_2 << 1));
+                    if (connection_count.find(buf_to_insert_1) != connection_count.end())
+                    {
+                        if (connection_count[buf_to_insert_1] > min_flow)
+                        {
+                            connection_count[buf_to_insert_1] -= min_flow;
+                        }
+                        else
+                        {
                             connection_count[buf_to_insert_1] = 0;
                         }
                     }
                     vector<uint32_t> buf_to_insert_2;
-                    buf_to_insert_2.push_back(max((node_1<<1)^1,node_2<<1));
-                    buf_to_insert_2.push_back(min((node_1<<1)^1,node_2<<1));
-                    if(connection_count.find(buf_to_insert_2)!=connection_count.end()){
-                        if(connection_count[buf_to_insert_2] > min_flow){
-                            connection_count[buf_to_insert_2]-=min_flow;
-                        }else{
+                    buf_to_insert_2.push_back(max((node_1 << 1) ^ 1, node_2 << 1));
+                    buf_to_insert_2.push_back(min((node_1 << 1) ^ 1, node_2 << 1));
+                    if (connection_count.find(buf_to_insert_2) != connection_count.end())
+                    {
+                        if (connection_count[buf_to_insert_2] > min_flow)
+                        {
+                            connection_count[buf_to_insert_2] -= min_flow;
+                        }
+                        else
+                        {
                             connection_count[buf_to_insert_2] = 0;
                         }
                     }
                     vector<uint32_t> buf_to_insert_3;
-                    buf_to_insert_3.push_back(max(node_1<<1,(node_2<<1)^1));
-                    buf_to_insert_3.push_back(min(node_1<<1,(node_2<<1)^1));
-                    if(connection_count.find(buf_to_insert_3)!=connection_count.end()){
-                        if(connection_count[buf_to_insert_3] > min_flow){
-                            connection_count[buf_to_insert_3]-=min_flow;
-                        }else{
+                    buf_to_insert_3.push_back(max(node_1 << 1, (node_2 << 1) ^ 1));
+                    buf_to_insert_3.push_back(min(node_1 << 1, (node_2 << 1) ^ 1));
+                    if (connection_count.find(buf_to_insert_3) != connection_count.end())
+                    {
+                        if (connection_count[buf_to_insert_3] > min_flow)
+                        {
+                            connection_count[buf_to_insert_3] -= min_flow;
+                        }
+                        else
+                        {
                             connection_count[buf_to_insert_3] = 0;
                         }
                     }
                     vector<uint32_t> buf_to_insert_4;
-                    buf_to_insert_4.push_back(max((node_1<<1)^1,(node_2<<1)^1));
-                    buf_to_insert_4.push_back(min((node_1<<1)^1,(node_2<<1)^1));
-                    if(connection_count.find(buf_to_insert_4)!=connection_count.end()){
-                        if(connection_count[buf_to_insert_4] > min_flow){
-                            connection_count[buf_to_insert_4]-=min_flow;
-                        }else{
+                    buf_to_insert_4.push_back(max((node_1 << 1) ^ 1, (node_2 << 1) ^ 1));
+                    buf_to_insert_4.push_back(min((node_1 << 1) ^ 1, (node_2 << 1) ^ 1));
+                    if (connection_count.find(buf_to_insert_4) != connection_count.end())
+                    {
+                        if (connection_count[buf_to_insert_4] > min_flow)
+                        {
+                            connection_count[buf_to_insert_4] -= min_flow;
+                        }
+                        else
+                        {
                             connection_count[buf_to_insert_4] = 0;
                         }
                     }
@@ -2038,536 +2456,560 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
         }
 
         set<set<uint32_t>> clean_set_path;
-        for(auto to_delete_path: set_of_path){
+        for (auto to_delete_path : set_of_path)
+        {
             bool needed = true;
-            for(auto path: set_of_path){
-                if(to_delete_path.size() < path.size()){
+            for (auto path : set_of_path)
+            {
+                if (to_delete_path.size() < path.size())
+                {
                     bool not_contained = false;
-                    for(auto node: to_delete_path){
-                        not_contained = (path.find(node)==path.end());
-                        if(not_contained){
+                    for (auto node : to_delete_path)
+                    {
+                        not_contained = (path.find(node) == path.end());
+                        if (not_contained)
+                        {
                             break;
                         }
                     }
                     needed = not_contained && needed;
-                    if(!needed){
+                    if (!needed)
+                    {
                         break;
                     }
                 }
             }
-            if(needed){
+            if (needed)
+            {
                 clean_set_path.insert(to_delete_path);
             }
         }
 
-        for(auto path: clean_set_path){
-            for(auto node: path){
+        for (auto path : clean_set_path)
+        {
+            for (auto node : path)
+            {
                 cout << graph->seq[node].name << ", ";
             }
             cout << endl;
         }
     }
-                    // uint32_t num_outgoing_arcs_x = asg_arc_n(graph, x);
-                    // asg_arc_t *outgoing_arcs_x = asg_arc_a(graph, x);
-                    // uint32_t num_outgoing_arcs_y = asg_arc_n(graph, y);
-                    // asg_arc_t *outgoing_arcs_y = asg_arc_a(graph, y);
-                    // uint32_t num_incoming_arcs_x = asg_arc_n(graph, x^1);
-                    // asg_arc_t *incoming_arcs_x = asg_arc_a(graph, x^1);
-                    // uint32_t num_incoming_arcs_y = asg_arc_n(graph, y^1);
-                    // asg_arc_t *incoming_arcs_y = asg_arc_a(graph, y^1);
-                    // bool flag = false;
-                    // for(int i=0; i<num_outgoing_arcs_x; i++){
-                    //     for(int j=0; j<num_outgoing_arcs_y; j++){
-                    //         if(outgoing_arcs_x[i].v == outgoing_arcs_y[j].v){
-                    //             flag = true;
-                    //             break;
-                    //         }
-                    //     }
-                    //     if(flag){
-                    //         break;
-                    //     }
-                    // }
-                    // bool flag2 = false;
-                    // for(int i=0; i<num_incoming_arcs_x; i++){
-                    //     for(int j=0; j<num_incoming_arcs_y; j++){
-                    //         if(incoming_arcs_x[i].v == incoming_arcs_y[j].v){
-                    //             flag2 = true;
-                    //             break;
-                    //         }
-                    //     }
-                    //     if(flag2){
-                    //         break;
-                    //     }
-                    // }
-
-        //             if(flag2||flag){
-        //                 string x_seq = string(graph->seq[x>>1].seq);
-        //                 uint32_t x_len = graph->seq[x>>1].len;
-        //                 if(x%2==1){
-        //                     x_seq = complement(string(x_seq));
-        //                 }
-        //                 string y_seq = string(graph->seq[y>>1].seq);
-        //                 uint32_t y_len = graph->seq[y>>1].len;
-        //                 if(y%2==1){
-        //                     y_seq = complement(string(y_seq));
-        //                 }
-
-        //                 // x_seq = string("CCCCGCCCCGAAGCGCCCGCGTTGCGGTGGTTCATTTCTTCGCTTGCCCACTGGGCCTGGCAGCCTTCCGGCCCGTGGTCGTGCCTTGGCAGTCCCGCAC");
-        //                 // y_seq = string("CCCCGCCCCGATGCCCCCGCGTTGCGGTGGTTCATTTCTTCGCTTGCCCACTGGGCCTGGCAGCCTTCCGGCCCGTGGTCGTGCCTTGGCAGTCCCGCAC");
-
-
-        //                 // const char** buf_seq = const_cast<const char**>(&(x_seq.c_str()));
-        //                 // const char** buf_name = const_cast<const char**>(&graph->seq[node.first>>1].name);
-        //                 // mm_idx_t *this_node = mm_idx_str(iopt.w, iopt.k, iopt.flag, iopt.bucket_bits, 1, buf_seq, buf_name);
-        //                 // mm_tbuf_t *tbuf = mm_tbuf_init();
-        //                 // mm_mapopt_update(&mopt, this_node);
-
-
-        //                 vector<uint32_t> bufff = vector<uint32_t>();
-        //                 vector<uint32_t> bufff_count = vector<uint32_t>();
-        //                 bufff.push_back(max(x,y));
-        //                 bufff.push_back(min(x,y));
-        //                 bufff_count.push_back(0);
-        //                 bufff_count.push_back(0);
-        //                 bubbles_counting[bufff] = bufff_count;
-
-
-        //                 Modset *ms_x = modsetCreate (hasher, params.B, 0) ;
-        //                 Reference *ref_x = referenceCreate (ms_x, 1 << 26) ;
-        //                 int id_x ;
-        //                 dictAdd (ref_x->dict, strdup("query_sequence"), &id_x);
-        //                 array (ref_x->len, id_x, int) = x_len ;
-        //                 SeqhashRCiterator *mi_x = modRCiterator (hasher, strdup(x_seq.c_str()), x_len) ;
-        //                 U64 hash_x ; int pos_x ;
-        //                 while (modRCnext (mi_x, &hash_x, &pos_x, 0))
-        //                 { U32 index = modsetIndexFind (ref_x->ms, hash_x, TRUE) ;
-        //                 if (index)
-        //                     { if (ref_x->max+1 >= ref_x->size) die ("reference size overflow") ;
-        //                     ref_x->index[ref_x->max] = index ;
-        //                     ++ref_x->depth[index] ;
-        //                     ref_x->offset[ref_x->max] = pos_x ;
-        //                     ref_x->id[ref_x->max] = id_x ;
-        //                     ++ref_x->max ;
-        //                     }
-        //                 }
-        //                 seqhashRCiteratorDestroy (mi_x) ;
-        //                 // int i_x ; U32 *d_x = &ref_x->depth[1] ;
-        //                 // for (i_x = 1 ; i_x <= ref_x->ms->max ; ++i_x, ++d_x)
-        //                 //     if (*d_x == 1) { msSetCopy1 (ref_x->ms, i_x) ; }
-        //                 //     else if (*d_x == 2) { msSetCopy2 (ref_x->ms, i_x) ; }
-        //                 //     else { msSetCopyM (ref_x->ms, i_x) ; }
-
-
-
-        //                 Modset *ms_y = modsetCreate (hasher, params.B, 0) ;
-        //                 Reference *ref_y = referenceCreate (ms_y, 1 << 26) ;
-        //                 int id_y ;
-        //                 dictAdd (ref_y->dict, strdup("query_sequence"), &id_y);
-        //                 array (ref_y->len, id_y, int) = y_len ;
-        //                 SeqhashRCiterator *mi_y = modRCiterator (hasher, strdup(y_seq.c_str()), y_len) ;
-        //                 U64 hash_y ; int pos_y ;
-        //                 while (modRCnext (mi_y, &hash_y, &pos_y, 0))
-        //                 { U32 index = modsetIndexFind (ref_y->ms, hash_y, TRUE) ;
-        //                 if (index)
-        //                     { if (ref_y->max+1 >= ref_y->size) die ("reference size overflow") ;
-        //                     ref_y->index[ref_y->max] = index ;
-        //                     ++ref_y->depth[index] ;
-        //                     ref_y->offset[ref_y->max] = pos_y ;
-        //                     ref_y->id[ref_y->max] = id_y ;
-        //                     ++ref_y->max ;
-        //                     }
-        //                 }
-        //                 seqhashRCiteratorDestroy (mi_y) ;
-        //                 // int i_y ; U32 *d_y = &ref_y->depth[1] ;
-        //                 // for (i_y = 1 ; i_y <= ref_y->ms->max ; ++i_y, ++d_y)
-        //                 //     if (*d_y == 1) { msSetCopy1 (ref_y->ms, i_y) ; }
-        //                 //     else if (*d_y == 2) { msSetCopy2 (ref_y->ms, i_y) ; }
-        //                 //     else { msSetCopyM (ref_y->ms, i_y) ; }
-
-
-        //                 map<U64,uint32_t> y_discrimitive_kmers = map<U64,uint32_t>();
-        //                 map<U64,uint32_t> x_discrimitive_kmers = map<U64,uint32_t>();
-
-        //                 SeqhashRCiterator *mi_query_y = modRCiterator (hasher, strdup(y_seq.c_str()), y_len) ;
-        //                 SeqhashRCiterator *mi_query_x = modRCiterator (hasher, strdup(x_seq.c_str()), x_len) ;
-
-        //                 U64 hash_query_x ; int pos_query_x ;
-        //                 while (modRCnext (mi_query_x, &hash_query_x, &pos_query_x, 0))
-        //                 { U32 index = modsetIndexFind (ref_y->ms, hash_query_x, FALSE) ;
-        //                 if (!index)
-        //                     {
-        //                         x_discrimitive_kmers[hash_query_x] = pos_query_x;
-        //                     }
-        //                 }
-        //                 seqhashRCiteratorDestroy (mi_query_x) ;
-
-        //                 U64 hash_query_y ; int pos_query_y ;
-        //                 while (modRCnext (mi_query_y, &hash_query_y, &pos_query_y, 0))
-        //                 { U32 index = modsetIndexFind (ref_x->ms, hash_query_y, FALSE) ;
-        //                 if (!index)
-        //                     {
-        //                         y_discrimitive_kmers[hash_query_y] = pos_query_y;
-        //                     }
-        //                 }
-        //                 seqhashRCiteratorDestroy (mi_query_y) ;
-
-
-        //                 modsetDestroy(ms_x);
-        //                 referenceDestroy(ref_x);
-        //                 modsetDestroy(ms_y);
-        //                 referenceDestroy(ref_y);
-        //                 // set<string> y_discrimitive_kmers = set<string>();
-        //                 // set<string> x_discrimitive_kmers = set<string>();
-
-        //                 // set<string> x_kmers = set<string>();
-        //                 // set<string> y_kmers = set<string>();
-
-        //                 // for(int i = 0; i < x_seq.length()-31; i++){
-        //                 //     x_kmers.insert(x_seq.substr(i,31));
-        //                 // }
-        //                 // for(int q = 0; q < y_seq.length()-31; q++){
-        //                 //     y_kmers.insert(y_seq.substr(q,31));
-        //                 // }
-        //                 // for(auto k_mer: x_kmers){
-        //                 //     if(y_kmers.find(k_mer)==y_kmers.end()){
-        //                 //         x_discrimitive_kmers.insert(k_mer);
-
-        //                 //     }
-        //                 // }
-        //                 // for(auto k_mer: y_kmers){
-        //                 //     if(x_kmers.find(k_mer)==x_kmers.end()){
-        //                 //         y_discrimitive_kmers.insert(k_mer);
-        //                 //     }
-        //                 // }
-
-        //                 // cout << x_seq << endl;
-        //                 // cout << y_seq << endl;
-        //                 cout << graph->seq[x>>1].name << " kmers: " << x_discrimitive_kmers.size() << endl;
-        //                 // for(auto k_mer : x_discrimitive_kmers){
-        //                 //     cout << k_mer << endl;
-        //                 // }
-        //                 // cout << counter_valid << " against " << valid_kmers.size() << endl;
-        //                 cout << graph->seq[y>>1].name << " kmers: " << y_discrimitive_kmers.size() << endl;
-        //                 // for(auto k_mer : y_discrimitive_kmers){
-        //                 //     cout << k_mer << endl;
-        //                 // }
-        //                 node_discrimitive_kmers[x] = x_discrimitive_kmers;
-        //                 node_discrimitive_kmers[y] = y_discrimitive_kmers;
-
-        //                 set<string> joint_set;
-        //                 for(auto n: node_query_set[x]){
-        //                     joint_set.insert(n);
-        //                 }
-        //                 for(auto n: node_query_set[y]){
-        //                     joint_set.insert(n);
-        //                 }
-        //                 uint32_t node_x = x;
-        //                 uint32_t node_y = y;
-        //                 for(auto query: joint_set){
-        //                     vector<paf_rec_str_t> record = name_rec[query];
-        //                     float node_x_support_record_ratio = 0;
-        //                     float node_y_support_record_ratio = 0;
-        //                     bool have_x = false;
-        //                     bool have_y = false;
-        //                     for(auto buf_record: record){
-        //                         string query_sequence = string();
-        //                         if(buf_record.tn==node_x && buf_record.tl >= graph->seq[node_x].len*0.2){
-        //                             have_x = true;
-        //                             string x_seq_str = string(graph->seq[node_x>>1].seq);
-        //                             if(node_x%2==1){
-        //                                 x_seq_str = complement(x_seq_str);
-        //                             }
-        //                             query_sequence = translate(x_seq_str,buf_record.ts,buf_record.seq);
-        //                         }else if(buf_record.tn == node_y && buf_record.tl >= graph->seq[node_y].len*0.2){
-        //                             have_y = true;
-        //                             string y_seq_str = string(graph->seq[node_y>>1].seq);
-        //                             if(node_y%2==1){
-        //                                 y_seq_str = complement(y_seq_str);
-        //                             }
-        //                             query_sequence = translate(y_seq_str,buf_record.ts,buf_record.seq);
-        //                         }
-        //                         if(query_sequence.length()>0){
-
-        //                             // set<string> query_kmers = set<string>();
-
-        //                             // for(int i = 0; i < query_sequence.length()-31; i++){
-        //                             //     query_kmers.insert(query_sequence.substr(i,31));
-        //                             // }
-
-        //                             // // int i ; U32 *d = &ref_query->depth[1] ; U32 n1 = 0, n2 = 0, nM = 0 ;
-        //                             // // for (i = 1 ; i <= ref_query->ms->max ; ++i, ++d)
-        //                             // //     if (*d == 1) { msSetCopy1 (ref_query->ms, i) ; ++n1 ; }
-        //                             // //     else if (*d == 2) { msSetCopy2 (ref_query->ms, i) ; ++n2 ; }
-        //                             // //     else { msSetCopyM (ref_query->ms, i) ; ++nM ; }
-        //                             // // modsetPack (ref_query->ms) ;
-        //                             // // referencePack (ref_query) ;
-
-
-        //                             // for(auto kmer_x: node_discrimitive_kmers[node_x]){
-        //                             //     if(query_kmers.find(kmer_x)!=query_kmers.end()){
-        //                             //         node_x_support_record+=1;
-        //                             //     }
-        //                             // }
-        //                             // for(auto kmer_y: node_discrimitive_kmers[node_y]){
-        //                             //     if(query_kmers.find(kmer_y)!=query_kmers.end()){
-        //                             //         node_y_support_record+=1;
-        //                             //     }
-        //                             // }
-
-        //                             Modset *ms_query = modsetCreate (hasher, params.B, 0) ;
-        //                             Reference *ref_query = referenceCreate (ms_query, 1 << 26) ;
-        //                             int id_query ;
-        //                             dictAdd (ref_query->dict, strdup("query_sequence"), &id_query);
-        //                             array (ref_query->len, id_query, int) = query_sequence.length() ;
-        //                             SeqhashRCiterator *mi_query = modRCiterator (hasher, strdup(query_sequence.c_str()), query_sequence.length()) ;
-        //                             U64 hash_query ; int pos_query ;
-        //                             while (modRCnext (mi_query, &hash_query, &pos_query, 0))
-        //                             { U32 index = modsetIndexFind (ref_query->ms, hash_query, TRUE) ;
-        //                             if (index)
-        //                                 { if (ref_query->max+1 >= ref_query->size) die ("reference size overflow") ;
-        //                                 ref_query->index[ref_query->max] = index ;
-        //                                 ++ref_query->depth[index] ;
-        //                                 ref_query->offset[ref_query->max] = pos_query ;
-        //                                 ref_query->id[ref_query->max] = id_query ;
-        //                                 ++ref_query->max ;
-        //                                 }
-        //                             }
-        //                             seqhashRCiteratorDestroy (mi_query) ;
-        //                             // int i_query ; U32 *d_query = &ref_query->depth[1] ;
-        //                             // for (i_query = 1 ; i_query <= ref_query->ms->max ; ++i_query, ++d_query)
-        //                             //     if (*d_query == 1) { msSetCopy1 (ref_query->ms, i_query) ; }
-        //                             //     else if (*d_query == 2) { msSetCopy2 (ref_query->ms, i_query) ; }
-        //                             //     else { msSetCopyM (ref_query->ms, i_query) ; }
-        //                             uint32_t node_x_support_record = 0;
-        //                             uint32_t node_y_support_record = 0;
-        //                             for(auto kmer_x: node_discrimitive_kmers[node_x]){
-        //                                 if(modsetIndexFind (ref_query->ms, kmer_x.first, FALSE)!=0){
-        //                                     node_x_support_record+=1;
-        //                                 }
-        //                             }
-        //                             for(auto kmer_y: node_discrimitive_kmers[node_y]){
-        //                                 if(modsetIndexFind (ref_query->ms, kmer_y.first, FALSE)!=0){
-        //                                     node_y_support_record+=1;
-        //                                 }
-        //                             }
-
-        //                             modsetDestroy(ms_query);
-        //                             referenceDestroy(ref_query);
-
-
-        //                             if(buf_record.tn==node_x && node_discrimitive_kmers[node_x].size()!=0){
-        //                                 node_x_support_record_ratio += (float)node_x_support_record/node_discrimitive_kmers[node_x].size();
-        //                             }
-        //                             if(buf_record.tn==node_y &&node_discrimitive_kmers[node_y].size()!=0){
-        //                                 node_y_support_record_ratio += (float)node_y_support_record/node_discrimitive_kmers[node_y].size();
-        //                             }
-        //                             // cout << node_x_support_record_ratio << " against " << node_y_support_record_ratio << endl;
-        //                             // cout << graph->seq[node_x].name << " against " << graph->seq[node_y].name << endl;
-
-        //                         }
-        //                     }
-
-        //                     if(node_x_support_record_ratio > node_y_support_record_ratio*1.5){
-        //                         if(node_support_reads.find(node_x)==node_support_reads.end()){
-        //                             node_support_reads[node_x] = set<string>();
-        //                         }
-        //                         if(have_x && have_y){
-        //                             bubbles_counting[bufff][0] += 1;
-        //                         }
-        //                         node_support_reads[node_x].insert(string(record[0].qn));
-        //                     }else if(node_y_support_record_ratio > node_x_support_record_ratio*1.5){
-        //                         if(node_support_reads.find(node_y)==node_support_reads.end()){
-        //                             node_support_reads[node_y] = set<string>();
-        //                         }
-        //                         if(have_x && have_y){
-        //                             bubbles_counting[bufff][0] += 1;
-        //                         }
-        //                         bubbles_counting[bufff][1] += 1;
-        //                         node_support_reads[node_y].insert(string(record[0].qn));
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-        // for(auto pair: bubbles_counting){
-        //     cout << graph->seq[pair.first[0]>>1].name << " " << pair.second[0] << " against " << graph->seq[pair.first[1]>>1].name << " " << pair.second[1] << endl;
-        // }
-        // map<string, set<uint32_t>> read_node_map;
-        // for(auto node: node_support_reads){
-        //     for(auto query_name: node.second){
-        //         if(read_node_map.find(query_name)==read_node_map.end()){
-        //             read_node_map[query_name] = set<uint32_t>();
-        //         }
-        //         read_node_map[query_name].insert(node.first);
-        //     }
-        // }
-        // for(auto read: read_node_map){
-        //     for(auto node: read.second){
-        //         cout << graph->seq[node>>1].name << ",\t";
-        //     }
-        //     cout << endl;
+    // uint32_t num_outgoing_arcs_x = asg_arc_n(graph, x);
+    // asg_arc_t *outgoing_arcs_x = asg_arc_a(graph, x);
+    // uint32_t num_outgoing_arcs_y = asg_arc_n(graph, y);
+    // asg_arc_t *outgoing_arcs_y = asg_arc_a(graph, y);
+    // uint32_t num_incoming_arcs_x = asg_arc_n(graph, x^1);
+    // asg_arc_t *incoming_arcs_x = asg_arc_a(graph, x^1);
+    // uint32_t num_incoming_arcs_y = asg_arc_n(graph, y^1);
+    // asg_arc_t *incoming_arcs_y = asg_arc_a(graph, y^1);
+    // bool flag = false;
+    // for(int i=0; i<num_outgoing_arcs_x; i++){
+    //     for(int j=0; j<num_outgoing_arcs_y; j++){
+    //         if(outgoing_arcs_x[i].v == outgoing_arcs_y[j].v){
+    //             flag = true;
+    //             break;
+    //         }
+    //     }
+    //     if(flag){
+    //         break;
+    //     }
+    // }
+    // bool flag2 = false;
+    // for(int i=0; i<num_incoming_arcs_x; i++){
+    //     for(int j=0; j<num_incoming_arcs_y; j++){
+    //         if(incoming_arcs_x[i].v == incoming_arcs_y[j].v){
+    //             flag2 = true;
+    //             break;
+    //         }
+    //     }
+    //     if(flag2){
+    //         break;
     //     }
     // }
 
+    //             if(flag2||flag){
+    //                 string x_seq = string(graph->seq[x>>1].seq);
+    //                 uint32_t x_len = graph->seq[x>>1].len;
+    //                 if(x%2==1){
+    //                     x_seq = complement(string(x_seq));
+    //                 }
+    //                 string y_seq = string(graph->seq[y>>1].seq);
+    //                 uint32_t y_len = graph->seq[y>>1].len;
+    //                 if(y%2==1){
+    //                     y_seq = complement(string(y_seq));
+    //                 }
 
+    //                 // x_seq = string("CCCCGCCCCGAAGCGCCCGCGTTGCGGTGGTTCATTTCTTCGCTTGCCCACTGGGCCTGGCAGCCTTCCGGCCCGTGGTCGTGCCTTGGCAGTCCCGCAC");
+    //                 // y_seq = string("CCCCGCCCCGATGCCCCCGCGTTGCGGTGGTTCATTTCTTCGCTTGCCCACTGGGCCTGGCAGCCTTCCGGCCCGTGGTCGTGCCTTGGCAGTCCCGCAC");
+
+    //                 // const char** buf_seq = const_cast<const char**>(&(x_seq.c_str()));
+    //                 // const char** buf_name = const_cast<const char**>(&graph->seq[node.first>>1].name);
+    //                 // mm_idx_t *this_node = mm_idx_str(iopt.w, iopt.k, iopt.flag, iopt.bucket_bits, 1, buf_seq, buf_name);
+    //                 // mm_tbuf_t *tbuf = mm_tbuf_init();
+    //                 // mm_mapopt_update(&mopt, this_node);
+
+    //                 vector<uint32_t> bufff = vector<uint32_t>();
+    //                 vector<uint32_t> bufff_count = vector<uint32_t>();
+    //                 bufff.push_back(max(x,y));
+    //                 bufff.push_back(min(x,y));
+    //                 bufff_count.push_back(0);
+    //                 bufff_count.push_back(0);
+    //                 bubbles_counting[bufff] = bufff_count;
+
+    //                 Modset *ms_x = modsetCreate (hasher, params.B, 0) ;
+    //                 Reference *ref_x = referenceCreate (ms_x, 1 << 26) ;
+    //                 int id_x ;
+    //                 dictAdd (ref_x->dict, strdup("query_sequence"), &id_x);
+    //                 array (ref_x->len, id_x, int) = x_len ;
+    //                 SeqhashRCiterator *mi_x = modRCiterator (hasher, strdup(x_seq.c_str()), x_len) ;
+    //                 U64 hash_x ; int pos_x ;
+    //                 while (modRCnext (mi_x, &hash_x, &pos_x, 0))
+    //                 { U32 index = modsetIndexFind (ref_x->ms, hash_x, TRUE) ;
+    //                 if (index)
+    //                     { if (ref_x->max+1 >= ref_x->size) die ("reference size overflow") ;
+    //                     ref_x->index[ref_x->max] = index ;
+    //                     ++ref_x->depth[index] ;
+    //                     ref_x->offset[ref_x->max] = pos_x ;
+    //                     ref_x->id[ref_x->max] = id_x ;
+    //                     ++ref_x->max ;
+    //                     }
+    //                 }
+    //                 seqhashRCiteratorDestroy (mi_x) ;
+    //                 // int i_x ; U32 *d_x = &ref_x->depth[1] ;
+    //                 // for (i_x = 1 ; i_x <= ref_x->ms->max ; ++i_x, ++d_x)
+    //                 //     if (*d_x == 1) { msSetCopy1 (ref_x->ms, i_x) ; }
+    //                 //     else if (*d_x == 2) { msSetCopy2 (ref_x->ms, i_x) ; }
+    //                 //     else { msSetCopyM (ref_x->ms, i_x) ; }
+
+    //                 Modset *ms_y = modsetCreate (hasher, params.B, 0) ;
+    //                 Reference *ref_y = referenceCreate (ms_y, 1 << 26) ;
+    //                 int id_y ;
+    //                 dictAdd (ref_y->dict, strdup("query_sequence"), &id_y);
+    //                 array (ref_y->len, id_y, int) = y_len ;
+    //                 SeqhashRCiterator *mi_y = modRCiterator (hasher, strdup(y_seq.c_str()), y_len) ;
+    //                 U64 hash_y ; int pos_y ;
+    //                 while (modRCnext (mi_y, &hash_y, &pos_y, 0))
+    //                 { U32 index = modsetIndexFind (ref_y->ms, hash_y, TRUE) ;
+    //                 if (index)
+    //                     { if (ref_y->max+1 >= ref_y->size) die ("reference size overflow") ;
+    //                     ref_y->index[ref_y->max] = index ;
+    //                     ++ref_y->depth[index] ;
+    //                     ref_y->offset[ref_y->max] = pos_y ;
+    //                     ref_y->id[ref_y->max] = id_y ;
+    //                     ++ref_y->max ;
+    //                     }
+    //                 }
+    //                 seqhashRCiteratorDestroy (mi_y) ;
+    //                 // int i_y ; U32 *d_y = &ref_y->depth[1] ;
+    //                 // for (i_y = 1 ; i_y <= ref_y->ms->max ; ++i_y, ++d_y)
+    //                 //     if (*d_y == 1) { msSetCopy1 (ref_y->ms, i_y) ; }
+    //                 //     else if (*d_y == 2) { msSetCopy2 (ref_y->ms, i_y) ; }
+    //                 //     else { msSetCopyM (ref_y->ms, i_y) ; }
+
+    //                 map<U64,uint32_t> y_discrimitive_kmers = map<U64,uint32_t>();
+    //                 map<U64,uint32_t> x_discrimitive_kmers = map<U64,uint32_t>();
+
+    //                 SeqhashRCiterator *mi_query_y = modRCiterator (hasher, strdup(y_seq.c_str()), y_len) ;
+    //                 SeqhashRCiterator *mi_query_x = modRCiterator (hasher, strdup(x_seq.c_str()), x_len) ;
+
+    //                 U64 hash_query_x ; int pos_query_x ;
+    //                 while (modRCnext (mi_query_x, &hash_query_x, &pos_query_x, 0))
+    //                 { U32 index = modsetIndexFind (ref_y->ms, hash_query_x, FALSE) ;
+    //                 if (!index)
+    //                     {
+    //                         x_discrimitive_kmers[hash_query_x] = pos_query_x;
+    //                     }
+    //                 }
+    //                 seqhashRCiteratorDestroy (mi_query_x) ;
+
+    //                 U64 hash_query_y ; int pos_query_y ;
+    //                 while (modRCnext (mi_query_y, &hash_query_y, &pos_query_y, 0))
+    //                 { U32 index = modsetIndexFind (ref_x->ms, hash_query_y, FALSE) ;
+    //                 if (!index)
+    //                     {
+    //                         y_discrimitive_kmers[hash_query_y] = pos_query_y;
+    //                     }
+    //                 }
+    //                 seqhashRCiteratorDestroy (mi_query_y) ;
+
+    //                 modsetDestroy(ms_x);
+    //                 referenceDestroy(ref_x);
+    //                 modsetDestroy(ms_y);
+    //                 referenceDestroy(ref_y);
+    //                 // set<string> y_discrimitive_kmers = set<string>();
+    //                 // set<string> x_discrimitive_kmers = set<string>();
+
+    //                 // set<string> x_kmers = set<string>();
+    //                 // set<string> y_kmers = set<string>();
+
+    //                 // for(int i = 0; i < x_seq.length()-31; i++){
+    //                 //     x_kmers.insert(x_seq.substr(i,31));
+    //                 // }
+    //                 // for(int q = 0; q < y_seq.length()-31; q++){
+    //                 //     y_kmers.insert(y_seq.substr(q,31));
+    //                 // }
+    //                 // for(auto k_mer: x_kmers){
+    //                 //     if(y_kmers.find(k_mer)==y_kmers.end()){
+    //                 //         x_discrimitive_kmers.insert(k_mer);
+
+    //                 //     }
+    //                 // }
+    //                 // for(auto k_mer: y_kmers){
+    //                 //     if(x_kmers.find(k_mer)==x_kmers.end()){
+    //                 //         y_discrimitive_kmers.insert(k_mer);
+    //                 //     }
+    //                 // }
+
+    //                 // cout << x_seq << endl;
+    //                 // cout << y_seq << endl;
+    //                 cout << graph->seq[x>>1].name << " kmers: " << x_discrimitive_kmers.size() << endl;
+    //                 // for(auto k_mer : x_discrimitive_kmers){
+    //                 //     cout << k_mer << endl;
+    //                 // }
+    //                 // cout << counter_valid << " against " << valid_kmers.size() << endl;
+    //                 cout << graph->seq[y>>1].name << " kmers: " << y_discrimitive_kmers.size() << endl;
+    //                 // for(auto k_mer : y_discrimitive_kmers){
+    //                 //     cout << k_mer << endl;
+    //                 // }
+    //                 node_discrimitive_kmers[x] = x_discrimitive_kmers;
+    //                 node_discrimitive_kmers[y] = y_discrimitive_kmers;
+
+    //                 set<string> joint_set;
+    //                 for(auto n: node_query_set[x]){
+    //                     joint_set.insert(n);
+    //                 }
+    //                 for(auto n: node_query_set[y]){
+    //                     joint_set.insert(n);
+    //                 }
+    //                 uint32_t node_x = x;
+    //                 uint32_t node_y = y;
+    //                 for(auto query: joint_set){
+    //                     vector<paf_rec_str_t> record = name_rec[query];
+    //                     float node_x_support_record_ratio = 0;
+    //                     float node_y_support_record_ratio = 0;
+    //                     bool have_x = false;
+    //                     bool have_y = false;
+    //                     for(auto buf_record: record){
+    //                         string query_sequence = string();
+    //                         if(buf_record.tn==node_x && buf_record.tl >= graph->seq[node_x].len*0.2){
+    //                             have_x = true;
+    //                             string x_seq_str = string(graph->seq[node_x>>1].seq);
+    //                             if(node_x%2==1){
+    //                                 x_seq_str = complement(x_seq_str);
+    //                             }
+    //                             query_sequence = translate(x_seq_str,buf_record.ts,buf_record.seq);
+    //                         }else if(buf_record.tn == node_y && buf_record.tl >= graph->seq[node_y].len*0.2){
+    //                             have_y = true;
+    //                             string y_seq_str = string(graph->seq[node_y>>1].seq);
+    //                             if(node_y%2==1){
+    //                                 y_seq_str = complement(y_seq_str);
+    //                             }
+    //                             query_sequence = translate(y_seq_str,buf_record.ts,buf_record.seq);
+    //                         }
+    //                         if(query_sequence.length()>0){
+
+    //                             // set<string> query_kmers = set<string>();
+
+    //                             // for(int i = 0; i < query_sequence.length()-31; i++){
+    //                             //     query_kmers.insert(query_sequence.substr(i,31));
+    //                             // }
+
+    //                             // // int i ; U32 *d = &ref_query->depth[1] ; U32 n1 = 0, n2 = 0, nM = 0 ;
+    //                             // // for (i = 1 ; i <= ref_query->ms->max ; ++i, ++d)
+    //                             // //     if (*d == 1) { msSetCopy1 (ref_query->ms, i) ; ++n1 ; }
+    //                             // //     else if (*d == 2) { msSetCopy2 (ref_query->ms, i) ; ++n2 ; }
+    //                             // //     else { msSetCopyM (ref_query->ms, i) ; ++nM ; }
+    //                             // // modsetPack (ref_query->ms) ;
+    //                             // // referencePack (ref_query) ;
+
+    //                             // for(auto kmer_x: node_discrimitive_kmers[node_x]){
+    //                             //     if(query_kmers.find(kmer_x)!=query_kmers.end()){
+    //                             //         node_x_support_record+=1;
+    //                             //     }
+    //                             // }
+    //                             // for(auto kmer_y: node_discrimitive_kmers[node_y]){
+    //                             //     if(query_kmers.find(kmer_y)!=query_kmers.end()){
+    //                             //         node_y_support_record+=1;
+    //                             //     }
+    //                             // }
+
+    //                             Modset *ms_query = modsetCreate (hasher, params.B, 0) ;
+    //                             Reference *ref_query = referenceCreate (ms_query, 1 << 26) ;
+    //                             int id_query ;
+    //                             dictAdd (ref_query->dict, strdup("query_sequence"), &id_query);
+    //                             array (ref_query->len, id_query, int) = query_sequence.length() ;
+    //                             SeqhashRCiterator *mi_query = modRCiterator (hasher, strdup(query_sequence.c_str()), query_sequence.length()) ;
+    //                             U64 hash_query ; int pos_query ;
+    //                             while (modRCnext (mi_query, &hash_query, &pos_query, 0))
+    //                             { U32 index = modsetIndexFind (ref_query->ms, hash_query, TRUE) ;
+    //                             if (index)
+    //                                 { if (ref_query->max+1 >= ref_query->size) die ("reference size overflow") ;
+    //                                 ref_query->index[ref_query->max] = index ;
+    //                                 ++ref_query->depth[index] ;
+    //                                 ref_query->offset[ref_query->max] = pos_query ;
+    //                                 ref_query->id[ref_query->max] = id_query ;
+    //                                 ++ref_query->max ;
+    //                                 }
+    //                             }
+    //                             seqhashRCiteratorDestroy (mi_query) ;
+    //                             // int i_query ; U32 *d_query = &ref_query->depth[1] ;
+    //                             // for (i_query = 1 ; i_query <= ref_query->ms->max ; ++i_query, ++d_query)
+    //                             //     if (*d_query == 1) { msSetCopy1 (ref_query->ms, i_query) ; }
+    //                             //     else if (*d_query == 2) { msSetCopy2 (ref_query->ms, i_query) ; }
+    //                             //     else { msSetCopyM (ref_query->ms, i_query) ; }
+    //                             uint32_t node_x_support_record = 0;
+    //                             uint32_t node_y_support_record = 0;
+    //                             for(auto kmer_x: node_discrimitive_kmers[node_x]){
+    //                                 if(modsetIndexFind (ref_query->ms, kmer_x.first, FALSE)!=0){
+    //                                     node_x_support_record+=1;
+    //                                 }
+    //                             }
+    //                             for(auto kmer_y: node_discrimitive_kmers[node_y]){
+    //                                 if(modsetIndexFind (ref_query->ms, kmer_y.first, FALSE)!=0){
+    //                                     node_y_support_record+=1;
+    //                                 }
+    //                             }
+
+    //                             modsetDestroy(ms_query);
+    //                             referenceDestroy(ref_query);
+
+    //                             if(buf_record.tn==node_x && node_discrimitive_kmers[node_x].size()!=0){
+    //                                 node_x_support_record_ratio += (float)node_x_support_record/node_discrimitive_kmers[node_x].size();
+    //                             }
+    //                             if(buf_record.tn==node_y &&node_discrimitive_kmers[node_y].size()!=0){
+    //                                 node_y_support_record_ratio += (float)node_y_support_record/node_discrimitive_kmers[node_y].size();
+    //                             }
+    //                             // cout << node_x_support_record_ratio << " against " << node_y_support_record_ratio << endl;
+    //                             // cout << graph->seq[node_x].name << " against " << graph->seq[node_y].name << endl;
+
+    //                         }
+    //                     }
+
+    //                     if(node_x_support_record_ratio > node_y_support_record_ratio*1.5){
+    //                         if(node_support_reads.find(node_x)==node_support_reads.end()){
+    //                             node_support_reads[node_x] = set<string>();
+    //                         }
+    //                         if(have_x && have_y){
+    //                             bubbles_counting[bufff][0] += 1;
+    //                         }
+    //                         node_support_reads[node_x].insert(string(record[0].qn));
+    //                     }else if(node_y_support_record_ratio > node_x_support_record_ratio*1.5){
+    //                         if(node_support_reads.find(node_y)==node_support_reads.end()){
+    //                             node_support_reads[node_y] = set<string>();
+    //                         }
+    //                         if(have_x && have_y){
+    //                             bubbles_counting[bufff][0] += 1;
+    //                         }
+    //                         bubbles_counting[bufff][1] += 1;
+    //                         node_support_reads[node_y].insert(string(record[0].qn));
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+    // for(auto pair: bubbles_counting){
+    //     cout << graph->seq[pair.first[0]>>1].name << " " << pair.second[0] << " against " << graph->seq[pair.first[1]>>1].name << " " << pair.second[1] << endl;
+    // }
+    // map<string, set<uint32_t>> read_node_map;
+    // for(auto node: node_support_reads){
+    //     for(auto query_name: node.second){
+    //         if(read_node_map.find(query_name)==read_node_map.end()){
+    //             read_node_map[query_name] = set<uint32_t>();
+    //         }
+    //         read_node_map[query_name].insert(node.first);
+    //     }
+    // }
+    // for(auto read: read_node_map){
+    //     for(auto node: read.second){
+    //         cout << graph->seq[node>>1].name << ",\t";
+    //     }
+    //     cout << endl;
+    //     }
+    // }
 
     set<set<uint32_t>> seen;
-    for(auto bubble: bubbles_pure){
-        for(int i = 0; i < bubble->paths_nodes.size(); i++){
-            for(int j = 0; j < bubble->paths_nodes.size(); j++){
-                if(i!=j){
+    for (auto bubble : bubbles_pure)
+    {
+        for (int i = 0; i < bubble->paths_nodes.size(); i++)
+        {
+            for (int j = 0; j < bubble->paths_nodes.size(); j++)
+            {
+                if (i != j)
+                {
                     set<uint32_t> path_nodes_1 = bubble->paths_nodes[i];
                     set<uint32_t> path_nodes_2 = bubble->paths_nodes[j];
                     cout << i << "\t" << j << endl;
-                    for(auto x: path_nodes_1){
-                        for(auto y: path_nodes_2){
+                    for (auto x : path_nodes_1)
+                    {
+                        for (auto y : path_nodes_2)
+                        {
                             set<uint32_t> buff_seen;
                             buff_seen.insert(x);
                             buff_seen.insert(y);
 
-                            bool comparable = (x>>1!= y>>1) && seen.insert(buff_seen).second;
+                            bool comparable = (x >> 1 != y >> 1) && seen.insert(buff_seen).second;
                             bool flag = false;
                             bool flag2 = false;
-                            if(comparable){
+                            if (comparable)
+                            {
                                 uint32_t num_outgoing_arcs_x = asg_arc_n(graph, x);
                                 asg_arc_t *outgoing_arcs_x = asg_arc_a(graph, x);
                                 uint32_t num_outgoing_arcs_y = asg_arc_n(graph, y);
                                 asg_arc_t *outgoing_arcs_y = asg_arc_a(graph, y);
-                                uint32_t num_incoming_arcs_x = asg_arc_n(graph, x^1);
-                                asg_arc_t *incoming_arcs_x = asg_arc_a(graph, x^1);
-                                uint32_t num_incoming_arcs_y = asg_arc_n(graph, y^1);
-                                asg_arc_t *incoming_arcs_y = asg_arc_a(graph, y^1);
-                                for(int i=0; i<num_outgoing_arcs_x; i++){
-                                    for(int j=0; j<num_outgoing_arcs_y; j++){
-                                        if(outgoing_arcs_x[i].v == outgoing_arcs_y[j].v){
+                                uint32_t num_incoming_arcs_x = asg_arc_n(graph, x ^ 1);
+                                asg_arc_t *incoming_arcs_x = asg_arc_a(graph, x ^ 1);
+                                uint32_t num_incoming_arcs_y = asg_arc_n(graph, y ^ 1);
+                                asg_arc_t *incoming_arcs_y = asg_arc_a(graph, y ^ 1);
+                                for (int i = 0; i < num_outgoing_arcs_x; i++)
+                                {
+                                    for (int j = 0; j < num_outgoing_arcs_y; j++)
+                                    {
+                                        if (outgoing_arcs_x[i].v == outgoing_arcs_y[j].v)
+                                        {
                                             flag = true;
                                             break;
                                         }
                                     }
-                                    if(flag){
+                                    if (flag)
+                                    {
                                         break;
                                     }
                                 }
-                                for(int i=0; i<num_incoming_arcs_x; i++){
-                                    for(int j=0; j<num_incoming_arcs_y; j++){
-                                        if(incoming_arcs_x[i].v == incoming_arcs_y[j].v){
+                                for (int i = 0; i < num_incoming_arcs_x; i++)
+                                {
+                                    for (int j = 0; j < num_incoming_arcs_y; j++)
+                                    {
+                                        if (incoming_arcs_x[i].v == incoming_arcs_y[j].v)
+                                        {
                                             flag2 = true;
                                             break;
                                         }
                                     }
-                                    if(flag2){
+                                    if (flag2)
+                                    {
                                         break;
                                     }
                                 }
                             }
-                            comparable = comparable && (flag||flag2);
-                            if(comparable){
-                                string x_seq = string(graph->seq[x>>1].seq);
-                                uint32_t x_len = graph->seq[x>>1].len;
-                                if(x%2==1){
+                            comparable = comparable && (flag || flag2);
+                            if (comparable)
+                            {
+                                string x_seq = string(graph->seq[x >> 1].seq);
+                                uint32_t x_len = graph->seq[x >> 1].len;
+                                if (x % 2 == 1)
+                                {
                                     x_seq = complement(string(x_seq));
                                 }
-                                string y_seq = string(graph->seq[y>>1].seq);
-                                uint32_t y_len = graph->seq[y>>1].len;
-                                if(y%2==1){
+                                string y_seq = string(graph->seq[y >> 1].seq);
+                                uint32_t y_len = graph->seq[y >> 1].len;
+                                if (y % 2 == 1)
+                                {
                                     y_seq = complement(string(y_seq));
                                 }
 
-
-                                Modset *ms_x = modsetCreate (hasher, params.B, 0) ;
-                                Reference *ref_x = referenceCreate (ms_x, 1 << 26) ;
-                                int id_x ;
-                                dictAdd (ref_x->dict, strdup("query_sequence"), &id_x);
-                                array (ref_x->len, id_x, int) = x_len ;
-                                SeqhashRCiterator *mi_x = modRCiterator (hasher, strdup(x_seq.c_str()), x_len) ;
-                                U64 hash_x ; int pos_x ;
-                                while (modRCnext (mi_x, &hash_x, &pos_x, 0))
-                                { U32 index = modsetIndexFind (ref_x->ms, hash_x, TRUE) ;
-                                if (index)
-                                    { if (ref_x->max+1 >= ref_x->size) die ("reference size overflow") ;
-                                    ref_x->index[ref_x->max] = index ;
-                                    ++ref_x->depth[index] ;
-                                    ref_x->offset[ref_x->max] = pos_x ;
-                                    ref_x->id[ref_x->max] = id_x ;
-                                    ++ref_x->max ;
+                                Modset *ms_x = modsetCreate(hasher, params.B, 0);
+                                Reference *ref_x = referenceCreate(ms_x, 1 << 26);
+                                int id_x;
+                                dictAdd(ref_x->dict, strdup("query_sequence"), &id_x);
+                                array(ref_x->len, id_x, int) = x_len;
+                                SeqhashRCiterator *mi_x = modRCiterator(hasher, strdup(x_seq.c_str()), x_len);
+                                U64 hash_x;
+                                int pos_x;
+                                while (modRCnext(mi_x, &hash_x, &pos_x, 0))
+                                {
+                                    U32 index = modsetIndexFind(ref_x->ms, hash_x, TRUE);
+                                    if (index)
+                                    {
+                                        if (ref_x->max + 1 >= ref_x->size)
+                                            die("reference size overflow");
+                                        ref_x->index[ref_x->max] = index;
+                                        ++ref_x->depth[index];
+                                        ref_x->offset[ref_x->max] = pos_x;
+                                        ref_x->id[ref_x->max] = id_x;
+                                        ++ref_x->max;
                                     }
                                 }
-                                seqhashRCiteratorDestroy (mi_x) ;
+                                seqhashRCiteratorDestroy(mi_x);
                                 // int i_x ; U32 *d_x = &ref_x->depth[1] ;
                                 // for (i_x = 1 ; i_x <= ref_x->ms->max ; ++i_x, ++d_x)
                                 //     if (*d_x == 1) { msSetCopy1 (ref_x->ms, i_x) ; }
                                 //     else if (*d_x == 2) { msSetCopy2 (ref_x->ms, i_x) ; }
                                 //     else { msSetCopyM (ref_x->ms, i_x) ; }
 
-
-
-                                Modset *ms_y = modsetCreate (hasher, params.B, 0) ;
-                                Reference *ref_y = referenceCreate (ms_y, 1 << 26) ;
-                                int id_y ;
-                                dictAdd (ref_y->dict, strdup("query_sequence"), &id_y);
-                                array (ref_y->len, id_y, int) = y_len ;
-                                SeqhashRCiterator *mi_y = modRCiterator (hasher, strdup(y_seq.c_str()), y_len) ;
-                                U64 hash_y ; int pos_y ;
-                                while (modRCnext (mi_y, &hash_y, &pos_y, 0))
-                                { U32 index = modsetIndexFind (ref_y->ms, hash_y, TRUE) ;
-                                if (index)
-                                    { if (ref_y->max+1 >= ref_y->size) die ("reference size overflow") ;
-                                    ref_y->index[ref_y->max] = index ;
-                                    ++ref_y->depth[index] ;
-                                    ref_y->offset[ref_y->max] = pos_y ;
-                                    ref_y->id[ref_y->max] = id_y ;
-                                    ++ref_y->max ;
+                                Modset *ms_y = modsetCreate(hasher, params.B, 0);
+                                Reference *ref_y = referenceCreate(ms_y, 1 << 26);
+                                int id_y;
+                                dictAdd(ref_y->dict, strdup("query_sequence"), &id_y);
+                                array(ref_y->len, id_y, int) = y_len;
+                                SeqhashRCiterator *mi_y = modRCiterator(hasher, strdup(y_seq.c_str()), y_len);
+                                U64 hash_y;
+                                int pos_y;
+                                while (modRCnext(mi_y, &hash_y, &pos_y, 0))
+                                {
+                                    U32 index = modsetIndexFind(ref_y->ms, hash_y, TRUE);
+                                    if (index)
+                                    {
+                                        if (ref_y->max + 1 >= ref_y->size)
+                                            die("reference size overflow");
+                                        ref_y->index[ref_y->max] = index;
+                                        ++ref_y->depth[index];
+                                        ref_y->offset[ref_y->max] = pos_y;
+                                        ref_y->id[ref_y->max] = id_y;
+                                        ++ref_y->max;
                                     }
                                 }
-                                seqhashRCiteratorDestroy (mi_y) ;
+                                seqhashRCiteratorDestroy(mi_y);
                                 // int i_y ; U32 *d_y = &ref_y->depth[1] ;
                                 // for (i_y = 1 ; i_y <= ref_y->ms->max ; ++i_y, ++d_y)
                                 //     if (*d_y == 1) { msSetCopy1 (ref_y->ms, i_y) ; }
                                 //     else if (*d_y == 2) { msSetCopy2 (ref_y->ms, i_y) ; }
                                 //     else { msSetCopyM (ref_y->ms, i_y) ; }
 
+                                map<U64, uint32_t> y_discrimitive_kmers = map<U64, uint32_t>();
+                                map<U64, uint32_t> x_discrimitive_kmers = map<U64, uint32_t>();
 
-                                map<U64,uint32_t> y_discrimitive_kmers = map<U64,uint32_t>();
-                                map<U64,uint32_t> x_discrimitive_kmers = map<U64,uint32_t>();
+                                SeqhashRCiterator *mi_query_y = modRCiterator(hasher, strdup(y_seq.c_str()), y_len);
+                                SeqhashRCiterator *mi_query_x = modRCiterator(hasher, strdup(x_seq.c_str()), x_len);
 
-                                SeqhashRCiterator *mi_query_y = modRCiterator (hasher, strdup(y_seq.c_str()), y_len) ;
-                                SeqhashRCiterator *mi_query_x = modRCiterator (hasher, strdup(x_seq.c_str()), x_len) ;
-
-                                U64 hash_query_x ; int pos_query_x ;
-                                while (modRCnext (mi_query_x, &hash_query_x, &pos_query_x, 0))
-                                { U32 index = modsetIndexFind (ref_y->ms, hash_query_x, FALSE) ;
-                                if (!index)
+                                U64 hash_query_x;
+                                int pos_query_x;
+                                while (modRCnext(mi_query_x, &hash_query_x, &pos_query_x, 0))
+                                {
+                                    U32 index = modsetIndexFind(ref_y->ms, hash_query_x, FALSE);
+                                    if (!index)
                                     {
                                         x_discrimitive_kmers[hash_query_x] = pos_query_x;
                                     }
                                 }
-                                seqhashRCiteratorDestroy (mi_query_x) ;
+                                seqhashRCiteratorDestroy(mi_query_x);
 
-                                U64 hash_query_y ; int pos_query_y ;
-                                while (modRCnext (mi_query_y, &hash_query_y, &pos_query_y, 0))
-                                { U32 index = modsetIndexFind (ref_x->ms, hash_query_y, FALSE) ;
-                                if (!index)
+                                U64 hash_query_y;
+                                int pos_query_y;
+                                while (modRCnext(mi_query_y, &hash_query_y, &pos_query_y, 0))
+                                {
+                                    U32 index = modsetIndexFind(ref_x->ms, hash_query_y, FALSE);
+                                    if (!index)
                                     {
                                         y_discrimitive_kmers[hash_query_y] = pos_query_y;
                                     }
                                 }
-                                seqhashRCiteratorDestroy (mi_query_y) ;
-
+                                seqhashRCiteratorDestroy(mi_query_y);
 
                                 modsetDestroy(ms_x);
                                 referenceDestroy(ref_x);
                                 modsetDestroy(ms_y);
                                 referenceDestroy(ref_y);
 
-
                                 // cout << graph->seq[x>>1].name << " kmers: " << x_discrimitive_kmers.size() << endl;
-                                for(auto k_mer : x_discrimitive_kmers){
+                                for (auto k_mer : x_discrimitive_kmers)
+                                {
                                     node_discrimitive_kmers[x].insert(k_mer);
                                 }
                                 // cout << counter_valid << " against " << valid_kmers.size() << endl;
                                 // cout << graph->seq[y>>1].name << " kmers: " << y_discrimitive_kmers.size() << endl;
-                                for(auto k_mer : y_discrimitive_kmers){
+                                for (auto k_mer : y_discrimitive_kmers)
+                                {
                                     node_discrimitive_kmers[y].insert(k_mer);
                                 }
                             }
@@ -2577,8 +3019,6 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
             }
         }
     }
-
-
 
     // set<uint32_t> nodes = set<uint32_t>();
     // for(int b = 0; b < graph->n_seq * 2; b++){
@@ -2637,13 +3077,11 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     //                 // x_seq = string("CCCCGCCCCGAAGCGCCCGCGTTGCGGTGGTTCATTTCTTCGCTTGCCCACTGGGCCTGGCAGCCTTCCGGCCCGTGGTCGTGCCTTGGCAGTCCCGCAC");
     //                 // y_seq = string("CCCCGCCCCGATGCCCCCGCGTTGCGGTGGTTCATTTCTTCGCTTGCCCACTGGGCCTGGCAGCCTTCCGGCCCGTGGTCGTGCCTTGGCAGTCCCGCAC");
 
-
     //                 // const char** buf_seq = const_cast<const char**>(&(x_seq.c_str()));
     //                 // const char** buf_name = const_cast<const char**>(&graph->seq[node.first>>1].name);
     //                 // mm_idx_t *this_node = mm_idx_str(iopt.w, iopt.k, iopt.flag, iopt.bucket_bits, 1, buf_seq, buf_name);
     //                 // mm_tbuf_t *tbuf = mm_tbuf_init();
     //                 // mm_mapopt_update(&mopt, this_node);
-
 
     //                 vector<uint32_t> bufff = vector<uint32_t>();
     //                 bufff.push_back(max(x,y));
@@ -2651,7 +3089,6 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     //                 bubbles.insert(bufff);
     //                 bubble_nodes.insert(x);
     //                 bubble_nodes.insert(y);
-
 
     //                 Modset *ms_x = modsetCreate (hasher, params.B, 0) ;
     //                 Reference *ref_x = referenceCreate (ms_x, 1 << 26) ;
@@ -2678,8 +3115,6 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     //                 //     else if (*d_x == 2) { msSetCopy2 (ref_x->ms, i_x) ; }
     //                 //     else { msSetCopyM (ref_x->ms, i_x) ; }
 
-
-
     //                 Modset *ms_y = modsetCreate (hasher, params.B, 0) ;
     //                 Reference *ref_y = referenceCreate (ms_y, 1 << 26) ;
     //                 int id_y ;
@@ -2704,7 +3139,6 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     //                 //     if (*d_y == 1) { msSetCopy1 (ref_y->ms, i_y) ; }
     //                 //     else if (*d_y == 2) { msSetCopy2 (ref_y->ms, i_y) ; }
     //                 //     else { msSetCopyM (ref_y->ms, i_y) ; }
-
 
     //                 map<U64,uint32_t> y_discrimitive_kmers = map<U64,uint32_t>();
     //                 map<U64,uint32_t> x_discrimitive_kmers = map<U64,uint32_t>();
@@ -2731,7 +3165,6 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     //                     }
     //                 }
     //                 seqhashRCiteratorDestroy (mi_query_y) ;
-
 
     //                 modsetDestroy(ms_x);
     //                 referenceDestroy(ref_x);
@@ -2779,19 +3212,22 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     //     }
     // }
 
-
-
     map<set<uint32_t>, set<string>> path_query_map = map<set<uint32_t>, set<string>>();
     map<set<uint32_t>, set<string>> path_query_support_map = map<set<uint32_t>, set<string>>();
 
-
-    for(auto record: *ordered_records){
+    for (auto record : *ordered_records)
+    {
         set<set<uint32_t>> inserted_path;
-        for(auto single_record: record){
-            if(node_path_map.find(single_record.tn)!=node_path_map.end() && record.size()>1){
-                for(auto buf_path:node_path_map[single_record.tn]){
-                    if(inserted_path.insert(buf_path).second){
-                        if(path_query_map.find(buf_path)==path_query_map.end()){
+        for (auto single_record : record)
+        {
+            if (node_path_map.find(single_record.tn) != node_path_map.end() && record.size() > 1)
+            {
+                for (auto buf_path : node_path_map[single_record.tn])
+                {
+                    if (inserted_path.insert(buf_path).second)
+                    {
+                        if (path_query_map.find(buf_path) == path_query_map.end())
+                        {
                             path_query_map[buf_path] = set<string>();
                         }
                         path_query_map[buf_path].insert(single_record.qn);
@@ -2801,73 +3237,91 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
         }
     }
 
-    for(auto bubble: bubbles_pure){
+    for (auto bubble : bubbles_pure)
+    {
         vector<vector<paf_rec_str_t>> joint_set = vector<vector<paf_rec_str_t>>();
         set<string> inserted_set = set<string>();
-        for(auto path: bubble->paths_nodes){
-            for(auto buf_query: path_query_map[path]){
-                if(inserted_set.insert(buf_query).second){
+        for (auto path : bubble->paths_nodes)
+        {
+            for (auto buf_query : path_query_map[path])
+            {
+                if (inserted_set.insert(buf_query).second)
+                {
                     joint_set.push_back(name_rec[buf_query]);
                 }
             }
         }
 
-
-        for(auto buf_query: joint_set){
-            vector<uint32_t> path_support_count(bubble->paths_nodes.size(),0);
-            vector<float> path_support_ratio(bubble->paths_nodes.size(),0);
-            for(auto buf_record: buf_query){
+        for (auto buf_query : joint_set)
+        {
+            vector<uint32_t> path_support_count(bubble->paths_nodes.size(), 0);
+            vector<float> path_support_ratio(bubble->paths_nodes.size(), 0);
+            for (auto buf_record : buf_query)
+            {
                 bool found = false;
-                for(auto path: bubble->paths_nodes){
-                    found = path.find(buf_record.tn)!=path.end();
-                    if(found){
+                for (auto path : bubble->paths_nodes)
+                {
+                    found = path.find(buf_record.tn) != path.end();
+                    if (found)
+                    {
                         break;
                     }
                 }
-                if(found){
+                if (found)
+                {
                     float current_ratio = 0;
                     uint32_t current_support_count = 0;
                     uint32_t node_x = buf_record.tn;
-                    string x_seq_str = string(graph->seq[node_x>>1].seq);
-                    if(node_x%2==1){
+                    string x_seq_str = string(graph->seq[node_x >> 1].seq);
+                    if (node_x % 2 == 1)
+                    {
                         x_seq_str = complement(x_seq_str);
                     }
-                    string query_sequence = translate(x_seq_str,buf_record.ts,buf_record.seq);
-                    Modset *ms_query = modsetCreate (hasher, params.B, 0) ;
-                    Reference *ref_query = referenceCreate (ms_query, 1 << 26) ;
-                    int id_query ;
-                    dictAdd (ref_query->dict, strdup("query_sequence"), &id_query);
-                    array (ref_query->len, id_query, int) = query_sequence.length() ;
-                    SeqhashRCiterator *mi_query = modRCiterator (hasher, strdup(query_sequence.c_str()), query_sequence.length()) ;
-                    U64 hash_query ; int pos_query ;
-                    while (modRCnext (mi_query, &hash_query, &pos_query, 0))
-                    { U32 index = modsetIndexFind (ref_query->ms, hash_query, TRUE) ;
-                    if (index)
-                        { if (ref_query->max+1 >= ref_query->size) die ("reference size overflow") ;
-                        ref_query->index[ref_query->max] = index ;
-                        ++ref_query->depth[index] ;
-                        ref_query->offset[ref_query->max] = pos_query ;
-                        ref_query->id[ref_query->max] = id_query ;
-                        ++ref_query->max ;
+                    string query_sequence = translate(x_seq_str, buf_record.ts, buf_record.seq);
+                    Modset *ms_query = modsetCreate(hasher, params.B, 0);
+                    Reference *ref_query = referenceCreate(ms_query, 1 << 26);
+                    int id_query;
+                    dictAdd(ref_query->dict, strdup("query_sequence"), &id_query);
+                    array(ref_query->len, id_query, int) = query_sequence.length();
+                    SeqhashRCiterator *mi_query = modRCiterator(hasher, strdup(query_sequence.c_str()), query_sequence.length());
+                    U64 hash_query;
+                    int pos_query;
+                    while (modRCnext(mi_query, &hash_query, &pos_query, 0))
+                    {
+                        U32 index = modsetIndexFind(ref_query->ms, hash_query, TRUE);
+                        if (index)
+                        {
+                            if (ref_query->max + 1 >= ref_query->size)
+                                die("reference size overflow");
+                            ref_query->index[ref_query->max] = index;
+                            ++ref_query->depth[index];
+                            ref_query->offset[ref_query->max] = pos_query;
+                            ref_query->id[ref_query->max] = id_query;
+                            ++ref_query->max;
                         }
                     }
-                    seqhashRCiteratorDestroy (mi_query) ;
+                    seqhashRCiteratorDestroy(mi_query);
 
-                    for(auto kmer_x: node_discrimitive_kmers[node_x]){
-                        if(modsetIndexFind (ref_query->ms, kmer_x.first, FALSE)!=0){
-                            current_support_count+=1;
+                    for (auto kmer_x : node_discrimitive_kmers[node_x])
+                    {
+                        if (modsetIndexFind(ref_query->ms, kmer_x.first, FALSE) != 0)
+                        {
+                            current_support_count += 1;
                         }
                     }
-                    if(node_discrimitive_kmers[node_x].size()!=0){
-                        current_ratio = (float)current_support_count/node_discrimitive_kmers[node_x].size();
+                    if (node_discrimitive_kmers[node_x].size() != 0)
+                    {
+                        current_ratio = (float)current_support_count / node_discrimitive_kmers[node_x].size();
                     }
                     modsetDestroy(ms_query);
                     referenceDestroy(ref_query);
 
-                    for(int idx = 0; idx < bubble->paths_nodes.size(); idx++){
-                        if(bubble->paths_nodes[idx].find(node_x)!=bubble->paths_nodes[idx].end()){
+                    for (int idx = 0; idx < bubble->paths_nodes.size(); idx++)
+                    {
+                        if (bubble->paths_nodes[idx].find(node_x) != bubble->paths_nodes[idx].end())
+                        {
                             path_support_count[idx]++;
-                            path_support_ratio[idx]+=current_ratio;
+                            path_support_ratio[idx] += current_ratio;
                         }
                     }
                 }
@@ -2875,9 +3329,11 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
 
             uint32_t max_idx = 0;
             float max_ratio = 0;
-            for(int idx = 0; idx < bubble->paths_nodes.size(); idx++){
-                path_support_ratio[idx]/=path_support_count[idx];
-                if(max_ratio < path_support_ratio[idx]){
+            for (int idx = 0; idx < bubble->paths_nodes.size(); idx++)
+            {
+                path_support_ratio[idx] /= path_support_count[idx];
+                if (max_ratio < path_support_ratio[idx])
+                {
                     max_idx = idx;
                     max_ratio = path_support_ratio[idx];
                 }
@@ -2886,11 +3342,12 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
         }
     }
 
-
-    for(auto path: path_query_support_map){
+    for (auto path : path_query_support_map)
+    {
         cout << endl;
-        for(auto node: path.first){
-            cout << graph->seq[node>>1].name << ", ";
+        for (auto node : path.first)
+        {
+            cout << graph->seq[node >> 1].name << ", ";
         }
         cout << endl;
         cout << path.second.size() << endl;
@@ -2938,7 +3395,6 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     //                     // //     else { msSetCopyM (ref_query->ms, i) ; ++nM ; }
     //                     // // modsetPack (ref_query->ms) ;
     //                     // // referencePack (ref_query) ;
-
 
     //                     // for(auto kmer_x: node_discrimitive_kmers[node_x]){
     //                     //     if(query_kmers.find(kmer_x)!=query_kmers.end()){
@@ -3018,77 +3474,96 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     //     }
     // }
 
-    vector<bubble_t*> pure_bubbles = vector<bubble_t*>();
+    vector<bubble_t *> pure_bubbles = vector<bubble_t *>();
     set<vector<uint32_t>> added_begin_end = set<vector<uint32_t>>();
     map<set<uint32_t>, set<string>> pure_path_query_support_map = map<set<uint32_t>, set<string>>();
-    map<vector<uint32_t>,vector<set<uint32_t>>> begEnd_pathes = map<vector<uint32_t>,vector<set<uint32_t>>>();
-    map<set<uint32_t>,vector<uint32_t>> path_begEnd = map<set<uint32_t>,vector<uint32_t>>();
+    map<vector<uint32_t>, vector<set<uint32_t>>> begEnd_pathes = map<vector<uint32_t>, vector<set<uint32_t>>>();
+    map<set<uint32_t>, vector<uint32_t>> path_begEnd = map<set<uint32_t>, vector<uint32_t>>();
     map<set<uint32_t>, map<set<uint32_t>, set<string>>> path_connection = map<set<uint32_t>, map<set<uint32_t>, set<string>>>();
     map<set<uint32_t>, map<set<uint32_t>, uint32_t>> path_connection_count = map<set<uint32_t>, map<set<uint32_t>, uint32_t>>();
     map<uint32_t, set<vector<set<uint32_t>>>> ordered_path_connection_count = map<uint32_t, set<vector<set<uint32_t>>>>();
     uint32_t max_connection_support = 0;
-    map<vector<uint32_t>, map<uint32_t,set<uint32_t>>> begEnd_haplo_path = map<vector<uint32_t>, map<uint32_t,set<uint32_t>>>();
+    map<vector<uint32_t>, map<uint32_t, set<uint32_t>>> begEnd_haplo_path = map<vector<uint32_t>, map<uint32_t, set<uint32_t>>>();
 
-    for(auto bubble: bubbles_pure){
+    for (auto bubble : bubbles_pure)
+    {
         vector<uint32_t> buf = vector<uint32_t>();
-        buf.push_back(bubble->begNode>>1);
-        buf.push_back(bubble->endNode>>1);
-        if(added_begin_end.insert(buf).second){
-            begEnd_haplo_path[buf] = map<uint32_t,set<uint32_t>>();
+        buf.push_back(bubble->begNode >> 1);
+        buf.push_back(bubble->endNode >> 1);
+        if (added_begin_end.insert(buf).second)
+        {
+            begEnd_haplo_path[buf] = map<uint32_t, set<uint32_t>>();
             begEnd_haplo_path[buf][1] = set<uint32_t>();
             begEnd_haplo_path[buf][2] = set<uint32_t>();
             vector<set<uint32_t>> all_pure_pathes = vector<set<uint32_t>>();
-            for(auto path: bubble->paths_nodes){
+            for (auto path : bubble->paths_nodes)
+            {
                 set<uint32_t> pure_path = set<uint32_t>();
-                for(auto buf_node: path){
-                    pure_path.insert(buf_node>>1);
+                for (auto buf_node : path)
+                {
+                    pure_path.insert(buf_node >> 1);
                 }
                 all_pure_pathes.push_back(pure_path);
                 path_begEnd[pure_path] = buf;
             }
             begEnd_pathes[buf] = all_pure_pathes;
             pure_bubbles.push_back(bubble);
-        }else{
+        }
+        else
+        {
             delete bubble;
         }
     }
 
-    for(auto path: path_query_support_map){
+    for (auto path : path_query_support_map)
+    {
         set<uint32_t> pure_path = set<uint32_t>();
-        for(auto buf_node: path.first){
-            pure_path.insert(buf_node>>1);
+        for (auto buf_node : path.first)
+        {
+            pure_path.insert(buf_node >> 1);
         }
-        if(pure_path_query_support_map.find(pure_path)==pure_path_query_support_map.end()){
+        if (pure_path_query_support_map.find(pure_path) == pure_path_query_support_map.end())
+        {
             pure_path_query_support_map[pure_path] = set<string>();
         }
-        for(auto read_name: path.second){
+        for (auto read_name : path.second)
+        {
             pure_path_query_support_map[pure_path].insert(read_name);
         }
     }
 
-    for(auto path_a: pure_path_query_support_map){
+    for (auto path_a : pure_path_query_support_map)
+    {
         path_connection[path_a.first] = map<set<uint32_t>, set<string>>();
-        for(auto path_b: pure_path_query_support_map){
+        for (auto path_b : pure_path_query_support_map)
+        {
             path_connection[path_a.first][path_b.first] = set<string>();
-            for(auto read_b: path_b.second){
-                if(path_a.second.find(read_b)!=path_a.second.end()){
+            for (auto read_b : path_b.second)
+            {
+                if (path_a.second.find(read_b) != path_a.second.end())
+                {
                     path_connection[path_a.first][path_b.first].insert(read_b);
                 }
             }
         }
     }
 
-    for(auto path_a: pure_path_query_support_map){
+    for (auto path_a : pure_path_query_support_map)
+    {
         cout << endl;
-        for(auto node: path_a.first){
+        for (auto node : path_a.first)
+        {
             cout << graph->seq[node].name << ", ";
         }
         cout << endl;
-        for(auto name: path_a.second){
+        for (auto name : path_a.second)
+        {
             vector<paf_rec_str_t> records = name_rec[name];
-            for(auto record: records){
-                if(path_a.first.find(record.tn>>1)!=path_a.first.end()){
-                    cout << graph->seq[record.tn >>1].name << ", ";
+            for (auto record : records)
+            {
+                if (path_a.first.find(record.tn >> 1) != path_a.first.end())
+                {
+                    cout << graph->seq[record.tn >> 1].name << ", ";
                 }
             }
             cout << endl;
@@ -3096,13 +3571,17 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
         cout << endl;
     }
 
-    for(auto path_a:path_connection){
+    for (auto path_a : path_connection)
+    {
         path_connection_count[path_a.first] = map<set<uint32_t>, uint32_t>();
-        for(auto path_b:path_a.second){
-            if(path_b.second.size()>max_connection_support){
+        for (auto path_b : path_a.second)
+        {
+            if (path_b.second.size() > max_connection_support)
+            {
                 max_connection_support = path_b.second.size();
             }
-            if(ordered_path_connection_count.find(path_b.second.size())==ordered_path_connection_count.end()){
+            if (ordered_path_connection_count.find(path_b.second.size()) == ordered_path_connection_count.end())
+            {
                 ordered_path_connection_count[path_b.second.size()] = set<vector<set<uint32_t>>>();
             }
             vector<set<uint32_t>> buf_begEnd = vector<set<uint32_t>>();
@@ -3119,14 +3598,19 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     bool finished = false;
     bool changed = true;
     uint32_t round = 1000;
-    while(!finished && round-- && changed){
+    while (!finished && round-- && changed)
+    {
         changed = false;
-        for(int i = max_connection_support; i>0; i--){
-            if(ordered_path_connection_count.find(i)!=ordered_path_connection_count.end()){
-                for(auto connection: ordered_path_connection_count[i]){
+        for (int i = max_connection_support; i > 0; i--)
+        {
+            if (ordered_path_connection_count.find(i) != ordered_path_connection_count.end())
+            {
+                for (auto connection : ordered_path_connection_count[i])
+                {
                     set<uint32_t> path_x = connection[0];
                     set<uint32_t> path_y = connection[1];
-                    if(first){
+                    if (first)
+                    {
                         haplo_1.insert(path_x);
                         haplo_1.insert(path_y);
                         begEnd_haplo_path[path_begEnd[path_x]][1] = path_x;
@@ -3139,77 +3623,118 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
                     uint32_t seen_x = 0;
                     uint32_t seen_y = 0;
 
-                    if(haplo_2.find(path_x)!=haplo_2.end()){
+                    if (haplo_2.find(path_x) != haplo_2.end())
+                    {
                         seen_x = 2;
-                    }else if(haplo_1.find(path_x)!=haplo_1.end()){
+                    }
+                    else if (haplo_1.find(path_x) != haplo_1.end())
+                    {
                         seen_x = 1;
                     }
 
-                    if(haplo_2.find(path_y)!=haplo_2.end()){
+                    if (haplo_2.find(path_y) != haplo_2.end())
+                    {
                         seen_y = 2;
-                    }else if(haplo_1.find(path_y)!=haplo_1.end()){
+                    }
+                    else if (haplo_1.find(path_y) != haplo_1.end())
+                    {
                         seen_y = 1;
                     }
 
-                    if(seen_x!=0 && seen_y==0){
-                        if(begEnd_haplo_path[path_begEnd[path_y]][seen_x].size()==0){
+                    if (seen_x != 0 && seen_y == 0)
+                    {
+                        if (begEnd_haplo_path[path_begEnd[path_y]][seen_x].size() == 0)
+                        {
                             changed = true;
                             begEnd_haplo_path[path_begEnd[path_y]][seen_x] = path_y;
-                            if(seen_x == 1){
+                            if (seen_x == 1)
+                            {
                                 haplo_1.insert(path_y);
-                            }else{
+                            }
+                            else
+                            {
                                 haplo_2.insert(path_y);
                             }
                         }
-                    }else if(seen_y!=0 && seen_x==0){
-                        if(begEnd_haplo_path[path_begEnd[path_x]][seen_y].size()==0){
+                    }
+                    else if (seen_y != 0 && seen_x == 0)
+                    {
+                        if (begEnd_haplo_path[path_begEnd[path_x]][seen_y].size() == 0)
+                        {
                             changed = true;
                             begEnd_haplo_path[path_begEnd[path_x]][seen_y] = path_x;
-                            if(seen_y == 1){
+                            if (seen_y == 1)
+                            {
                                 haplo_1.insert(path_x);
-                            }else{
+                            }
+                            else
+                            {
                                 haplo_2.insert(path_x);
                             }
                         }
-                    }else if(seen_x==0 && seen_y==0){
-                        if(begEnd_pathes[path_begEnd[path_x]].size()==2){
-                            if(begEnd_haplo_path[path_begEnd[path_x]][1].size()!=0 && begEnd_haplo_path[path_begEnd[path_x]][2].size()!=0){
+                    }
+                    else if (seen_x == 0 && seen_y == 0)
+                    {
+                        if (begEnd_pathes[path_begEnd[path_x]].size() == 2)
+                        {
+                            if (begEnd_haplo_path[path_begEnd[path_x]][1].size() != 0 && begEnd_haplo_path[path_begEnd[path_x]][2].size() != 0)
+                            {
                                 seen_x = -1;
-                            }else if(begEnd_haplo_path[path_begEnd[path_x]][1].size()!=0){
+                            }
+                            else if (begEnd_haplo_path[path_begEnd[path_x]][1].size() != 0)
+                            {
                                 seen_x = 2;
-                            }else if(begEnd_haplo_path[path_begEnd[path_x]][2].size()!=0){
+                            }
+                            else if (begEnd_haplo_path[path_begEnd[path_x]][2].size() != 0)
+                            {
                                 seen_x = 1;
                             }
                         }
-                        if(begEnd_pathes[path_begEnd[path_y]].size()==2){
-                            if(begEnd_haplo_path[path_begEnd[path_y]][1].size()!=0 && begEnd_haplo_path[path_begEnd[path_y]][2].size()!=0){
+                        if (begEnd_pathes[path_begEnd[path_y]].size() == 2)
+                        {
+                            if (begEnd_haplo_path[path_begEnd[path_y]][1].size() != 0 && begEnd_haplo_path[path_begEnd[path_y]][2].size() != 0)
+                            {
                                 seen_x = -1;
-                            }else if(begEnd_haplo_path[path_begEnd[path_y]][1].size()!=0){
+                            }
+                            else if (begEnd_haplo_path[path_begEnd[path_y]][1].size() != 0)
+                            {
                                 seen_y = 2;
-                            }else if(begEnd_haplo_path[path_begEnd[path_y]][2].size()!=0){
+                            }
+                            else if (begEnd_haplo_path[path_begEnd[path_y]][2].size() != 0)
+                            {
                                 seen_y = 1;
                             }
                         }
-                        if(seen_x!=-1 && seen_y!=-1){
-                            if((seen_y == seen_x || seen_y==0) && seen_x != 0){
+                        if (seen_x != -1 && seen_y != -1)
+                        {
+                            if ((seen_y == seen_x || seen_y == 0) && seen_x != 0)
+                            {
                                 changed = true;
                                 begEnd_haplo_path[path_begEnd[path_y]][seen_x] = path_y;
                                 begEnd_haplo_path[path_begEnd[path_x]][seen_x] = path_x;
-                                if(seen_x == 1){
+                                if (seen_x == 1)
+                                {
                                     haplo_1.insert(path_x);
                                     haplo_1.insert(path_y);
-                                }else{
+                                }
+                                else
+                                {
                                     haplo_2.insert(path_x);
                                     haplo_2.insert(path_y);
                                 }
-                            }else if(seen_x == 0 && seen_y != 0){
+                            }
+                            else if (seen_x == 0 && seen_y != 0)
+                            {
                                 changed = true;
                                 begEnd_haplo_path[path_begEnd[path_y]][seen_y] = path_y;
                                 begEnd_haplo_path[path_begEnd[path_x]][seen_y] = path_x;
-                                if(seen_y == 1){
+                                if (seen_y == 1)
+                                {
                                     haplo_1.insert(path_x);
                                     haplo_1.insert(path_y);
-                                }else{
+                                }
+                                else
+                                {
                                     haplo_2.insert(path_x);
                                     haplo_2.insert(path_y);
                                 }
@@ -3220,8 +3745,10 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
             }
         }
         finished = true;
-        for(auto begEnd:begEnd_haplo_path){
-            if(begEnd.second[1].size()==0 || begEnd.second[2].size()==0){
+        for (auto begEnd : begEnd_haplo_path)
+        {
+            if (begEnd.second[1].size() == 0 || begEnd.second[2].size() == 0)
+            {
                 finished = false;
                 break;
             }
@@ -3229,16 +3756,20 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     }
 
     cout << endl;
-    for(auto path: haplo_1){
-        for(auto node: path){
+    for (auto path : haplo_1)
+    {
+        for (auto node : path)
+        {
             cout << graph->seq[node].name << ", ";
         }
         cout << "\t";
     }
     cout << endl;
 
-    for(auto path: haplo_2){
-        for(auto node: path){
+    for (auto path : haplo_2)
+    {
+        for (auto node : path)
+        {
             cout << graph->seq[node].name << ", ";
         }
         cout << "\t";
@@ -3333,7 +3864,6 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     //         }
     //     }
     // }
-
 
     // uint32_t max_support = 0;
     // map<uint32_t,vector<vector<uint32_t>>> support_count_connections = map<uint32_t,vector<vector<uint32_t>>>();
@@ -3492,7 +4022,6 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     // set<uint32_t> path_0;
     // set<uint32_t> path_1;
 
-
     // for(auto bubble:bubbles){
     //     uint32_t node_x = bubble[0]>>1;
     //     uint32_t node_y = bubble[1]>>1;
@@ -3528,7 +4057,8 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     // }
     // cout << endl;
 
-    for(auto bubble: pure_bubbles){
+    for (auto bubble : pure_bubbles)
+    {
         delete bubble;
     }
     // for(auto node_path :node_path_map){
@@ -3556,46 +4086,66 @@ void get_seperate_haplotype(set<vector<uint32_t>>* set_of_pathes, vector<vector<
     // cout << endl;
 }
 
-void repeat_resolver::save_pathes_to_file(set<vector<uint32_t>>* set_of_pathes, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, asg_t* graph, string output_directory){
+void repeat_resolver::save_pathes_to_file(set<vector<uint32_t>> *set_of_pathes, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph, asg_t *graph, string output_directory)
+{
     stringstream ss;
     ss << "repeat_resolve_graph.gfa";
-    ofstream current_file(output_directory+string("/")+ss.str());
+    ofstream current_file(output_directory + string("/") + ss.str());
     int counting = 0;
     // set<uint32_t> common_nodes;
-    for(auto a : *set_of_pathes){
+    for (auto a : *set_of_pathes)
+    {
         // uint32_t num_of_nodes = a[a.size()-1];
-        for(auto b: a){
-            cout << graph->seq[b>>1].name << " to ";
+        for (auto b : a)
+        {
+            cout << graph->seq[b >> 1].name << " to ";
         }
         set<uint32_t> nodes;
-        for(int b = 0; b < a.size()/2; b++){
-            if(nodes.insert(a[b*2]>>1).second){
-                current_file << "S\t" << string(graph->seq[a[b*2]>>1].name) + string("_") + to_string(counting) << "\t" << "*" << endl;
+        for (int b = 0; b < a.size() / 2; b++)
+        {
+            if (nodes.insert(a[b * 2] >> 1).second)
+            {
+                current_file << "S\t" << string(graph->seq[a[b * 2] >> 1].name) + string("_") + to_string(counting) << "\t"
+                             << "*" << endl;
             }
-            if(nodes.insert(a[b*2+1]>>1).second){
-                current_file << "S\t" << string(graph->seq[a[b*2+1]>>1].name + string("_")) + to_string(counting) << "\t" << "*" << endl;
+            if (nodes.insert(a[b * 2 + 1] >> 1).second)
+            {
+                current_file << "S\t" << string(graph->seq[a[b * 2 + 1] >> 1].name + string("_")) + to_string(counting) << "\t"
+                             << "*" << endl;
             }
-            for(auto q : (*bubble_chain_graph)[a[b*2]][a[b*2+1]]){
-                if(nodes.insert(q>>1).second){
-                    current_file << "S\t" << string(graph->seq[q>>1].name) + string("_") + to_string(counting) << "\t" << "*" << endl;
+            for (auto q : (*bubble_chain_graph)[a[b * 2]][a[b * 2 + 1]])
+            {
+                if (nodes.insert(q >> 1).second)
+                {
+                    current_file << "S\t" << string(graph->seq[q >> 1].name) + string("_") + to_string(counting) << "\t"
+                                 << "*" << endl;
                 }
             }
         }
-        for(auto q : nodes){
-            uint32_t num_outgoing_arcs = asg_arc_n(graph, (q<<1));
-            asg_arc_t *outgoing_arcs = asg_arc_a(graph, (q<<1));
-            uint32_t num_outgoing_reversed_arcs = asg_arc_n(graph, (q<<1)^1);
-            asg_arc_t *outgoing_reversed_arcs = asg_arc_a(graph, (q<<1)^1);
-            for(int i = 0; i < num_outgoing_arcs; i++){
-                uint32_t other_node = outgoing_arcs[i].v>>1;
-                if(nodes.find(other_node)!=nodes.end()){
-                    current_file << "L\t" << string(graph->seq[q].name) + string("_") + to_string(counting) << "\t"<< "+" << "\t" << string(graph->seq[outgoing_arcs[i].v>>1].name) + string("_") + to_string(counting) << "\t" << (outgoing_arcs[i].v%2==0 ? "+" : "-") << "\t0M\t" <<endl;
+        for (auto q : nodes)
+        {
+            uint32_t num_outgoing_arcs = asg_arc_n(graph, (q << 1));
+            asg_arc_t *outgoing_arcs = asg_arc_a(graph, (q << 1));
+            uint32_t num_outgoing_reversed_arcs = asg_arc_n(graph, (q << 1) ^ 1);
+            asg_arc_t *outgoing_reversed_arcs = asg_arc_a(graph, (q << 1) ^ 1);
+            for (int i = 0; i < num_outgoing_arcs; i++)
+            {
+                uint32_t other_node = outgoing_arcs[i].v >> 1;
+                if (nodes.find(other_node) != nodes.end())
+                {
+                    current_file << "L\t" << string(graph->seq[q].name) + string("_") + to_string(counting) << "\t"
+                                 << "+"
+                                 << "\t" << string(graph->seq[outgoing_arcs[i].v >> 1].name) + string("_") + to_string(counting) << "\t" << (outgoing_arcs[i].v % 2 == 0 ? "+" : "-") << "\t0M\t" << endl;
                 }
             }
-            for(int i = 0; i < num_outgoing_reversed_arcs; i++){
-                uint32_t other_node = outgoing_reversed_arcs[i].v>>1;
-                if(nodes.find(other_node)!=nodes.end()){
-                    current_file << "L\t" << string(graph->seq[q].name) + string("_") + to_string(counting) << "\t"<< "-" << "\t" << string(graph->seq[outgoing_reversed_arcs[i].v>>1].name) + string("_") + to_string(counting) << "\t" << (outgoing_reversed_arcs[i].v%2==0 ? "+" : "-") << "\t0M\t" <<endl;
+            for (int i = 0; i < num_outgoing_reversed_arcs; i++)
+            {
+                uint32_t other_node = outgoing_reversed_arcs[i].v >> 1;
+                if (nodes.find(other_node) != nodes.end())
+                {
+                    current_file << "L\t" << string(graph->seq[q].name) + string("_") + to_string(counting) << "\t"
+                                 << "-"
+                                 << "\t" << string(graph->seq[outgoing_reversed_arcs[i].v >> 1].name) + string("_") + to_string(counting) << "\t" << (outgoing_reversed_arcs[i].v % 2 == 0 ? "+" : "-") << "\t0M\t" << endl;
                 }
             }
         }
@@ -3664,7 +4214,6 @@ void repeat_resolver::save_pathes_to_file(set<vector<uint32_t>>* set_of_pathes, 
 //     return result;
 // }
 
-
 // void repeat_resolver::solve_repeat_hic(char* hic_filename_1, char* hic_filename_2, asg_t* graph)
 // {
 
@@ -3691,8 +4240,6 @@ void repeat_resolver::save_pathes_to_file(set<vector<uint32_t>>* set_of_pathes, 
 //         kmers[j] = current_kmers;
 //     }
 
-
-
 //     hic_reader reader;
 //     hic_file_t* file1 = reader.hic_open(hic_filename_1);
 //     hic_file_t* file2 = reader.hic_open(hic_filename_2);
@@ -3704,7 +4251,6 @@ void repeat_resolver::save_pathes_to_file(set<vector<uint32_t>>* set_of_pathes, 
 //         map<uint32_t, float> count_1;
 //         map<uint32_t, float> count_2;
 //         for(auto unitig: kmers){
-
 
 //             mm_tbuf_t *tbuf = mm_tbuf_init();
 //             mm_mapopt_update(&mopt, unitig.second);
@@ -3784,93 +4330,116 @@ void repeat_resolver::save_pathes_to_file(set<vector<uint32_t>>* set_of_pathes, 
 
 // }
 
-typedef struct{
+typedef struct
+{
     uint32_t **counting_result;
 
-
     uint32_t len;
-    string* haplo_sequences;
-    vector<uint32_t>* current_nodes_haplo;
-    map<uint32_t,uint32_t>* node_positions;
-    uint32_t** connection_count_forward;
-    uint32_t** connection_count_backward;
+    string *haplo_sequences;
+    vector<uint32_t> *current_nodes_haplo;
+    map<uint32_t, uint32_t> *node_positions;
+    uint32_t **connection_count_forward;
+    uint32_t **connection_count_backward;
 } count_step;
 
-typedef struct { // global data structure for kt_pipeline()
-	asg_t* graph;
-    map<uint32_t,bubble_t*>* node_bubble_map;
-    uint32_t** connections_count;
-    vector<bubble_t*> complex_bubbles;
-    map<uint32_t,set<uint32_t>>* node_path_id_map;
+typedef struct
+{ // global data structure for kt_pipeline()
+    asg_t *graph;
+    map<uint32_t, bubble_t *> *node_bubble_map;
+    uint32_t **connections_count;
+    vector<bubble_t *> complex_bubbles;
+    map<uint32_t, set<uint32_t>> *node_path_id_map;
 } shared_data;
 
-typedef struct { // data structure for each step in kt_pipeline()
-	shared_data *p;
-	vector<uint32_t>* beg_node;
-    vector<uint32_t>* end_node;
-    vector<set<uint32_t>>* current_nodes;
-    string* haplo_sequences;
-    vector<uint32_t>* haplo_pathes;
-    map<uint32_t,uint32_t>* node_positions;
-    bool* similar;
-    set<uint32_t>* dif_nodes;
+typedef struct
+{ // data structure for each step in kt_pipeline()
+    shared_data *p;
+    vector<uint32_t> *beg_node;
+    vector<uint32_t> *end_node;
+    vector<set<uint32_t>> *current_nodes;
+    string *haplo_sequences;
+    vector<uint32_t> *haplo_pathes;
+    map<uint32_t, uint32_t> *node_positions;
+    bool *similar;
+    set<uint32_t> *dif_nodes;
 } step_data;
 
 static void counter_worker_single_step(void *data, long i, int tid) // callback for kt_for()
 {
-    count_step *p = (count_step*)data;
-    for(int j = 0; j < p->len; ++j){
-        if((i>>1) != (j>>1)){
-            for(auto node_i: p->current_nodes_haplo[i]){
-                for(auto node_j: p->current_nodes_haplo[j]){
-                    if((node_i>>1) != (node_j>>1)){
-                        bool forward = !((node_i%2==0) ^ (node_j%2==0));
+    count_step *p = (count_step *)data;
+    for (int j = 0; j < p->len; ++j)
+    {
+        if ((i >> 1) != (j >> 1))
+        {
+            for (auto node_i : p->current_nodes_haplo[i])
+            {
+                for (auto node_j : p->current_nodes_haplo[j])
+                {
+                    if ((node_i >> 1) != (node_j >> 1))
+                    {
+                        bool forward = !((node_i % 2 == 0) ^ (node_j % 2 == 0));
                         uint32_t pos_i = p->node_positions[i][node_i];
                         uint32_t pos_j = p->node_positions[j][node_j];
                         uint32_t pos_i_back = p->haplo_sequences[i].size() - pos_i;
                         uint32_t pos_j_back = p->haplo_sequences[j].size() - pos_j;
-                        if(pos_i + pos_j < 10000000){
-                            if(forward){
-                                p->counting_result[(i<<1)+1][(j<<1)] += p->connection_count_backward[node_i>>1][node_j>>1];
-                            }else{
-                                p->counting_result[(i<<1)+1][(j<<1)] += p->connection_count_forward[node_i>>1][node_j>>1];
+                        if (pos_i + pos_j < 10000000)
+                        {
+                            if (forward)
+                            {
+                                p->counting_result[(i << 1) + 1][(j << 1)] += p->connection_count_backward[node_i >> 1][node_j >> 1];
+                            }
+                            else
+                            {
+                                p->counting_result[(i << 1) + 1][(j << 1)] += p->connection_count_forward[node_i >> 1][node_j >> 1];
                             }
                         }
-                        if(pos_i_back + pos_j < 10000000){
-                            if(forward){
-                                p->counting_result[(i<<1)][(j<<1)] += p->connection_count_forward[node_i>>1][node_j>>1];
-                            }else{
-                                p->counting_result[(i<<1)][(j<<1)] += p->connection_count_backward[node_i>>1][node_j>>1];
+                        if (pos_i_back + pos_j < 10000000)
+                        {
+                            if (forward)
+                            {
+                                p->counting_result[(i << 1)][(j << 1)] += p->connection_count_forward[node_i >> 1][node_j >> 1];
+                            }
+                            else
+                            {
+                                p->counting_result[(i << 1)][(j << 1)] += p->connection_count_backward[node_i >> 1][node_j >> 1];
                             }
                         }
-                        if(pos_i_back + pos_j_back < 10000000){
-                            if(forward){
-                                p->counting_result[(i<<1)][(j<<1)+1] += p->connection_count_backward[node_i>>1][node_j>>1];
-                            }else{
-                                p->counting_result[(i<<1)][(j<<1)+1] += p->connection_count_forward[node_i>>1][node_j>>1];
+                        if (pos_i_back + pos_j_back < 10000000)
+                        {
+                            if (forward)
+                            {
+                                p->counting_result[(i << 1)][(j << 1) + 1] += p->connection_count_backward[node_i >> 1][node_j >> 1];
+                            }
+                            else
+                            {
+                                p->counting_result[(i << 1)][(j << 1) + 1] += p->connection_count_forward[node_i >> 1][node_j >> 1];
                             }
                         }
-                        if(pos_i + pos_j_back < 10000000){
-                            if(forward){
-                                p->counting_result[(i<<1)+1][(j<<1)+1] += p->connection_count_forward[node_i>>1][node_j>>1];
-                            }else{
-                                p->counting_result[(i<<1)+1][(j<<1)+1] += p->connection_count_backward[node_i>>1][node_j>>1];
+                        if (pos_i + pos_j_back < 10000000)
+                        {
+                            if (forward)
+                            {
+                                p->counting_result[(i << 1) + 1][(j << 1) + 1] += p->connection_count_forward[node_i >> 1][node_j >> 1];
+                            }
+                            else
+                            {
+                                p->counting_result[(i << 1) + 1][(j << 1) + 1] += p->connection_count_backward[node_i >> 1][node_j >> 1];
                             }
                         }
                     }
-                }   
+                }
             }
         }
     }
 }
 
-
-string get_haplotype_sequence(asg_t* graph, set<uint32_t> set_of_nodes, uint32_t begin, uint32_t end, int id, vector<uint32_t>* haplo_path, map<uint32_t,uint32_t>* node_pos){
+string get_haplotype_sequence(asg_t *graph, set<uint32_t> set_of_nodes, uint32_t begin, uint32_t end, int id, vector<uint32_t> *haplo_path, map<uint32_t, uint32_t> *node_pos)
+{
     stringstream result;
     uint32_t node = begin;
     uint32_t num_outgoing_arcs = asg_arc_n(graph, node);
     asg_arc_t *outgoing_arcs = asg_arc_a(graph, node);
-    vector<pair<int,pair<uint32_t,uint32_t>>> arcs_record;
+    vector<pair<int, pair<uint32_t, uint32_t>>> arcs_record;
     set<uint32_t> visited_nodes;
     vector<uint32_t> visited_arcs;
     uint32_t current_pos = 0;
@@ -3878,100 +4447,119 @@ string get_haplotype_sequence(asg_t* graph, set<uint32_t> set_of_nodes, uint32_t
     // visited_arcs.push_back(node);
     // result << string(">")+string(graph->seq[begin>>1].name) + string("_") + string(string(graph->seq[end>>1].name))+string("_hap")+to_string(id);
     // result << endl;
-    string pre_seq = string(graph->seq[node>>1].seq);
-    if(node&1){
+    string pre_seq = string(graph->seq[node >> 1].seq);
+    if (node & 1)
+    {
         pre_seq = complement(pre_seq);
     }
-    while(node!=-1){
+    while (node != -1)
+    {
         visited_arcs.push_back(node);
         positions[node] = current_pos;
         visited_nodes.insert(node);
         // bool found = false;
-        if(node == end){
+        if (node == end)
+        {
             result << pre_seq;
             break;
         }
         map<uint32_t, asg_arc_t> next_node_arc;
-        for(int i = 0; i < num_outgoing_arcs; i++){
+        for (int i = 0; i < num_outgoing_arcs; i++)
+        {
             next_node_arc[outgoing_arcs[i].v] = outgoing_arcs[i];
         }
 
         uint32_t next_node = -1;
         uint32_t max_counter = 0;
-        for(auto buf_node: next_node_arc){
-            if(set_of_nodes.find(buf_node.first>>1)!=set_of_nodes.end() && visited_nodes.find(buf_node.first)==visited_nodes.end()){
+        for (auto buf_node : next_node_arc)
+        {
+            if (set_of_nodes.find(buf_node.first >> 1) != set_of_nodes.end() && visited_nodes.find(buf_node.first) == visited_nodes.end())
+            {
                 uint32_t num_outgoing_arcs = asg_arc_n(graph, buf_node.first);
                 asg_arc_t *outgoing_arcs = asg_arc_a(graph, buf_node.first);
                 set<uint32_t> current_next_next;
-                for(int i = 0; i < num_outgoing_arcs; i++){
-                    if(set_of_nodes.find(outgoing_arcs[i].v>>1)!=set_of_nodes.end()){
+                for (int i = 0; i < num_outgoing_arcs; i++)
+                {
+                    if (set_of_nodes.find(outgoing_arcs[i].v >> 1) != set_of_nodes.end())
+                    {
                         current_next_next.insert(outgoing_arcs[i].v);
                     }
                 }
                 uint32_t score = current_next_next.size();
-                if(visited_nodes.find(buf_node.first^1)==visited_nodes.end()){
-                    score+=100;
+                if (visited_nodes.find(buf_node.first ^ 1) == visited_nodes.end())
+                {
+                    score += 100;
                 }
-                if(score>=max_counter){
+                if (score >= max_counter)
+                {
                     next_node = buf_node.first;
                     max_counter = score;
                 }
             }
         }
-        if(next_node == -1){
+        if (next_node == -1)
+        {
             bool found = false;
             uint32_t num_outgoing_arcs_temp = asg_arc_n(graph, node);
             asg_arc_t *outgoing_arcs_temp = asg_arc_a(graph, node);
-            for(int i = 0; i < num_outgoing_arcs_temp; i++){
-                if(found){
+            for (int i = 0; i < num_outgoing_arcs_temp; i++)
+            {
+                if (found)
+                {
                     break;
                 }
                 uint32_t num_outgoing_arcs_temp_sec = asg_arc_n(graph, outgoing_arcs_temp[i].v);
                 asg_arc_t *outgoing_arcs_temp_sec = asg_arc_a(graph, outgoing_arcs_temp[i].v);
-                for(int j = 0; j < num_outgoing_arcs_temp_sec; j++){
-                    if(set_of_nodes.find(outgoing_arcs_temp_sec[j].v>>1)!=set_of_nodes.end() && visited_nodes.find(outgoing_arcs_temp_sec[j].v)==visited_nodes.end()){
+                for (int j = 0; j < num_outgoing_arcs_temp_sec; j++)
+                {
+                    if (set_of_nodes.find(outgoing_arcs_temp_sec[j].v >> 1) != set_of_nodes.end() && visited_nodes.find(outgoing_arcs_temp_sec[j].v) == visited_nodes.end())
+                    {
                         found = true;
                         next_node = outgoing_arcs_temp[i].v;
                         break;
                     }
                 }
             }
-            if(next_node == -1){
+            if (next_node == -1)
+            {
                 stringstream res;
                 res << endl;
-                res << "Start-End: " << string(graph->seq[begin>>1].name) << ", " << string(graph->seq[end>>1].name)+string(" hap")+to_string(id) << endl;
+                res << "Start-End: " << string(graph->seq[begin >> 1].name) << ", " << string(graph->seq[end >> 1].name) + string(" hap") + to_string(id) << endl;
                 res << "All nodes: ";
-                for(auto node_buf: set_of_nodes){
-                    res << graph->seq[node_buf].name <<", ";
-                }   
+                for (auto node_buf : set_of_nodes)
+                {
+                    res << graph->seq[node_buf].name << ", ";
+                }
                 res << endl;
                 res << "Visited: ";
-                for(auto node_buf: visited_arcs){
-                    res << graph->seq[node_buf>>1].name << (node_buf%2==1?'-':'+')<< ", ";
-                }   
+                for (auto node_buf : visited_arcs)
+                {
+                    res << graph->seq[node_buf >> 1].name << (node_buf % 2 == 1 ? '-' : '+') << ", ";
+                }
                 res << endl;
                 cout << res.str();
                 cout << endl;
                 break;
             }
         }
-        assert(next_node!=-1);
+        assert(next_node != -1);
         uint32_t prev_n = node;
         node = next_node;
         current_pos += pre_seq.length() - next_node_arc[node].ol;
-        result << pre_seq.substr(0,pre_seq.length() - next_node_arc[node].ol);
+        result << pre_seq.substr(0, pre_seq.length() - next_node_arc[node].ol);
         // result << pre_seq;
-        pre_seq = string(graph->seq[node>>1].seq);
-        if(node&1){
+        pre_seq = string(graph->seq[node >> 1].seq);
+        if (node & 1)
+        {
             pre_seq = complement(pre_seq);
         }
         // string res_str = result.str();
         // bool failed = (strcmp(pre_seq.substr(0,next_node_arc[node].ol).c_str(), res_str.substr(res_str.length()-next_node_arc[node].ol, res_str.length()).c_str())!=0);
         // if(failed){
-            // int buf_ol = next_node_arc[node].ol;
-            // arcs_record.push_back(make_pair(buf_ol,make_pair(prev_n,next_node)));
+        // int buf_ol = next_node_arc[node].ol;
+        // arcs_record.push_back(make_pair(buf_ol,make_pair(prev_n,next_node)));
         // }else{
-            // arcs_record.push_back(make_pair(-1,make_pair(prev_n,next_node)));
+        // arcs_record.push_back(make_pair(-1,make_pair(prev_n,next_node)));
         // }
         // if(failed){
         //     cout << graph->seq[prev_n>>1].name << (prev_n%2==1?'-':'+')<< ", "<< graph->seq[next_node>>1].name << (next_node%2==1?'-':'+') << "\t failed" << endl;
@@ -4007,554 +4595,1115 @@ string get_haplotype_sequence(asg_t* graph, set<uint32_t> set_of_nodes, uint32_t
     return result.str();
 }
 
-
 static void worker_for_single_step(void *data, long i, int tid) // callback for kt_for()
 {
-	step_data *s = (step_data*)data;
+    step_data *s = (step_data *)data;
     set<uint32_t> current_nodes = (*s->current_nodes)[i];
-    asg_t* graph = s->p->graph;
-    map<uint32_t,set<uint32_t>>* node_path_id_map = s->p->node_path_id_map;
-    map<uint32_t,bubble_t*>* node_bubble_map = s->p->node_bubble_map;
-    uint32_t** connections_count = s->p->connections_count;
+    asg_t *graph = s->p->graph;
+    map<uint32_t, set<uint32_t>> *node_path_id_map = s->p->node_path_id_map;
+    map<uint32_t, bubble_t *> *node_bubble_map = s->p->node_bubble_map;
+    uint32_t **connections_count = s->p->connections_count;
 
     pair<vector<uint32_t>, vector<uint32_t>> sources_ends = get_sources(graph);
 
     // if(current_nodes.size()>4){
-        set<bubble_t*> cur_bubbles;
-        for(auto node:current_nodes){
-            if(node_bubble_map->find(node)!=node_bubble_map->end()){
-                cur_bubbles.insert((*node_bubble_map)[node]);
+    set<bubble_t *> cur_bubbles;
+    for (auto node : current_nodes)
+    {
+        if (node_bubble_map->find(node) != node_bubble_map->end())
+        {
+            cur_bubbles.insert((*node_bubble_map)[node]);
+        }
+    }
+    // cout << current_nodes.size() << endl;
+    map<bubble_t *, uint32_t> bubble_path_id_1;
+    map<bubble_t *, uint32_t> bubble_path_id_2;
+    set<uint32_t> path_1_not_included;
+    set<uint32_t> path_2_not_included;
+    map<bubble_t *, map<bubble_t *, map<uint32_t, map<uint32_t, uint32_t>>>> bubble_connection;
+    for (auto node_1 : current_nodes)
+    {
+        for (auto node_2 : current_nodes)
+        {
+
+            if (node_bubble_map->find(node_1) != node_bubble_map->end() && node_bubble_map->find(node_2) != node_bubble_map->end() && connections_count[node_1][node_2] != 0)
+            {
+                bubble_t *bub_1 = (*node_bubble_map)[node_1];
+                bubble_t *bub_2 = (*node_bubble_map)[node_2];
+                if (bub_1 != bub_2)
+                {
+                    set<uint32_t> pids_1 = (*node_path_id_map)[node_1];
+                    set<uint32_t> pids_2 = (*node_path_id_map)[node_2];
+                    // vector<bubble_t*> to_insert_bub;
+                    // to_insert_bub.push_back(bub_1);
+                    // to_insert_bub.push_back(bub_2);
+                    if (bubble_connection.find(bub_1) == bubble_connection.end())
+                    {
+                        bubble_connection[bub_1] = map<bubble_t *, map<uint32_t, map<uint32_t, uint32_t>>>();
+                    }
+                    if (bubble_connection[bub_1].find(bub_2) == bubble_connection[bub_1].end())
+                    {
+                        bubble_connection[bub_1][bub_2] = map<uint32_t, map<uint32_t, uint32_t>>();
+                    }
+                    for (auto pid_1 : pids_1)
+                    {
+                        for (auto pid_2 : pids_2)
+                        {
+                            if (bubble_connection[bub_1][bub_2].find(pid_1) == bubble_connection[bub_1][bub_2].end())
+                            {
+                                bubble_connection[bub_1][bub_2][pid_1] = map<uint32_t, uint32_t>();
+                            }
+                            if (bubble_connection[bub_1][bub_2][pid_1].find(pid_2) == bubble_connection[bub_1][bub_2][pid_1].end())
+                            {
+                                bubble_connection[bub_1][bub_2][pid_1][pid_2] = 0;
+                            }
+                            bubble_connection[bub_1][bub_2][pid_1][pid_2] += connections_count[node_1][node_2];
+                        }
+                    }
+
+                    if (bubble_connection.find(bub_2) == bubble_connection.end())
+                    {
+                        bubble_connection[bub_2] = map<bubble_t *, map<uint32_t, map<uint32_t, uint32_t>>>();
+                    }
+                    if (bubble_connection[bub_2].find(bub_1) == bubble_connection[bub_2].end())
+                    {
+                        bubble_connection[bub_2][bub_1] = map<uint32_t, map<uint32_t, uint32_t>>();
+                    }
+                    for (auto pid_1 : pids_1)
+                    {
+                        for (auto pid_2 : pids_2)
+                        {
+                            if (bubble_connection[bub_2][bub_1].find(pid_2) == bubble_connection[bub_2][bub_1].end())
+                            {
+                                bubble_connection[bub_2][bub_1][pid_2] = map<uint32_t, uint32_t>();
+                            }
+                            if (bubble_connection[bub_2][bub_1][pid_2].find(pid_1) == bubble_connection[bub_2][bub_1][pid_2].end())
+                            {
+                                bubble_connection[bub_2][bub_1][pid_2][pid_1] = 0;
+                            }
+                            bubble_connection[bub_2][bub_1][pid_2][pid_1] += connections_count[node_1][node_2];
+                        }
+                    }
+                }
             }
         }
-        // cout << current_nodes.size() << endl;
-        map<bubble_t*, uint32_t> bubble_path_id_1;
-        map<bubble_t*, uint32_t> bubble_path_id_2;
-        set<uint32_t> path_1_not_included;
-        set<uint32_t> path_2_not_included;
-        map<bubble_t*, map<bubble_t*, map<uint32_t, map<uint32_t,uint32_t>>>> bubble_connection;
-        for(auto node_1: current_nodes){
-            for(auto node_2: current_nodes){
+    }
+    // stringstream to_print;
+    // for(auto bub_1: bubble_connection){
+    //     for(auto bub_2: bub_1.second){
+    //         for(auto pid_1: bub_2.second){
+    //             for(auto pid_2: pid_1.second){
+    //                 set<uint32_t> path_bub_1 = bub_1.first->paths_nodes[pid_1.first];
+    //                 set<uint32_t> path_bub_2 = bub_2.first->paths_nodes[pid_2.first];
+    //                 uint32_t connection_number = pid_2.second;
+    //                 for(auto n: path_bub_1){
+    //                     to_print << graph->seq[n].name << ",";
+    //                 }
+    //                 to_print << "\t";
+    //                 for(auto n: path_bub_2){
+    //                     to_print << graph->seq[n].name << ",";
+    //                 }
+    //                 to_print << "\t" << connection_number << endl;
+    //             }
+    //         }
+    //     }
+    // }
 
-                if(node_bubble_map->find(node_1) != node_bubble_map->end()
-                && node_bubble_map->find(node_2) != node_bubble_map->end()
-                && connections_count[node_1][node_2]!=0){
-                    bubble_t* bub_1 = (*node_bubble_map)[node_1];
-                    bubble_t* bub_2 = (*node_bubble_map)[node_2];
-                    if(bub_1!=bub_2){
-                        set<uint32_t> pids_1 = (*node_path_id_map)[node_1];
-                        set<uint32_t> pids_2 = (*node_path_id_map)[node_2];
-                        // vector<bubble_t*> to_insert_bub;
-                        // to_insert_bub.push_back(bub_1);
-                        // to_insert_bub.push_back(bub_2);
-                        if(bubble_connection.find(bub_1)==bubble_connection.end()){
-                            bubble_connection[bub_1] = map<bubble_t*, map<uint32_t, map<uint32_t,uint32_t>>>();
+    // cout << to_print.str() << endl;
+
+    // cout << "Get connections between bubble" << endl;
+    bubble_t *max_bubble_1;
+    bubble_t *max_bubble_2;
+    uint32_t max_path_id_1;
+    uint32_t max_path_id_2;
+    uint32_t max_count = 0;
+    for (auto bub_1 : bubble_connection)
+    {
+        for (auto bub_2 : bub_1.second)
+        {
+            for (auto path_1 : bub_2.second)
+            {
+                for (auto path_2 : path_1.second)
+                {
+                    if (max_count < path_2.second && bub_1.first != bub_2.first)
+                    {
+                        max_count = path_2.second;
+                        max_bubble_1 = bub_1.first;
+                        max_bubble_2 = bub_2.first;
+                        max_path_id_1 = path_1.first;
+                        max_path_id_2 = path_2.first;
+                    }
+                }
+            }
+        }
+    }
+    if (max_count > 0)
+    {
+        bubble_path_id_1[max_bubble_1] = max_path_id_1;
+        bubble_path_id_1[max_bubble_2] = max_path_id_2;
+        if (max_bubble_1->paths_nodes.size() == 2)
+        {
+            if (max_path_id_1 == 1)
+            {
+                bubble_path_id_2[max_bubble_1] = 0;
+            }
+            else
+            {
+                bubble_path_id_2[max_bubble_1] = 1;
+            }
+        }
+        if (max_bubble_2->paths_nodes.size() == 2)
+        {
+            if (max_path_id_2 == 1)
+            {
+                bubble_path_id_2[max_bubble_2] = 0;
+            }
+            else
+            {
+                bubble_path_id_2[max_bubble_2] = 1;
+            }
+        }
+        while (bubble_connection.size() != bubble_path_id_1.size())
+        {
+            bubble_t *max_bubble;
+            uint32_t max_path_id;
+            uint32_t max_count = 0;
+
+            map<bubble_t *, map<uint32_t, uint32_t>> extension_count;
+            for (auto bub_1 : bubble_path_id_1)
+            {
+                for (auto new_bub : bubble_connection[bub_1.first])
+                {
+                    if (bubble_path_id_1.find(new_bub.first) == bubble_path_id_1.end())
+                    {
+                        for (auto new_path_id : new_bub.second[bub_1.second])
+                        {
+                            if (extension_count.find(new_bub.first) == extension_count.end())
+                            {
+                                extension_count[new_bub.first] = map<uint32_t, uint32_t>();
+                            }
+                            if (extension_count[new_bub.first].find(new_path_id.first) == extension_count[new_bub.first].end())
+                            {
+                                extension_count[new_bub.first][new_path_id.first] = 0;
+                            }
+                            extension_count[new_bub.first][new_path_id.first] += new_path_id.second;
                         }
-                        if(bubble_connection[bub_1].find(bub_2)==bubble_connection[bub_1].end()){
-                            bubble_connection[bub_1][bub_2] = map<uint32_t, map<uint32_t,uint32_t>>();
-                        }
-                        for(auto pid_1: pids_1){
-                            for(auto pid_2:pids_2){
-                                if(bubble_connection[bub_1][bub_2].find(pid_1)==bubble_connection[bub_1][bub_2].end()){
-                                    bubble_connection[bub_1][bub_2][pid_1] = map<uint32_t,uint32_t>();
+                    }
+                }
+            }
+
+            for (auto new_bub : extension_count)
+            {
+                for (auto new_path_id : new_bub.second)
+                {
+                    if (new_path_id.second > max_count)
+                    {
+                        max_bubble = new_bub.first;
+                        max_path_id = new_path_id.first;
+                        max_count = new_path_id.second;
+                    }
+                }
+            }
+            if (max_count != 0)
+            {
+                bubble_path_id_1[max_bubble] = max_path_id;
+                if (max_bubble->paths_nodes.size() == 2)
+                {
+                    if (max_path_id == 1)
+                    {
+                        bubble_path_id_2[max_bubble] = 0;
+                    }
+                    else
+                    {
+                        bubble_path_id_2[max_bubble] = 1;
+                    }
+                }
+            }
+            else
+            {
+                break;
+            }
+        }
+        // cout << "Get connected path in hap1" << endl;
+        max_count = 0;
+        if (bubble_path_id_2.size() == 0)
+        {
+            for (auto bub_1 : bubble_connection)
+            {
+                for (auto bub_2 : bub_1.second)
+                {
+                    for (auto path_1 : bub_2.second)
+                    {
+                        for (auto path_2 : path_1.second)
+                        {
+                            if (max_count < path_2.second)
+                            {
+                                if ((bubble_path_id_1.find(bub_1.first) == bubble_path_id_1.end() || bubble_path_id_1[bub_1.first] != path_1.first) && (bubble_path_id_1.find(bub_2.first) == bubble_path_id_1.end() || bubble_path_id_1[bub_2.first] != path_2.first))
+                                {
+                                    max_count = path_2.second;
+                                    max_bubble_1 = bub_1.first;
+                                    max_bubble_2 = bub_2.first;
+                                    max_path_id_1 = path_1.first;
+                                    max_path_id_2 = path_2.first;
                                 }
-                                if(bubble_connection[bub_1][bub_2][pid_1].find(pid_2)==bubble_connection[bub_1][bub_2][pid_1].end()){
-                                    bubble_connection[bub_1][bub_2][pid_1][pid_2] = 0;
-                                }
-                                bubble_connection[bub_1][bub_2][pid_1][pid_2] += connections_count[node_1][node_2];
                             }
                         }
+                    }
+                }
+            }
+        }
+        if (max_count > 0)
+        {
+            bubble_path_id_2[max_bubble_1] = max_path_id_1;
+            bubble_path_id_2[max_bubble_2] = max_path_id_2;
+            if (bubble_path_id_1.find(max_bubble_1) == bubble_path_id_1.end())
+            {
+                if (max_path_id_1 > 0)
+                {
+                    bubble_path_id_1[max_bubble_1] = 0;
+                }
+                else
+                {
+                    bubble_path_id_1[max_bubble_1] = 1;
+                }
+            }
+            if (bubble_path_id_1.find(max_bubble_2) == bubble_path_id_1.end())
+            {
+                if (max_path_id_2 > 0)
+                {
+                    bubble_path_id_1[max_bubble_2] = 0;
+                }
+                else
+                {
+                    bubble_path_id_1[max_bubble_2] = 1;
+                }
+            }
+        }
+        while (bubble_connection.size() != bubble_path_id_2.size())
+        {
+            bubble_t *max_bubble;
+            uint32_t max_path_id;
+            uint32_t max_count = 0;
 
-                        if(bubble_connection.find(bub_2)==bubble_connection.end()){
-                            bubble_connection[bub_2] = map<bubble_t*, map<uint32_t, map<uint32_t,uint32_t>>>();
-                        }
-                        if(bubble_connection[bub_2].find(bub_1)==bubble_connection[bub_2].end()){
-                            bubble_connection[bub_2][bub_1] = map<uint32_t, map<uint32_t,uint32_t>>();
-                        }
-                        for(auto pid_1: pids_1){
-                            for(auto pid_2:pids_2){
-                                if(bubble_connection[bub_2][bub_1].find(pid_2)==bubble_connection[bub_2][bub_1].end()){
-                                    bubble_connection[bub_2][bub_1][pid_2] = map<uint32_t,uint32_t>();
-                                }
-                                if(bubble_connection[bub_2][bub_1][pid_2].find(pid_1)==bubble_connection[bub_2][bub_1][pid_2].end()){
-                                    bubble_connection[bub_2][bub_1][pid_2][pid_1] = 0;
-                                }
-                                bubble_connection[bub_2][bub_1][pid_2][pid_1] += connections_count[node_1][node_2];
+            map<bubble_t *, map<uint32_t, uint32_t>> extension_count;
+            for (auto bub_1 : bubble_path_id_2)
+            {
+                for (auto new_bub : bubble_connection[bub_1.first])
+                {
+                    if (bubble_path_id_2.find(new_bub.first) == bubble_path_id_2.end())
+                    {
+                        for (auto new_path_id : new_bub.second[bub_1.second])
+                        {
+                            if (extension_count.find(new_bub.first) == extension_count.end())
+                            {
+                                extension_count[new_bub.first] = map<uint32_t, uint32_t>();
                             }
-                        }
-                    }
-                }
-            }
-        }
-        // stringstream to_print;
-        // for(auto bub_1: bubble_connection){
-        //     for(auto bub_2: bub_1.second){
-        //         for(auto pid_1: bub_2.second){
-        //             for(auto pid_2: pid_1.second){
-        //                 set<uint32_t> path_bub_1 = bub_1.first->paths_nodes[pid_1.first];
-        //                 set<uint32_t> path_bub_2 = bub_2.first->paths_nodes[pid_2.first];
-        //                 uint32_t connection_number = pid_2.second;
-        //                 for(auto n: path_bub_1){
-        //                     to_print << graph->seq[n].name << ",";
-        //                 }
-        //                 to_print << "\t";
-        //                 for(auto n: path_bub_2){
-        //                     to_print << graph->seq[n].name << ",";
-        //                 }
-        //                 to_print << "\t" << connection_number << endl;
-        //             }
-        //         }
-        //     }
-        // }
-
-        // cout << to_print.str() << endl;
-
-        // cout << "Get connections between bubble" << endl;
-        bubble_t* max_bubble_1;
-        bubble_t* max_bubble_2;
-        uint32_t max_path_id_1;
-        uint32_t max_path_id_2;
-        uint32_t max_count = 0;
-        for(auto bub_1: bubble_connection){
-            for(auto bub_2: bub_1.second){
-                for(auto path_1: bub_2.second){
-                    for(auto path_2: path_1.second){
-                        if(max_count < path_2.second && bub_1.first != bub_2.first){
-                            max_count = path_2.second;
-                            max_bubble_1 = bub_1.first;
-                            max_bubble_2 = bub_2.first;
-                            max_path_id_1 = path_1.first;
-                            max_path_id_2 = path_2.first;
-                        }
-                    }
-                }
-            }
-        }
-        if(max_count > 0){
-            bubble_path_id_1[max_bubble_1] = max_path_id_1;
-            bubble_path_id_1[max_bubble_2] = max_path_id_2;
-            if(max_bubble_1->paths_nodes.size()==2){
-                if(max_path_id_1==1){
-                    bubble_path_id_2[max_bubble_1] = 0;
-                }else{
-                    bubble_path_id_2[max_bubble_1] = 1;
-                }
-            }
-            if(max_bubble_2->paths_nodes.size()==2){
-                if(max_path_id_2==1){
-                    bubble_path_id_2[max_bubble_2] = 0;
-                }else{
-                    bubble_path_id_2[max_bubble_2] = 1;
-                }
-            }
-            while(bubble_connection.size()!= bubble_path_id_1.size()){
-                bubble_t* max_bubble;
-                uint32_t max_path_id;
-                uint32_t max_count = 0;
-
-                map<bubble_t*, map<uint32_t,uint32_t>> extension_count;
-                for(auto bub_1: bubble_path_id_1){
-                    for(auto new_bub: bubble_connection[bub_1.first]){
-                        if(bubble_path_id_1.find(new_bub.first)==bubble_path_id_1.end()){
-                            for(auto new_path_id: new_bub.second[bub_1.second]){
-                                if(extension_count.find(new_bub.first)==extension_count.end()){
-                                    extension_count[new_bub.first] = map<uint32_t,uint32_t>();
-                                }
-                                if(extension_count[new_bub.first].find(new_path_id.first)==extension_count[new_bub.first].end()){
-                                    extension_count[new_bub.first][new_path_id.first] = 0;
-                                }
-                                extension_count[new_bub.first][new_path_id.first] += new_path_id.second;
+                            if (extension_count[new_bub.first].find(new_path_id.first) == extension_count[new_bub.first].end())
+                            {
+                                extension_count[new_bub.first][new_path_id.first] = 0;
                             }
-                        }
-                    }
-                }
-
-                for(auto new_bub: extension_count){
-                    for(auto new_path_id: new_bub.second){
-                        if(new_path_id.second>max_count){
-                            max_bubble = new_bub.first;
-                            max_path_id = new_path_id.first;
-                            max_count = new_path_id.second;
-                        }
-                    }
-                }
-                if(max_count!= 0){
-                    bubble_path_id_1[max_bubble] = max_path_id;
-                    if(max_bubble->paths_nodes.size()==2){
-                        if(max_path_id==1){
-                            bubble_path_id_2[max_bubble] = 0;
-                        }else{
-                            bubble_path_id_2[max_bubble] = 1;
-                        }
-                    }
-                }else{
-                    break;
-                }
-            }
-            // cout << "Get connected path in hap1" << endl;
-            max_count = 0;
-            if(bubble_path_id_2.size() == 0){
-                for(auto bub_1: bubble_connection){
-                    for(auto bub_2: bub_1.second){
-                        for(auto path_1: bub_2.second){
-                            for(auto path_2: path_1.second){
-                                if(max_count < path_2.second){
-                                    if( (bubble_path_id_1.find(bub_1.first)==bubble_path_id_1.end() || bubble_path_id_1[bub_1.first] != path_1.first)
-                                    && (bubble_path_id_1.find(bub_2.first)==bubble_path_id_1.end() || bubble_path_id_1[bub_2.first] != path_2.first)
-                                    ){
-                                        max_count = path_2.second;
-                                        max_bubble_1 = bub_1.first;
-                                        max_bubble_2 = bub_2.first;
-                                        max_path_id_1 = path_1.first;
-                                        max_path_id_2 = path_2.first;
-                                    }
-                                }
-                            }
+                            extension_count[new_bub.first][new_path_id.first] += new_path_id.second;
                         }
                     }
                 }
             }
-            if(max_count > 0){
-                bubble_path_id_2[max_bubble_1] = max_path_id_1;
-                bubble_path_id_2[max_bubble_2] = max_path_id_2;
-                if(bubble_path_id_1.find(max_bubble_1) == bubble_path_id_1.end()){
-                    if(max_path_id_1>0){
-                        bubble_path_id_1[max_bubble_1] = 0;
-                    }else{
-                        bubble_path_id_1[max_bubble_1] = 1;
-                    }
-                }
-                if(bubble_path_id_1.find(max_bubble_2) == bubble_path_id_1.end()){
-                    if(max_path_id_2>0){
-                        bubble_path_id_1[max_bubble_2] = 0;
-                    }else{
-                        bubble_path_id_1[max_bubble_2] = 1;
-                    }
-                }
 
-
-            }
-            while(bubble_connection.size()!= bubble_path_id_2.size()){
-                bubble_t* max_bubble;
-                uint32_t max_path_id;
-                uint32_t max_count = 0;
-
-                map<bubble_t*, map<uint32_t,uint32_t>> extension_count;
-                for(auto bub_1: bubble_path_id_2){
-                    for(auto new_bub: bubble_connection[bub_1.first]){
-                        if(bubble_path_id_2.find(new_bub.first)==bubble_path_id_2.end()){
-                            for(auto new_path_id: new_bub.second[bub_1.second]){
-                                if(extension_count.find(new_bub.first)==extension_count.end()){
-                                    extension_count[new_bub.first] = map<uint32_t,uint32_t>();
-                                }
-                                if(extension_count[new_bub.first].find(new_path_id.first)==extension_count[new_bub.first].end()){
-                                    extension_count[new_bub.first][new_path_id.first] = 0;
-                                }
-                                extension_count[new_bub.first][new_path_id.first] += new_path_id.second;
-                            }
-                        }
-                    }
-                }
-
-                for(auto new_bub: extension_count){
-                    for(auto new_path_id: new_bub.second){
-                        if(new_path_id.second>max_count){
-                            max_bubble = new_bub.first;
-                            max_path_id = new_path_id.first;
-                            max_count = new_path_id.second;
-                        }
-                    }
-                }
-                if(max_count!= 0){
-                    bubble_path_id_2[max_bubble] = max_path_id;
-                    if(bubble_path_id_1.find(max_bubble) == bubble_path_id_1.end()){
-                        if(max_path_id>0){
-                            bubble_path_id_1[max_bubble] = 0;
-                        }else{
-                            bubble_path_id_1[max_bubble] = 1;
-                        }
-                    }
-                }else{
-                    break;
-                }
-            }
-            // cout << "Get connected path in hap2" << endl;
-        }
-
-        for(auto bubble: cur_bubbles){
-            if(bubble_path_id_1.find(bubble)== bubble_path_id_1.end()){
-                bubble_path_id_1[bubble] = 0;
-            }
-        }
-        for(auto bubble: cur_bubbles){
-            if(bubble_path_id_2.find(bubble)== bubble_path_id_2.end()){
-                bubble_path_id_2[bubble] = 1;
-            }
-        }
-
-        set<uint32_t> path_1_included;
-        set<uint32_t> path_2_included;
-
-        for(auto bubble: bubble_path_id_1){
-            set<uint32_t> cur_path = bubble.first->paths_nodes[bubble.second];
-            set<uint32_t> current_path;
-            for(auto node: cur_path){
-                current_path.insert(node);
-                path_1_included.insert(node);
-            }
-            for(auto path: bubble.first->paths_nodes){
-                for(auto node: path){
-                    if(current_path.find(node)== current_path.end()){
-                        path_1_not_included.insert(node);
+            for (auto new_bub : extension_count)
+            {
+                for (auto new_path_id : new_bub.second)
+                {
+                    if (new_path_id.second > max_count)
+                    {
+                        max_bubble = new_bub.first;
+                        max_path_id = new_path_id.first;
+                        max_count = new_path_id.second;
                     }
                 }
             }
-        }
-
-        for(auto bubble: bubble_path_id_2){
-            set<uint32_t> cur_path = bubble.first->paths_nodes[bubble.second];
-            set<uint32_t> current_path;
-            for(auto node: cur_path){
-                current_path.insert(node);
-                path_2_included.insert(node);
-            }
-            for(auto path: bubble.first->paths_nodes){
-                for(auto node: path){
-                    if(current_path.find(node)== current_path.end()){
-                        path_2_not_included.insert(node);
+            if (max_count != 0)
+            {
+                bubble_path_id_2[max_bubble] = max_path_id;
+                if (bubble_path_id_1.find(max_bubble) == bubble_path_id_1.end())
+                {
+                    if (max_path_id > 0)
+                    {
+                        bubble_path_id_1[max_bubble] = 0;
+                    }
+                    else
+                    {
+                        bubble_path_id_1[max_bubble] = 1;
                     }
                 }
             }
-        }
-
-        // cout << "Fill gaps in haps" << endl;
-        // cout << bubble_connection.size() << "\t";
-        // cout << bubble_path_id_1.size() << "\t";
-        // cout << bubble_path_id_2.size() << endl;
-        cout << endl;
-	cout << "haplotype 1:";
-        for(auto node: current_nodes){
-            if(path_1_not_included.find(node)== path_1_not_included.end()){
-                path_1_included.insert(node);
-                cout << graph->seq[node].name << ", ";
+            else
+            {
+                break;
             }
         }
-        cout << endl;
-        cout << "haplotype 2:";
-        for(auto node: current_nodes){
-            if(path_2_not_included.find(node)== path_2_not_included.end()){
-                path_2_included.insert(node);
-                cout << graph->seq[node].name << ", ";
+        // cout << "Get connected path in hap2" << endl;
+    }
+
+    for (auto bubble : cur_bubbles)
+    {
+        if (bubble_path_id_1.find(bubble) == bubble_path_id_1.end())
+        {
+            bubble_path_id_1[bubble] = 0;
+        }
+    }
+    for (auto bubble : cur_bubbles)
+    {
+        if (bubble_path_id_2.find(bubble) == bubble_path_id_2.end())
+        {
+            bubble_path_id_2[bubble] = 1;
+        }
+    }
+
+    set<uint32_t> path_1_included;
+    set<uint32_t> path_2_included;
+
+    for (auto bubble : bubble_path_id_1)
+    {
+        set<uint32_t> cur_path = bubble.first->paths_nodes[bubble.second];
+        set<uint32_t> current_path;
+        for (auto node : cur_path)
+        {
+            current_path.insert(node);
+            path_1_included.insert(node);
+        }
+        for (auto path : bubble.first->paths_nodes)
+        {
+            for (auto node : path)
+            {
+                if (current_path.find(node) == current_path.end())
+                {
+                    path_1_not_included.insert(node);
+                }
             }
         }
-	cout << endl;
-        uint32_t intersect_len = 0;
-        uint32_t total_len = 0;
-        set<uint32_t> dif_nodes;
-        for(auto node : path_2_included){
-            if(path_1_included.find(node)!=path_1_included.end()){
-                intersect_len += graph->seq[node].len;
-            }else{
-                dif_nodes.insert(node);
+    }
+
+    for (auto bubble : bubble_path_id_2)
+    {
+        set<uint32_t> cur_path = bubble.first->paths_nodes[bubble.second];
+        set<uint32_t> current_path;
+        for (auto node : cur_path)
+        {
+            current_path.insert(node);
+            path_2_included.insert(node);
+        }
+        for (auto path : bubble.first->paths_nodes)
+        {
+            for (auto node : path)
+            {
+                if (current_path.find(node) == current_path.end())
+                {
+                    path_2_not_included.insert(node);
+                }
             }
-            total_len += graph->seq[node].len;
         }
-        
-        for(auto node : path_1_included){
-            total_len += graph->seq[node].len;
+    }
+
+    // cout << "Fill gaps in haps" << endl;
+    // cout << bubble_connection.size() << "\t";
+    // cout << bubble_path_id_1.size() << "\t";
+    // cout << bubble_path_id_2.size() << endl;
+    cout << endl;
+    cout << "haplotype 1:";
+    for (auto node : current_nodes)
+    {
+        if (path_1_not_included.find(node) == path_1_not_included.end())
+        {
+            path_1_included.insert(node);
+            cout << graph->seq[node].name << ", ";
         }
-
-        total_len /= 2;
-
-        if( (total_len - intersect_len) *10 < total_len){
-            s->similar[i] = true;
-            s->dif_nodes[i] = dif_nodes;
+    }
+    cout << endl;
+    cout << "haplotype 2:";
+    for (auto node : current_nodes)
+    {
+        if (path_2_not_included.find(node) == path_2_not_included.end())
+        {
+            path_2_included.insert(node);
+            cout << graph->seq[node].name << ", ";
         }
-        stringstream to_print_start;
-        to_print_start << "Start get Sequence: ";
-        to_print_start << graph->seq[(*s->beg_node)[i]>>1].name << " to " << graph->seq[(*s->end_node)[i]>>1].name << endl;
-        cout << to_print_start.str();
+    }
+    cout << endl;
+    uint32_t intersect_len = 0;
+    uint32_t total_len = 0;
+    set<uint32_t> dif_nodes;
+    for (auto node : path_2_included)
+    {
+        if (path_1_included.find(node) != path_1_included.end())
+        {
+            intersect_len += graph->seq[node].len;
+        }
+        else
+        {
+            dif_nodes.insert(node);
+        }
+        total_len += graph->seq[node].len;
+    }
 
-        s->haplo_sequences[i*2] = get_haplotype_sequence(graph, path_1_included, (*s->beg_node)[i], (*s->end_node)[i], 1, &s->haplo_pathes[i*2], &s->node_positions[i*2]);
-        s->haplo_sequences[i*2+1] = get_haplotype_sequence(graph, path_2_included, (*s->beg_node)[i], (*s->end_node)[i], 2, &s->haplo_pathes[i*2+1], &s->node_positions[i*2+1]);
-        // (s->results)[i] = res.str();
-        stringstream to_print_finish;
-        to_print_finish << "Finish get Sequence: ";
-        to_print_finish << graph->seq[(*s->beg_node)[i]>>1].name << " to " << graph->seq[(*s->end_node)[i]>>1].name << endl;
-        cout << to_print_finish.str();
+    for (auto node : path_1_included)
+    {
+        total_len += graph->seq[node].len;
+    }
+
+    total_len /= 2;
+
+    if ((total_len - intersect_len) * 10 < total_len)
+    {
+        s->similar[i] = true;
+        s->dif_nodes[i] = dif_nodes;
+    }
+    stringstream to_print_start;
+    to_print_start << "Start get Sequence: ";
+    to_print_start << graph->seq[(*s->beg_node)[i] >> 1].name << " to " << graph->seq[(*s->end_node)[i] >> 1].name << endl;
+    cout << to_print_start.str();
+
+    s->haplo_sequences[i * 2] = get_haplotype_sequence(graph, path_1_included, (*s->beg_node)[i], (*s->end_node)[i], 1, &s->haplo_pathes[i * 2], &s->node_positions[i * 2]);
+    s->haplo_sequences[i * 2 + 1] = get_haplotype_sequence(graph, path_2_included, (*s->beg_node)[i], (*s->end_node)[i], 2, &s->haplo_pathes[i * 2 + 1], &s->node_positions[i * 2 + 1]);
+    // (s->results)[i] = res.str();
+    stringstream to_print_finish;
+    to_print_finish << "Finish get Sequence: ";
+    to_print_finish << graph->seq[(*s->beg_node)[i] >> 1].name << " to " << graph->seq[(*s->end_node)[i] >> 1].name << endl;
+    cout << to_print_finish.str();
     // }
 }
 
-
-uint32_t findComp(uint32_t i,uint32_t* nodeID_compID)
+uint32_t findComp(uint32_t i, uint32_t *nodeID_compID)
 {
-if(i==nodeID_compID[i]){
-	return i;
-}
-return nodeID_compID[i]=findComp(nodeID_compID[i],nodeID_compID);
-}
-
-
-bool compareComp(uint32_t i,uint32_t j, uint32_t* nodeID_compID){
-        while(i!=nodeID_compID[i]){
-		i = nodeID_compID[i];
-	};
-	while(j!=nodeID_compID[j]){
-             j= nodeID_compID[j];
-	}
-	return i==j;
+    if (i == nodeID_compID[i])
+    {
+        return i;
+    }
+    return nodeID_compID[i] = findComp(nodeID_compID[i], nodeID_compID);
 }
 
-void connect(uint32_t u, uint32_t i,uint32_t* nodeID_compID,int V){
-    u = findComp(u,nodeID_compID);
-    i = findComp(i,nodeID_compID);
+bool compareComp(uint32_t i, uint32_t j, uint32_t *nodeID_compID)
+{
+    while (i != nodeID_compID[i])
+    {
+        i = nodeID_compID[i];
+    };
+    while (j != nodeID_compID[j])
+    {
+        j = nodeID_compID[j];
+    }
+    return i == j;
+}
 
-    if(u!=i){
-     nodeID_compID[u]=i;
-     if(u%2==0 && u < V){
-       nodeID_compID[u+1]=nodeID_compID[u];
-     }else{
-     nodeID_compID[u-1]=nodeID_compID[u];
-     }
+void connect(uint32_t u, uint32_t i, uint32_t *nodeID_compID, int V)
+{
+    u = findComp(u, nodeID_compID);
+    i = findComp(i, nodeID_compID);
+
+    if (u != i)
+    {
+        nodeID_compID[u] = i;
+        if (u % 2 == 0 && u < V)
+        {
+            nodeID_compID[u + 1] = nodeID_compID[u];
+        }
+        else
+        {
+            nodeID_compID[u - 1] = nodeID_compID[u];
+        }
     }
 }
 
-static void worker_for_single_step_gen(void *data, long i, int tid){
+
+
+bool cmp_pair2(pair<vector<uint32_t>, int> a, pair<vector<uint32_t>, int> b)
+{
+    return a.second > b.second;
+}
+
+static void worker_for_single_step_gen(void *data, long i, int tid)
+{
     // CHECK IF DIVIDE by TWO is required and odd even nodes
     // node_bubble_map need to fixed and long-range allele between bubbles
-step_data *s = (step_data*)data;
-asg_t* graph = s->p->graph;
-uint32_t** connections_count = s->p->connections_count;
-pair<vector<uint32_t>, vector<uint32_t>> sources_ends = get_sources(graph);
-vector<bubble_t*> bubbles = s->p->complex_bubbles;
-vector<uint32_t>  path_1_included;
-vector<uint32_t>  path_2_included;
-map<uint32_t,bubble_t*>* node_bubble_map = s->p->node_bubble_map;
-vector<uint32_t> sources = sources_ends.first;
+    step_data *s = (step_data *)data;
+    // set<uint32_t> current_nodes = (*s->current_nodes)[i]; //something wrong here
 
-int V = graph->n_seq*2;
-bool *visited = new bool[V];
+    asg_t *graph = s->p->graph;
+    uint32_t **connections_count = s->p->connections_count;
+    pair<vector<uint32_t>, vector<uint32_t>> sources_ends = get_sources(graph);
+    vector<bubble_t *> bubbles = s->p->complex_bubbles;
 
-for (auto i:sources){
-for (int k = 0; k < V; k++)
-    visited[k] = false;
-stack<uint32_t> stack1;
-stack1.push(i);
-path_1_included.empty();
-path_1_included.push_back(i); //check here that the current source goes in
-uint32_t num_outgoing_arcs;
-int cost=0;
-int u;
-uint32_t prev_allbub = i;
+    map<uint32_t, bubble_t *> *node_bubble_map = s->p->node_bubble_map;
+    // vector<uint32_t> sources = sources_ends.first;
+    vector<uint32_t> all_sources = sources_ends.first;
+    vector<uint32_t> sources;
 
-while (!stack1.empty())
-{
-uint32_t p = stack1.top();
-stack1.pop();
-u =p;
-if(node_bubble_map->find(u)!=node_bubble_map->end()){
-    bubble_t* bubb = (*node_bubble_map)[u];
-    visited[u] = true;
-    int c=0;
-    int key =0;
-    for (int all=0; all< bubb->paths.size();all++)
+    int V = graph->n_seq * 2;
+    uint32_t *nodeID_compID = new uint32_t[V];
+
+    for (uint32_t i = 0; i < graph->n_seq * 2; i++)
     {
-        uint32_t id = bubb->paths[all][0]->v;
-        if (connections_count[prev_allbub/2][id/2] > c){
-            c = connections_count[u/2][id/2]; // TODO: make sure check with alleles with previous bubble/half bubble
-            key = all;
-        }
-        prev_allbub = bubb->paths[key][0]->v;
-
+        nodeID_compID[i] = i;
     }
 
-    cost=cost+c;
-    //put bubble allele in haplotype path
-    for(int h =0; h<bubb->paths[key].size(); h++){
-        path_1_included.push_back(bubb->paths[key][h]->v);
-        visited[bubb->paths[key][h]->v] = true;
-        u = bubb->paths[key][h]->v;
-    }   
-stack1.push(u);
-}
+    for (uint32_t i = 0; i < graph->n_seq * 2; i++)
+    {
+        int num_outgoing_arcs = asg_arc_n(graph, i);
+        asg_arc_t *outgoing_arcs = asg_arc_a(graph, i);
 
-//if not a bubble
-else if(!visited[u]){
-    visited[u] = true;
-    
-    num_outgoing_arcs = asg_arc_n(graph, u);
-asg_arc_t *outgoing_arcs = asg_arc_a(graph, u);  
+        for (int vi = 0; vi < num_outgoing_arcs; vi++)
+        {
+            uint32_t u = outgoing_arcs[vi].v;
+            connect(u, i, nodeID_compID, V);
+        }
+    }
 
-u = outgoing_arcs[0].v;
-path_1_included.push_back(u);
-stack1.push(u);
+    for (auto src : all_sources)
+    { // use component ID to judge, rather than using current_nodes
+        // if(current_nodes.find(src/2) != current_nodes.end())
+        if (compareComp((*s->beg_node)[i], src, nodeID_compID))
+            sources.push_back(src);
+    }
 
-}
+    if (sources.size() == 2 && node_bubble_map->find(sources[0]) != node_bubble_map->end() && node_bubble_map->find(sources[1]) != node_bubble_map->end())
+    {
+        cout << "Only a single bubble chain in this component: run worker_for_single_step() instead." << endl;
+        worker_for_single_step(s, i, tid); // test done
+        return;
+    }
+    // else if() //TODO: other unusual cases
 
-}
+    // int V = graph->n_seq * 2;
+    bool *visited = new bool[V];
 
-cout << endl;
-cout << "haplotype 1:" << cost << endl;
-        for(auto node: path_1_included){
-                cout << graph->seq[node/2].name << ", ";
+    vector<pair<vector<uint32_t>, int>> all_paths;
+
+    for (auto i : sources)
+    {
+        // if (graph->seq[i / 2].len < 500000)
+        // {
+        //     continue;
+        // }
+        for (int k = 0; k < V; k++)
+            visited[k] = false;
+        stack<uint32_t> stack1;
+        stack1.push(i);
+        vector<uint32_t> path_included;
+
+        path_included.push_back(i); // check here that the current source goes in
+
+        uint32_t num_outgoing_arcs;
+        int cost = 0;
+        int u;
+        uint32_t prev_allbub = i;
+
+        while (!stack1.empty())
+        {
+            uint32_t p = stack1.top();
+            stack1.pop();
+            u = p;
+
+            if (node_bubble_map->find(u) != node_bubble_map->end())
+            {
+                // cout << "is in bubble";
+                bubble_t *bubb = (*node_bubble_map)[u];
+                visited[u] = true;
+                int c = 0;
+                int key = 0;
+                int max_c = 0;
+
+                // cout << "\tpaths_size: " << bubb->paths.size();
+
+                uint32_t tmp_id;
+
+                // find the optimal bubble path
+                for (int all = 0; all < bubb->paths.size(); all++)
+                {
+                    uint32_t id = bubb->paths[all][0]->v;
+                    int tmp_c = 0, c1 = 0;
+                    for (int h = 0; h < bubb->paths[all].size() - 1; h++)
+                    {
+                        tmp_id = bubb->paths[all][h]->v;
+                        c1 = connections_count[prev_allbub / 2][tmp_id / 2];
+                        tmp_c += c1;
+                    }
+
+                    if (tmp_c >= max_c)
+                    {
+                        max_c = tmp_c;
+                        // c = connections_count[u / 2][id / 2]; // TODO: does the calculation of 'c' make sense ? u/2 ?
+                        c = connections_count[prev_allbub / 2][id / 2];
+                        key = all;
+                    }
+                }
+
+                // use the node which has max count as the new id in the previous bubble
+                uint32_t max_prev_id;
+                int c0 = 0, c1 = 0;
+                for (int h = 0; h < bubb->paths[key].size() - 1; h++)
+                {
+                    tmp_id = bubb->paths[key][h]->v;
+                    c1 = connections_count[prev_allbub / 2][tmp_id / 2];
+                    if (c1 >= c0)
+                    {
+                        max_prev_id = tmp_id;
+                        c0 = c1;
+                    }
+                }
+                // prev_allbub = bubb->paths[key][0]->v; // Shilpa's version: use the first node in the bubble path
+
+                // replace it unless current node length >= 500kb, otherwise keep it
+                if (graph->seq[max_prev_id / 2].len >= 500000)
+                {
+                    prev_allbub = max_prev_id;
+                }
+
+                cost = cost + c;
+
+                // put bubble allele in haplotype path
+                for (int h = 0; h < bubb->paths[key].size(); h++)
+                {
+                    path_included.push_back(bubb->paths[key][h]->v);
+                    visited[bubb->paths[key][h]->v] = true;
+                    u = bubb->paths[key][h]->v;
+                }
+                stack1.push(u);
             }
-}  
-   
 
+            // if not a bubble
+            else if (!visited[u])
+            {
+                visited[u] = true;
+                num_outgoing_arcs = asg_arc_n(graph, u);
+                asg_arc_t *outgoing_arcs = asg_arc_a(graph, u);
+
+                // u = outgoing_arcs[0].v;
+                // path_included.push_back(u);
+                // stack1.push(u);
+
+                int max_cc = 0, cc = 0;
+                uint32_t max_n = 0;
+                bool stop = true;
+                for (uint32_t n = 0; n < num_outgoing_arcs; n++)
+                {
+                    u = outgoing_arcs[n].v;
+                    if (visited[u]) // if cycle shows, go to another arc
+                    {
+                        continue;
+                    }
+                    stop = false;
+                    cc = connections_count[prev_allbub / 2][u / 2];
+                    if (cc >= max_cc)
+                    {
+                        max_cc = cc;
+                        max_n = n;
+                    }
+                }
+
+                if (stop)
+                    break;
+
+                u = outgoing_arcs[max_n].v;
+                path_included.push_back(u);
+                stack1.push(u);
+                cost = cost + max_cc;
+                if (graph->seq[u / 2].len >= 500000)
+                {
+                    prev_allbub = u;
+                }
+            }
+
+            else
+            {
+                num_outgoing_arcs = asg_arc_n(graph, u);
+                if (num_outgoing_arcs == 0)
+                    break;
+                asg_arc_t *outgoing_arcs = asg_arc_a(graph, u);
+                int max_cc = 0, cc = 0;
+                uint32_t max_n = 0;
+                bool stop = true;
+                for (uint32_t n = 0; n < num_outgoing_arcs; n++)
+                {
+                    u = outgoing_arcs[n].v;
+                    if (visited[u]) // if cycle shows, go to another arc
+                    {
+                        continue;
+                    }
+                    stop = false;
+                    cc = connections_count[prev_allbub / 2][u / 2];
+                    if (cc >= max_cc)
+                    {
+                        max_cc = cc;
+                        max_n = n;
+                    }
+                }
+
+                if (stop)
+                    break;
+                u = outgoing_arcs[max_n].v;
+                path_included.push_back(u);
+                stack1.push(u);
+                visited[u] = true;
+                cost = cost + max_cc;
+                if (graph->seq[u / 2].len >= 500000)
+                {
+                    prev_allbub = u;
+                }
+            }
+        }
+
+        // cout << endl;
+        // cout << "source:" << i << "\t" << graph->seq[i / 2].name << endl;
+        // cout << "tmp_haplotype :" << cost << endl;
+        // for (auto node : path_included)
+        // {
+        //     cout << graph->seq[node / 2].name << ", ";
+        // }
+        // cout << endl;
+
+        all_paths.push_back(make_pair(path_included, cost));
+    }
+
+    sort(all_paths.begin(), all_paths.end(), cmp_pair2); // sort by cost with descending order
+    map<uint32_t, uint32_t> path_1_nodes;
+    vector<uint32_t> path_1_included_v;
+    vector<uint32_t> path_2_included_v;
+    for (auto node : all_paths[0].first) // max cost path
+    {
+        uint32_t node_tmp = node / 2;
+        path_1_nodes[node_tmp * 2] = 1;
+        path_1_nodes[node_tmp * 2 + 1] = 1;
+        path_1_included_v.push_back(node);
+    }
+    uint32_t path_1_src = path_1_included_v.front();
+    uint32_t path_1_end = path_1_included_v.back();
+    uint32_t path_2_src;
+
+    for (int i = 1; i < all_paths.size(); i++)
+    {
+        // cout<<"all_paths.size(),"<<all_paths.size()<<"\t"<<i<<endl;
+        path_2_src = all_paths[i].first.front();
+        if ((path_2_src / 2 != path_1_src / 2) && (path_2_src / 2 != path_1_end / 2))
+        {
+            break;
+        }
+    }
+    // cout<<"ATTENTION: ";
+    // cout << path_2_src <<"\t" <<path_1_end <<"\t";
+    // cout<<graph->seq[path_2_src / 2].name<<"\t"<<graph->seq[path_1_end / 2].name<<endl;
+
+    // find path_2
+    cout << "\n\n\nFinding path 2..." << endl;
+    int cost_path2 = 0;
+    if (path_2_src)
+    {
+        for (int k = 0; k < V; k++)
+            visited[k] = false;
+        stack<uint32_t> stack1;
+        stack1.push(path_2_src);
+
+        path_2_included_v.push_back(path_2_src);
+
+        uint32_t num_outgoing_arcs;
+        // int cost = 0;
+        int u;
+        uint32_t prev_allbub = path_2_src;
+
+        while (!stack1.empty())
+        {
+            uint32_t p = stack1.top();
+            stack1.pop();
+            u = p;
+            // cout << "NODE: " << u << " - " << graph->seq[u / 2].name << " ";
+
+            if (node_bubble_map->find(u) != node_bubble_map->end())
+            {
+                bubble_t *bubb = (*node_bubble_map)[u];
+                visited[u] = true;
+                int c = 0;
+                int key = 0;
+                int max_c = 0;
+
+                uint32_t tmp_id;
+
+                // find the optimal bubble path that is different with path_1
+                for (int all = 0; all < bubb->paths.size(); all++)
+                {
+                    uint32_t id = bubb->paths[all][0]->v;
+                    if (path_1_nodes.find(id) != path_1_nodes.end())
+                        continue;
+
+                    int tmp_c = 0, c1 = 0;
+                    // bool stop = false;
+                    for (int h = 0; h < bubb->paths[all].size() - 1; h++)
+                    {
+                        tmp_id = bubb->paths[all][h]->v;
+                        // if (path_1_nodes.find(tmp_id) != path_1_nodes.end())
+                        // {
+                        //     stop = true;
+                        //     continue;
+                        // }
+                        c1 = connections_count[prev_allbub / 2][tmp_id / 2];
+                        tmp_c += c1;
+                    }
+                    // if (stop)
+                    //     continue;
+                    if (tmp_c >= max_c)
+                    {
+                        max_c = tmp_c;
+                        // c = connections_count[u / 2][id / 2]; // TODO: does the calculation of 'c' make sense ? u/2 ?
+                        c = connections_count[prev_allbub / 2][id / 2];
+                        key = all;
+                    }
+                }
+
+                // use the node which has max count as the new id in the previous bubble
+                uint32_t max_prev_id;
+                int c0 = 0, c1 = 0;
+                // cout <<"tmp_id:";
+                for (int h = 0; h < bubb->paths[key].size() - 1; h++)
+                {
+                    tmp_id = bubb->paths[key][h]->v;
+                    c1 = connections_count[prev_allbub / 2][tmp_id / 2];
+                    if (c1 >= c0)
+                    {
+                        max_prev_id = tmp_id;
+                        c0 = c1;
+                    }
+                }
+
+                // replace it unless current node length >= 500kb, otherwise keep it
+                if (graph->seq[max_prev_id / 2].len >= 500000)
+                {
+                    prev_allbub = max_prev_id;
+                }
+
+                // cout << "\tCount: " << c;
+                // cout << endl;
+
+                cost_path2 = cost_path2 + c;
+
+                // put bubble allele in haplotype path
+                for (int h = 0; h < bubb->paths[key].size(); h++)
+                {
+                    path_2_included_v.push_back(bubb->paths[key][h]->v);
+                    visited[bubb->paths[key][h]->v] = true;
+                    u = bubb->paths[key][h]->v;
+                }
+                stack1.push(u);
+            }
+
+            // if not a bubble
+            else if (!visited[u])
+            {
+                visited[u] = true;
+                num_outgoing_arcs = asg_arc_n(graph, u);
+                asg_arc_t *outgoing_arcs = asg_arc_a(graph, u);
+
+                // u = outgoing_arcs[0].v;
+                // path_2_included_v.push_back(u);
+                // stack1.push(u);
+
+                int max_cc = 0, cc = 0;
+                uint32_t max_n = 0;
+                bool stop = true;
+                for (uint32_t n = 0; n < num_outgoing_arcs; n++)
+                {
+                    u = outgoing_arcs[n].v;
+                    if (visited[u]) // if cycle shows, go to another arc
+                    {
+                        continue;
+                    }
+                    stop = false;
+                    cc = connections_count[prev_allbub / 2][u / 2];
+                    if (cc >= max_cc)
+                    {
+                        max_cc = cc;
+                        max_n = n;
+                    }
+                }
+
+                if (stop)
+                    break;
+
+                u = outgoing_arcs[max_n].v;
+                path_2_included_v.push_back(u);
+                stack1.push(u);
+                cost_path2 = cost_path2 + max_cc;
+                if (graph->seq[u / 2].len >= 500000)
+                {
+                    prev_allbub = u;
+                }
+            }
+
+            else
+            {
+                num_outgoing_arcs = asg_arc_n(graph, u);
+                if (num_outgoing_arcs == 0)
+                    break;
+                asg_arc_t *outgoing_arcs = asg_arc_a(graph, u);
+                int max_cc = 0, cc = 0;
+                uint32_t max_n = 0;
+                bool stop = true;
+                for (uint32_t n = 0; n < num_outgoing_arcs; n++)
+                {
+                    u = outgoing_arcs[n].v;
+                    if ((path_1_nodes.find(u) != path_1_nodes.end()) && (num_outgoing_arcs > 1))
+                        continue;
+                    if (visited[u]) // if cycle shows, go to another arc
+                        continue;
+                    stop = false;
+                    cc = connections_count[prev_allbub / 2][u / 2];
+                    if (cc >= max_cc)
+                    {
+                        max_cc = cc;
+                        max_n = n;
+                    }
+                }
+
+                if (stop)
+                    break;
+                u = outgoing_arcs[max_n].v;
+                path_2_included_v.push_back(u);
+                stack1.push(u);
+                visited[u] = true;
+
+                cost_path2 = cost_path2 + max_cc;
+                if (graph->seq[u / 2].len >= 500000)
+                {
+                    prev_allbub = u;
+                }
+            }
+        }
+    }
+
+    set<uint32_t> path_1_included; // store nodes divided by 2
+    set<uint32_t> path_2_included;
+
+    cout << "\n\nhaplotype 1: " << all_paths[0].second << "\t";
+    for (auto node : path_1_included_v) // max cost path
+    {
+        path_1_included.insert(node / 2); // order changed in set
+        cout << graph->seq[node / 2].name << ", ";
+    }
+    cout << endl;
+
+    cout << "\n\nhaplotype 2: " << cost_path2 << "\t";
+    for (auto node : path_2_included_v)
+    {
+        path_2_included.insert(node / 2);
+        cout << graph->seq[node / 2].name << ", ";
+    }
+    cout << endl;
+
+    uint32_t intersect_len = 0;
+    uint32_t total_len = 0;
+    set<uint32_t> dif_nodes;
+    for (auto node : path_2_included)
+    {
+        if (path_1_included.find(node) != path_1_included.end())
+        {
+            intersect_len += graph->seq[node].len;
+        }
+        else
+        {
+            dif_nodes.insert(node);
+        }
+        total_len += graph->seq[node].len;
+    }
+
+    for (auto node : path_1_included)
+    {
+        total_len += graph->seq[node].len;
+    }
+
+    total_len /= 2;
+
+    if ((total_len - intersect_len) * 10 < total_len)
+    {
+        s->similar[i] = true;
+        s->dif_nodes[i] = dif_nodes;
+    }
+    stringstream to_print_start;
+    // to_print_start << "Start get Sequence: ";
+    // to_print_start << graph->seq[(*s->beg_node)[i] >> 1].name << " to " << graph->seq[(*s->end_node)[i] >> 1].name << endl;
+    // cout << to_print_start.str();
+
+    // s->haplo_sequences[i * 2] = get_haplotype_sequence(graph, path_1_included, (*s->beg_node)[i], (*s->end_node)[i], 1, &s->haplo_pathes[i * 2], &s->node_positions[i * 2]);
+    // s->haplo_sequences[i * 2 + 1] = get_haplotype_sequence(graph, path_2_included, (*s->beg_node)[i], (*s->end_node)[i], 2, &s->haplo_pathes[i * 2 + 1], &s->node_positions[i * 2 + 1]);
+    s->haplo_sequences[i * 2] = get_haplotype_sequence(graph, path_1_included, path_1_included_v.front(), path_1_included_v.back(), 1, &s->haplo_pathes[i * 2], &s->node_positions[i * 2]);
+    s->haplo_sequences[i * 2 + 1] = get_haplotype_sequence(graph, path_2_included, path_2_included_v.front(), path_2_included_v.back(), 2, &s->haplo_pathes[i * 2 + 1], &s->node_positions[i * 2 + 1]);
+
+    // (s->results)[i] = res.str();
+    stringstream to_print_finish;
+    // to_print_finish << "Finish get Sequence: ";
+    // to_print_finish << graph->seq[(*s->beg_node)[i] >> 1].name << " to " << graph->seq[(*s->end_node)[i] >> 1].name << endl;
+    cout << to_print_finish.str();
 }
 
-void get_haplotype_path(uint32_t** connection_count_forward, uint32_t** connection_count_backward, asg_t *graph, map<uint32_t,map<uint32_t,set<uint32_t>>>* bubble_chain_graph, char* output_directory, int n_threads, map<string, string>* excluded_nodes){
+void get_haplotype_path(uint32_t **connection_count_forward, uint32_t **connection_count_backward, asg_t *graph, map<uint32_t, map<uint32_t, set<uint32_t>>> *bubble_chain_graph, char *output_directory, int n_threads, map<string, string> *excluded_nodes)
+{
     set<uint32_t> existing_nodes;
 
     // connection_count_forward stores the index according to the line number in M lines
-   pair<vector<uint32_t>, vector<uint32_t>> sources_ends = get_sources(graph);
+    pair<vector<uint32_t>, vector<uint32_t>> sources_ends = get_sources(graph);
     cout << "Start get haplotypes" << endl;
     uint32_t **connections_count;
-	CALLOC(connections_count,graph->n_seq);
-	for(int i = 0; i< graph->n_seq; i++){
-		CALLOC(connections_count[i], graph->n_seq);
-		memset(connections_count[i], 0, sizeof(*connections_count[i]));
-	}
-int V = graph->n_seq*2;
-uint32_t *nodeID_compID= new uint32_t[V];
-int num_outgoing_arcs;
-
-for(uint32_t i = 0; i < graph->n_seq*2; i++){
-    nodeID_compID[i] = i;
-}
-
-for(uint32_t i = 0; i < graph->n_seq*2; i++){
-    num_outgoing_arcs = asg_arc_n(graph, i);
-    asg_arc_t *outgoing_arcs = asg_arc_a(graph, i);
-
-    for (int vi=0; vi<num_outgoing_arcs; vi++) {
-            uint32_t u = outgoing_arcs[vi].v;
-            connect(u,i,nodeID_compID,V);
+    CALLOC(connections_count, graph->n_seq);
+    for (int i = 0; i < graph->n_seq; i++)
+    {
+        CALLOC(connections_count[i], graph->n_seq);
+        memset(connections_count[i], 0, sizeof(*connections_count[i]));
     }
-}
+    int V = graph->n_seq * 2;
+    uint32_t *nodeID_compID = new uint32_t[V];
+    int num_outgoing_arcs;
+
+    for (uint32_t i = 0; i < graph->n_seq * 2; i++)
+    {
+        nodeID_compID[i] = i;
+    }
+
+    for (uint32_t i = 0; i < graph->n_seq * 2; i++)
+    {
+        num_outgoing_arcs = asg_arc_n(graph, i);
+        asg_arc_t *outgoing_arcs = asg_arc_a(graph, i);
+
+        for (int vi = 0; vi < num_outgoing_arcs; vi++)
+        {
+            uint32_t u = outgoing_arcs[vi].v;
+            connect(u, i, nodeID_compID, V);
+        }
+    }
+
+    for (uint32_t i = 0; i < graph->n_seq * 2; i++)
+    {
+        cout << "nodeID_compID:" << i << "\t" << nodeID_compID[i] << endl;
+    }
     // map<uint32_t,map<uint32_t,uint32_t>> connections_count_forward;
     // map<uint32_t,map<uint32_t,uint32_t>> connections_count_backward;
-     for(int i = 0; i < graph->n_seq; i++){
-        for(int j = 0; j < graph->n_seq; j++){
+    for (int i = 0; i < graph->n_seq; i++)
+    {
+        for (int j = 0; j < graph->n_seq; j++)
+        {
             // if(connection_count_forward[i][j]+connection_count_backward[i][j]>0){
-                connections_count[i][j] = connection_count_forward[i][j] + connection_count_backward[i][j];
-                connections_count[i][j] += connection_count_forward[j][i] + connection_count_backward[j][i];
-                // if(connections_count_forward.find(i)==connections_count_forward.end()){
-                //     connections_count_forward[i] = map<uint32_t,uint32_t>();
-                // }
-                // connections_count_forward[i][j] = connection_count_forward[i][j];
-                // if(connections_count_forward.find(j)==connections_count_forward.end()){
-                //     connections_count_forward[j] = map<uint32_t,uint32_t>();
-                // }
-                // connections_count_forward[j][i] = connection_count_forward[i][j];
+            connections_count[i][j] = connection_count_forward[i][j] + connection_count_backward[i][j];
+            connections_count[i][j] += connection_count_forward[j][i] + connection_count_backward[j][i];
+            // if(connections_count_forward.find(i)==connections_count_forward.end()){
+            //     connections_count_forward[i] = map<uint32_t,uint32_t>();
+            // }
+            // connections_count_forward[i][j] = connection_count_forward[i][j];
+            // if(connections_count_forward.find(j)==connections_count_forward.end()){
+            //     connections_count_forward[j] = map<uint32_t,uint32_t>();
+            // }
+            // connections_count_forward[j][i] = connection_count_forward[i][j];
 
-                // if(connections_count_backward.find(i)==connections_count_backward.end()){
-                //     connections_count_backward[i] = map<uint32_t,uint32_t>();
-                // }
-                // connections_count_backward[i][j] = connection_count_backward[i][j];
-                // if(connections_count_backward.find(j)==connections_count_backward.end()){
-                //     connections_count_backward[j] = map<uint32_t,uint32_t>();
-                // }
-                // connections_count_backward[j][i] = connection_count_backward[i][j];
+            // if(connections_count_backward.find(i)==connections_count_backward.end()){
+            //     connections_count_backward[i] = map<uint32_t,uint32_t>();
+            // }
+            // connections_count_backward[i][j] = connection_count_backward[i][j];
+            // if(connections_count_backward.find(j)==connections_count_backward.end()){
+            //     connections_count_backward[j] = map<uint32_t,uint32_t>();
+            // }
+            // connections_count_backward[j][i] = connection_count_backward[i][j];
             // }
         }
         // free(connection_count_forward[i]);
@@ -4562,95 +5711,107 @@ for(uint32_t i = 0; i < graph->n_seq*2; i++){
     }
     // free(connection_count_forward);
     // free(connection_count_backward);
-    //TODO: maybe there are some extra connections, because no three-way shake is done yet.
-vector<uint32_t> sources = sources_ends.first;
+    // TODO: maybe there are some extra connections, because no three-way shake is done yet.
+    vector<uint32_t> sources = sources_ends.first;
 
-vector<uint32_t> ends = sources_ends.second;
-vector<uint32_t> elements_from_i;
-vector<uint32_t> elements_from_j;
-std::vector<uint32_t> v_intersection;
-asg_arc_t *a;
-bool *visited = new bool[V];
+    vector<uint32_t> ends = sources_ends.second;
+    vector<uint32_t> elements_from_i;
+    vector<uint32_t> elements_from_j;
+    std::vector<uint32_t> v_intersection;
+    asg_arc_t *a;
+    bool *visited = new bool[V];
 
+    // this piece of code causes no bubble
 
-       for(int i = 0; i < graph->n_seq*2; i=i+2){
-        for(int j = 0; j < graph->n_seq*2; j=j+2){
-             if (std::find (sources.begin(), sources.end(), i)!= sources.end() || std::find (ends.begin(), ends.end(), i/2)!= ends.end()
-             || std::find (sources.begin(), sources.end(), j)!= sources.end() || std::find (ends.begin(), ends.end(), j/2)!= ends.end())
-             {
-                
-                
-                if (!compareComp(i,j, nodeID_compID)){
-                if (connections_count[i/2][j/2]>200 &&  graph->seq[i/2].len > 100000 &&  graph->seq[j/2].len > 100000 ){ // hard-coded value here... //TODO: check if i and j need to be divided by two.
-                cout <<"different components: " <<graph->seq[i/2].name << "," << graph->seq[j/2].name << endl;
+    // for (int i = 0; i < graph->n_seq * 2; i = i + 2)
+    // {
+    //     for (int j = 0; j < graph->n_seq * 2; j = j + 2)
+    //     {
+    //         if ((std::find(sources.begin(), sources.end(), i) != sources.end() || std::find(ends.begin(), ends.end(), i / 2) != ends.end()) ^ (std::find(sources.begin(), sources.end(), j) != sources.end() || std::find(ends.begin(), ends.end(), j / 2) != ends.end()))
+    //         {
 
-                a = gfa_add_arc1(graph, i, j, 0, 0, -1, 0);
-                }
-                    }
-     
-            
+    //             if (!compareComp(i, j, nodeID_compID))
+    //             {
+    //                 if (connections_count[i / 2][j / 2] > 200 && graph->seq[i / 2].len > 100000 && graph->seq[j / 2].len > 100000)
+    //                 { // hard-coded value here... //TODO: check if i and j need to be divided by two.
+    //                     cout << "different components: " << graph->seq[i / 2].name << "," << graph->seq[j / 2].name << endl;
 
-             }
-          
-        }
-        }
-std::cout.flush();
-   gfa_finalize(graph);
+    //                     a = gfa_add_arc1(graph, i, j, 0, 0, -1, 0);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+
+    std::cout.flush();
+    gfa_finalize(graph);
 
     cout << "Complete connection table." << endl;
     uint32_t n_vtx = graph->n_seq * 2;
     int node_type[n_vtx];
 
-    vector<bubble_t*> bubbles;
-    vector<bubble_t*> pure_bubbles;
-    vector<bubble_t*> complex_bubbles;
-    map<uint32_t,bubble_t*> node_bubble_map;
-    map<uint32_t,set<uint32_t>> node_path_id_map;
+    vector<bubble_t *> bubbles;
+    vector<bubble_t *> pure_bubbles;
+    vector<bubble_t *> complex_bubbles;
+    map<uint32_t, bubble_t *> node_bubble_map;
+    map<uint32_t, set<uint32_t>> node_path_id_map;
 
-    for(uint32_t i=0; i<n_vtx; i++){
+    for (uint32_t i = 0; i < n_vtx; i++)
+    {
         node_type[i] = 0;
-        bubble_t* result = detect_bubble(graph, i);
-        if(result!=nullptr){
+        bubble_t *result = detect_bubble(graph, i);
+        if (result != nullptr)
+        {
             result->id = i;
             bubbles.push_back(result);
         }
     }
 
+    cout << "bubbles size:" << bubbles.size() << endl;
 
-    for (int b=0; b<bubbles.size(); b++) {
-        bubble_t* bubble = bubbles[b];
+    for (int b = 0; b < bubbles.size(); b++)
+    {
+        bubble_t *bubble = bubbles[b];
         uint32_t bubble_beginning = bubble->begNode;
         uint32_t bubble_end = bubble->endNode;
 
-        cout << "start get bubble paths from " << graph->seq[bubble_beginning /2].name<< " to " << graph->seq[bubble_end /2].name << endl;
+        cout << "start get bubble paths from " << graph->seq[bubble_beginning / 2].name << " to " << graph->seq[bubble_end / 2].name << endl;
 
-        vector<asg_arc_t*> arc_stack;
-        vector<uint32_t> node_stack;  // DFS
+        vector<asg_arc_t *> arc_stack;
+        vector<uint32_t> node_stack; // DFS
         vector<uint32_t> node_vi_stack;
         node_stack.push_back(bubble_beginning);
         node_vi_stack.push_back(0);
         int stack_count = 0;
         uint32_t lastNode = bubble_beginning;
-        while(!node_stack.empty()) {
+        while (!node_stack.empty())
+        {
             uint32_t u = node_stack.back();
             uint32_t vi = node_vi_stack.back();
-            if (u==bubble_end) {
-                for (int ui=0; ui<node_stack.size(); ui++) {
+            if (u == bubble_end)
+            {
+                for (int ui = 0; ui < node_stack.size(); ui++)
+                {
                     // cout << g->seq[node_stack[ui]/2].name << " ";
-                    if(ui==0 || ui == node_stack.size()-1){
-                        if(node_type[node_stack[ui]] != 2){
+                    if (ui == 0 || ui == node_stack.size() - 1)
+                    {
+                        if (node_type[node_stack[ui]] != 2)
+                        {
                             node_type[node_stack[ui]] = BUBBLE_END_BEGIN;
                         }
-                    }else{
+                    }
+                    else
+                    {
                         node_type[node_stack[ui]] = BUBBLE_INSIDE;
                     }
                 }
-                stack_count ++;
+                stack_count++;
                 // cout << endl;
                 set<uint32_t> buf_path_node = set<uint32_t>();
-                for(auto arc_buf: arc_stack){
+                for (auto arc_buf : arc_stack)
+                {
                     // if(arc_buf->v!=bubble->endNode){
-                        buf_path_node.insert(arc_buf->v);
+                    buf_path_node.insert(arc_buf->v);
                     // }
                 }
                 buf_path_node.insert(bubble->begNode);
@@ -4667,14 +5828,17 @@ std::cout.flush();
             }
 
             uint32_t num_outgoing_arcs = asg_arc_n(graph, u);
-            if (vi < num_outgoing_arcs) {
+            if (vi < num_outgoing_arcs)
+            {
                 asg_arc_t *outgoing_arcs = asg_arc_a(graph, u);
                 uint32_t v = outgoing_arcs[vi].v;
                 node_vi_stack.back()++;
                 arc_stack.push_back(outgoing_arcs + vi);
                 node_stack.push_back(v);
                 node_vi_stack.push_back(0);
-            } else {
+            }
+            else
+            {
                 arc_stack.pop_back();
                 node_stack.pop_back();
                 node_vi_stack.pop_back();
@@ -4685,20 +5849,25 @@ std::cout.flush();
         // cout << "finish get bubble paths from " << bubble_beginning << " to " << bubble_end << endl;
     }
 
-
-
-    for(auto bubble: bubbles){
+    for (auto bubble : bubbles)
+    {
         // if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2 && bubble->paths_nodes.size()>24){
-        if(node_type[bubble->begNode]!=2 && node_type[bubble->endNode]!=2){
+        if (node_type[bubble->begNode] != 2 && node_type[bubble->endNode] != 2)
+        {
             set<uint32_t> nodes;
-            for(auto path:bubble->paths_nodes){
-                for(auto node: path){
+            for (auto path : bubble->paths_nodes)
+            {
+                for (auto node : path)
+                {
                     nodes.insert(node);
                 }
             }
-            if(nodes.size()>3){
+            if (nodes.size() > 3)
+            {
                 complex_bubbles.push_back(bubble);
-            }else{
+            }
+            else
+            {
                 pure_bubbles.push_back(bubble);
             }
             // cout << endl;
@@ -4708,35 +5877,47 @@ std::cout.flush();
             //     }
             //     cout << endl;
             // }
-        }else{
+        }
+        else
+        {
             delete bubble;
         }
     }
 
     // set<uint32_t> nodes;
     // set<uint32_t> double_nodes;
-    for(auto bubble: complex_bubbles){
+    for (auto bubble : complex_bubbles)
+    {
         set<set<uint32_t>> set_of_pathes;
-        for(auto path: bubble->paths_nodes){
+        for (auto path : bubble->paths_nodes)
+        {
             set<uint32_t> buf_path;
-            for(auto n:path){
-                if((n>>1)!=(bubble->begNode>>1) && (n>>1)!=(bubble->endNode>>1)){
-                    buf_path.insert(n>>1);
-                } 
+            for (auto n : path)
+            {
+                if ((n >> 1) != (bubble->begNode >> 1) && (n >> 1) != (bubble->endNode >> 1))
+                {
+                    buf_path.insert(n >> 1);
+                }
             }
             set_of_pathes.insert(buf_path);
         }
         vector<set<uint32_t>> vec_of_pathes;
-        for(auto p:set_of_pathes){
+        for (auto p : set_of_pathes)
+        {
             vec_of_pathes.push_back(p);
         }
         bubble->paths_nodes = vec_of_pathes;
     }
-    for(auto bubble: complex_bubbles){
-        for(int i = 0; i < bubble->paths_nodes.size(); i++){
-            for(auto node: bubble->paths_nodes[i]){
-                node_bubble_map[node] = bubble;
-                if(node_path_id_map.find(node)==node_path_id_map.end()){
+    for (auto bubble : complex_bubbles)
+    {
+        for (int i = 0; i < bubble->paths_nodes.size(); i++)
+        {
+            for (auto node : bubble->paths_nodes[i])
+            {
+                // cout << "node -> bubble:"<<node<<endl; // TODO: may have problem
+                // node_bubble_map[node] = bubble; //comment by xiao
+                if (node_path_id_map.find(node) == node_path_id_map.end())
+                {
                     node_path_id_map[node] = set<uint32_t>();
                 }
                 node_path_id_map[node].insert(i);
@@ -4744,49 +5925,50 @@ std::cout.flush();
         }
     }
 
-    for(auto bubble: complex_bubbles){
-               node_bubble_map[bubble->begNode] = bubble;
+    for (auto bubble : complex_bubbles)
+    {
+        cout << "begNode -> bubble:" << bubble->begNode << endl;
+        node_bubble_map[bubble->begNode] = bubble;
     }
 
     cout << "Bubbles Retrieved" << endl;
 
     // map<uint32_t,map<uint32_t,uint32_t>> cnt_count_branches;
-    map<uint32_t,map<uint32_t,set<uint32_t>>> bubble_chain_graph_full;
-    map<uint32_t,vector<vector<uint32_t>>> node_beg_end;
+    map<uint32_t, map<uint32_t, set<uint32_t>>> bubble_chain_graph_full;
+    map<uint32_t, vector<vector<uint32_t>>> node_beg_end;
 
-    
-    
-    for(auto begin: *bubble_chain_graph){
+    for (auto begin : *bubble_chain_graph)
+    {
 
-        for(auto end: begin.second){
-                vector<uint32_t> vec1;
-                vec1.push_back(begin.first);
-                vec1.push_back(end.first);
-                vector<uint32_t> vec2;
-                vec1.push_back(end.first^1);
-                vec1.push_back(begin.first^1);
-                for(auto node: end.second){
-                    node_beg_end[node] = vector<vector<uint32_t>>();
-                    node_beg_end[node].push_back(vec1);
-                    node_beg_end[node].push_back(vec2);
-                }
+        for (auto end : begin.second)
+        {
+            vector<uint32_t> vec1;
+            vec1.push_back(begin.first);
+            vec1.push_back(end.first);
+            vector<uint32_t> vec2;
+            vec1.push_back(end.first ^ 1);
+            vec1.push_back(begin.first ^ 1);
+            for (auto node : end.second)
+            {
+                node_beg_end[node] = vector<vector<uint32_t>>();
+                node_beg_end[node].push_back(vec1);
+                node_beg_end[node].push_back(vec2);
+            }
 
+            if (bubble_chain_graph_full.find(begin.first) != bubble_chain_graph_full.end())
+            {
+                bubble_chain_graph_full[begin.first] = map<uint32_t, set<uint32_t>>();
+            }
+            bubble_chain_graph_full[begin.first][end.first] = end.second;
 
-                if(bubble_chain_graph_full.find(begin.first) != bubble_chain_graph_full.end()){
-                    bubble_chain_graph_full[begin.first] = map<uint32_t,set<uint32_t>>();
-                }
-                bubble_chain_graph_full[begin.first][end.first] = end.second;
-
-                if(bubble_chain_graph_full.find(end.first^1) != bubble_chain_graph_full.end()){
-                    bubble_chain_graph_full[end.first^1] = map<uint32_t,set<uint32_t>>();
-                }
-                bubble_chain_graph_full[end.first^1][begin.first^1] = end.second;
-
+            if (bubble_chain_graph_full.find(end.first ^ 1) != bubble_chain_graph_full.end())
+            {
+                bubble_chain_graph_full[end.first ^ 1] = map<uint32_t, set<uint32_t>>();
+            }
+            bubble_chain_graph_full[end.first ^ 1][begin.first ^ 1] = end.second;
         }
     }
     delete bubble_chain_graph;
-
-
 
     shared_data shared;
     shared.graph = graph;
@@ -4799,46 +5981,51 @@ std::cout.flush();
     step.beg_node = new vector<uint32_t>();
     step.end_node = new vector<uint32_t>();
     step.current_nodes = new vector<set<uint32_t>>();
-    
-    set<pair<uint32_t,uint32_t>> seen_beg_end;
+
+    set<pair<uint32_t, uint32_t>> seen_beg_end;
 
     uint32_t counting_contigs = 0;
-    for(auto beg: bubble_chain_graph_full){
-    // for(auto beg: bubble_chain_graph_connected){
+    for (auto beg : bubble_chain_graph_full)
+    {
+        // for(auto beg: bubble_chain_graph_connected){
         // if(beg.first%2==0){
-            for(auto end: beg.second){
-                // if(seen_beg_end.find(make_pair(beg.first,end.first)) == seen_beg_end.end() && seen_beg_end.find(make_pair(end.first^1, beg.first^1))==seen_beg_end.end() && end.second.size()>8){
-                if(seen_beg_end.find(make_pair(beg.first,end.first)) == seen_beg_end.end() && seen_beg_end.find(make_pair(end.first^1, beg.first^1))==seen_beg_end.end()){
-                    step.beg_node->push_back(beg.first);
-                    step.end_node->push_back(end.first);
-                    step.current_nodes->push_back(end.second);
-                    // cout << graph->seq[beg.first>>1].name << (beg.first%2==0?"+":"-") <<" to " << graph->seq[end.first>>1].name << (end.first%2==0?"+":"-") << ": " << endl;
-                    // for(auto node: end.second){
-                    //     cout << graph->seq[node].name << ", ";
-                    // }
-                    // cout << endl;
-                    counting_contigs++;
-                    seen_beg_end.insert(make_pair(beg.first,end.first));
-                    seen_beg_end.insert(make_pair(end.first^1, beg.first^1));
+        for (auto end : beg.second)
+        {
+            // if(seen_beg_end.find(make_pair(beg.first,end.first)) == seen_beg_end.end() && seen_beg_end.find(make_pair(end.first^1, beg.first^1))==seen_beg_end.end() && end.second.size()>8){
+            if (seen_beg_end.find(make_pair(beg.first, end.first)) == seen_beg_end.end() && seen_beg_end.find(make_pair(end.first ^ 1, beg.first ^ 1)) == seen_beg_end.end())
+            {
+                step.beg_node->push_back(beg.first);
+                step.end_node->push_back(end.first);
+                step.current_nodes->push_back(end.second);
+                cout << "Multi-Contigs in one cc: " << graph->seq[beg.first >> 1].name << (beg.first % 2 == 0 ? "+" : "-") << " to " << graph->seq[end.first >> 1].name << (end.first % 2 == 0 ? "+" : "-") << ": " << endl;
+                for (auto node : end.second)
+                {
+                    cout << graph->seq[node].name << ", ";
                 }
+                cout << endl;
+                counting_contigs++;
+                seen_beg_end.insert(make_pair(beg.first, end.first));
+                seen_beg_end.insert(make_pair(end.first ^ 1, beg.first ^ 1));
             }
+        }
         // }
     }
     cout << "Total Contigs: " << counting_contigs << endl;
     // set<uint32_t> seen_nodes;
-	uint32_t** connect_num;
-	// float **best_buddy;
-	// bool **seen;
+    uint32_t **connect_num;
+    // float **best_buddy;
+    // bool **seen;
     uint32_t len = step.current_nodes->size();
-	connect_num = (uint32_t**)calloc(len*4,sizeof(uint32_t*));
-	// best_buddy = (float**)calloc(len*4,sizeof(float*));
-	// seen = (bool**)calloc(len*4,sizeof(bool*));
+    connect_num = (uint32_t **)calloc(len * 4, sizeof(uint32_t *));
+    // best_buddy = (float**)calloc(len*4,sizeof(float*));
+    // seen = (bool**)calloc(len*4,sizeof(bool*));
 
-	for(int i = 0; i < len*4; ++i){
-        connect_num[i] = (uint32_t*)calloc(len*4, sizeof(uint32_t));
-    //     best_buddy[i] = (float*)calloc(len*4, sizeof(float));
-    //     seen[i] = (bool*)calloc(len*4, sizeof(bool));
-	}
+    for (int i = 0; i < len * 4; ++i)
+    {
+        connect_num[i] = (uint32_t *)calloc(len * 4, sizeof(uint32_t));
+        //     best_buddy[i] = (float*)calloc(len*4, sizeof(float));
+        //     seen[i] = (bool*)calloc(len*4, sizeof(bool));
+    }
 
     // map<uint32_t,uint32_t> seen_nodes;
     // for(auto x: (*step.current_nodes)){
@@ -4855,16 +6042,17 @@ std::cout.flush();
     // covered_nodesFile.close();
     // cout << seen_nodes.size() << " out of " << graph->n_seq << endl;
 
+    step.haplo_sequences = (string *)calloc(step.beg_node->size() * 2, sizeof(string));
+    step.dif_nodes = (set<uint32_t> *)calloc(step.beg_node->size(), sizeof(set<uint32_t>));
+    step.similar = (bool *)calloc(step.beg_node->size(), sizeof(bool));
+    step.haplo_pathes = (vector<uint32_t> *)calloc(step.beg_node->size() * 2, sizeof(vector<uint32_t>));
+    step.node_positions = (map<uint32_t, uint32_t> *)calloc(step.beg_node->size() * 2, sizeof(map<uint32_t, uint32_t>));
 
+    cout << "step.beg_node->size: " << step.beg_node->size() << endl;
+    // kt_for(n_threads, worker_for_single_step_gen, &step, 1);
+    kt_for(n_threads, worker_for_single_step_gen, &step, step.beg_node->size());
+    // kt_for(n_threads, worker_for_single_step, &step, step.beg_node->size());
 
-    step.haplo_sequences = (string*)calloc(step.beg_node->size()*2,sizeof(string));
-    step.dif_nodes = (set<uint32_t>*)calloc(step.beg_node->size(),sizeof(set<uint32_t>));
-    step.similar = (bool*)calloc(step.beg_node->size(),sizeof(bool));
-    step.haplo_pathes = (vector<uint32_t>*)calloc(step.beg_node->size()*2,sizeof(vector<uint32_t>));
-    step.node_positions = (map<uint32_t,uint32_t>*)calloc(step.beg_node->size()*2,sizeof(map<uint32_t,uint32_t>));
-
-
-    kt_for(n_threads, worker_for_single_step_gen , &step, step.beg_node->size());
     // for(auto bubble: pure_bubbles){
     //     cout << "Bubble: " << graph->seq[bubble->begNode>>1].name << " to " << graph->seq[bubble->endNode>>1].name << endl;
     //     for(auto path: bubble->paths_nodes){
@@ -4876,31 +6064,66 @@ std::cout.flush();
     //     cout << endl;
     // }
 
+    // exit(0);
 
     ofstream outFile;
     ofstream outFileBrokenNodes;
-    outFile.open(string(output_directory)+string("/pred_haplotypes.fa"), ofstream::out | ofstream::trunc);
-    outFileBrokenNodes.open(string(output_directory)+string("/pred_broken_nodes.fa"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < step.beg_node->size()*2; i++){
-        if(step.similar[i>>1]){
-            outFile << string(">")+string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name))+string("s_hap")+to_string(i%2==0?1:2) << endl;
+    outFile.open(string(output_directory) + string("/pred_haplotypes.fa"), ofstream::out | ofstream::trunc);
+    outFileBrokenNodes.open(string(output_directory) + string("/pred_broken_nodes.fa"), ofstream::out | ofstream::trunc);
+
+    map<string,bool> if_seen_seqs;
+    for (int i = 0; i < step.beg_node->size() * 2; i++)
+    {
+       
+        if (if_seen_seqs.find(step.haplo_sequences[i])!=if_seen_seqs.end())
+        {
+            continue; //skip replicated haplotype sequences
+        }
+        else
+        {
+            if_seen_seqs[step.haplo_sequences[i]]=true;
+        }
+
+        if (step.similar[i >> 1])
+        {
+            outFile << string(">") + string(graph->seq[(*step.beg_node)[i >> 1] >> 1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i >> 1] >> 1].name)) + string("s_hap") + to_string(i % 2 == 0 ? 1 : 2) << endl;
             outFile << step.haplo_sequences[i] << endl;
-        }else{
-            outFile << string(">")+string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name))+string("_hap")+to_string(i%2==0?1:2) << endl;
+        }
+        else
+        {
+            outFile << string(">") + string(graph->seq[(*step.beg_node)[i >> 1] >> 1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i >> 1] >> 1].name)) + string("_hap") + to_string(i % 2 == 0 ? 1 : 2) << endl;
             outFile << step.haplo_sequences[i] << endl;
         }
     }
-    for(auto i : *excluded_nodes){
-        // cout << i.first << endl;
-        outFileBrokenNodes << ">" << i.first << endl;
-        outFileBrokenNodes << i.second << endl;
-    }
+
+    // for (auto i : *excluded_nodes)
+    // {
+    //     // cout << i.first << endl;
+    //     outFileBrokenNodes << ">" << i.first << endl;
+    //     outFileBrokenNodes << i.second << endl;
+    // }
+
     // for(int i = 0; i < step.beg_node->size(); i++){
     //     for(auto n: step.dif_nodes[i]){
     //         outFileBrokenNodes << ">" << graph->seq[n].name << endl;
     //         outFileBrokenNodes << graph->seq[n].seq << endl;
     //     }
     // }
+    set<uint32_t> nodes_in_haplo_seqs;
+    for(int i = 0; i < step.beg_node->size()*2; i++){
+        for(auto n: step.haplo_pathes[i]){
+            nodes_in_haplo_seqs.insert(n>>1);
+        }
+    }
+    for(int i = 0; i < (V/2); i++){
+        if(nodes_in_haplo_seqs.find(i)==nodes_in_haplo_seqs.end()){
+            outFileBrokenNodes << ">" << graph->seq[i].name << endl;
+            outFileBrokenNodes << graph->seq[i].seq << endl;
+        }
+        
+    }
+    // cout << "Number of nodes in graph: " << V/2 <<endl;
+
     outFile.close();
     outFileBrokenNodes.close();
 
@@ -4914,11 +6137,10 @@ std::cout.flush();
     // }
     // outFileBroken.close();
 
-
     // ofstream outFileContigHapNodes;
     // outFileContigHapNodes.open(string(output_directory)+string("/contig_hap_nodes.txt"), ofstream::out | ofstream::trunc);
     // for(int i = 0; i < step.beg_node->size()*2; i++){
-	// // for(auto ns: hap2_nodes){
+    // // for(auto ns: hap2_nodes){
     //     for(auto n: step.haplo_pathes[i]){
     //         outFileContigHapNodes <<graph->seq[n>>1].name << ",";
     //     }
@@ -4926,11 +6148,10 @@ std::cout.flush();
     // }
     // outFileContigHapNodes.close();
 
-
     // ofstream outFileContigNodes;
     // outFileContigNodes.open(string(output_directory)+string("/contig_nodes.txt"), ofstream::out | ofstream::trunc);
     // for(int i = 0; i < step.beg_node->size(); i++){
-	// // for(auto ns: hap2_nodes){
+    // // for(auto ns: hap2_nodes){
     //     for(auto n: (*step.current_nodes)[i]){
     //         outFileContigNodes <<graph->seq[n].name << ",";
     //     }
@@ -4939,129 +6160,138 @@ std::cout.flush();
     // outFileContigNodes.close();
 
     count_step cstep;
-    cstep.len = step.beg_node->size()*2;
+    cstep.len = step.beg_node->size() * 2;
     cstep.counting_result = connect_num;
     cstep.haplo_sequences = step.haplo_sequences;
     cstep.connection_count_forward = connection_count_forward;
     cstep.connection_count_backward = connection_count_backward;
     cstep.current_nodes_haplo = step.haplo_pathes;
     cstep.node_positions = step.node_positions;
-    
 
-    kt_for(n_threads, counter_worker_single_step , &cstep, step.beg_node->size()*2);
+    kt_for(n_threads, counter_worker_single_step, &cstep, step.beg_node->size() * 2);
     // if(enzymes.size()==0){
-        for(int i = 0; i < len*4; i++){
-            double ratio_i = 1;
-            if(step.haplo_sequences[i>>1].size()<10000000){
-                ratio_i = 10000000.0/((double)step.haplo_sequences[i>>1].size());
-            }
-            for(int j = 0; j < len*4; j++){
-                double ratio_j = 1;
-                if(step.haplo_sequences[j>>1].size()<10000000){
-                    ratio_j = 10000000.0/((double)step.haplo_sequences[j>>1].size());
-                }
-
-                connect_num[i][j] = (uint32_t)(connect_num[i][j] * ratio_i * ratio_j);
-            }
+    for (int i = 0; i < len * 4; i++)
+    {
+        double ratio_i = 1;
+        if (step.haplo_sequences[i >> 1].size() < 10000000)
+        {
+            ratio_i = 10000000.0 / ((double)step.haplo_sequences[i >> 1].size());
         }
+        for (int j = 0; j < len * 4; j++)
+        {
+            double ratio_j = 1;
+            if (step.haplo_sequences[j >> 1].size() < 10000000)
+            {
+                ratio_j = 10000000.0 / ((double)step.haplo_sequences[j >> 1].size());
+            }
+
+            connect_num[i][j] = (uint32_t)(connect_num[i][j] * ratio_i * ratio_j);
+        }
+    }
     // }else{
-        // vector<uint32_t> front_re;
-        // vector<uint32_t> back_re;
-        // for(int i = 0; i < len*4; i++){
-        //     uint32_t cur_front = 0;
-        //     uint32_t cur_back = 0;
-        //     string whole_str = step.haplo_sequences[i>>1];
-        //     string ff = whole_str.substr(0,min(10000000,(int)whole_str.size()));
-        //     string fb = whole_str.substr(max(((int)whole_str.size())-10000000,0), whole_str.size());
-        //     for(auto e: enzymes){
-        //         cur_front += stringCount(ff,e);
-        //         cur_back += stringCount(fb,e);
-        //     }
-        //     front_re.push_back(cur_front);
-        //     back_re.push_back(cur_back);
-        // }
-
-        // ofstream outFileRECount;
-        // outFileRECount.open(string(output_directory)+string("/re_count.txt"), ofstream::out | ofstream::trunc);
-        // for(int i = 0; i < len*2; i++){
-        //     outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Front" << "\t" << front_re[i<<1] << endl;
-        //     outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Back" << "\t" << back_re[i<<1] << endl;
-        // }
-        // outFileRECount.close();
-
-        // for(int i = 0; i < len*4; i++){
-        //     uint32_t cur_front_i = front_re[i];
-        //     uint32_t cur_back_i = back_re[i];
-        //     for(int j = 0; j < len*4; j++){
-        //         uint32_t cur_front_j = front_re[j];
-        //         uint32_t cur_back_j = back_re[j];
-        //         if(i%2 == 0 && j%2 == 0){
-        //             connect_num[i][j] /= (((double)(cur_back_i))/10000);
-        //             connect_num[i][j] /= (((double)(cur_front_j))/10000);
-        //         }else if(i%2 == 1 && j%2 == 0){
-        //             connect_num[i][j] /= (((double)(cur_front_i))/10000);
-        //             connect_num[i][j] /= (((double)(cur_front_j))/10000);
-        //         }else if(i%2 == 0 && j%2 == 1){
-        //             connect_num[i][j] /= (((double)(cur_back_i))/10000);
-        //             connect_num[i][j] /= (((double)(cur_back_j))/10000);
-        //         }else if(i%2 == 1 && j%2 == 1){
-        //             connect_num[i][j] /= (((double)(cur_front_i))/10000);
-        //             connect_num[i][j] /= (((double)(cur_back_j))/10000);
-        //         }
-        //     }
-        // }
-
-        // for(int i = 0; i < len*4; i++){
-        //     uint32_t cur_front_i = front_re[i];
-        //     uint32_t cur_back_i = back_re[i];
-        //     for(int j = 0; j < len*4; j++){
-        //         uint32_t cur_front_j = front_re[j];
-        //         uint32_t cur_back_j = back_re[j];
-        //         if(i%2 == 0 && j%2 == 0){
-        //             connect_num[i][j] /= (((double)(cur_back_i + cur_front_j))/10000);
-        //         }else if(i%2 == 1 && j%2 == 0){
-        //             connect_num[i][j] /= (((double)(cur_front_i + cur_front_j))/10000);
-        //         }else if(i%2 == 0 && j%2 == 1){
-        //             connect_num[i][j] /= (((double)(cur_back_i + cur_back_j))/10000);
-        //         }else if(i%2 == 1 && j%2 == 1){
-        //             connect_num[i][j] /= (((double)(cur_front_i + cur_back_j))/10000);
-        //         }
-        //     }
-        // }
-        
-        // for(int i = 0; i < len*4; i++){
-        //     uint32_t cur_front_i = front_re[i];
-        //     uint32_t cur_back_i = back_re[i];
-        //     for(int j = 0; j < len*4; j++){
-        //         uint32_t cur_front_j = front_re[j];
-        //         uint32_t cur_back_j = back_re[j];
-        //         double ratio = 0;
-        //         if(i%2 == 0 && j%2 == 0){
-        //             ratio = 300000/((double)(cur_back_i + cur_front_j));
-        //         }else if(i%2 == 1 && j%2 == 0){
-        //             ratio = 300000/((double)(cur_front_i + cur_front_j));
-        //         }else if(i%2 == 0 && j%2 == 1){
-        //             ratio = 300000/((double)(cur_back_i + cur_back_j));
-        //         }else if(i%2 == 1 && j%2 == 1){
-        //             ratio = 300000/((double)(cur_front_i + cur_back_j));
-        //         }
-        //         // ratio = 1;
-        //         connect_num[i][j] *= ratio;
-        //     }
-        // }
+    // vector<uint32_t> front_re;
+    // vector<uint32_t> back_re;
+    // for(int i = 0; i < len*4; i++){
+    //     uint32_t cur_front = 0;
+    //     uint32_t cur_back = 0;
+    //     string whole_str = step.haplo_sequences[i>>1];
+    //     string ff = whole_str.substr(0,min(10000000,(int)whole_str.size()));
+    //     string fb = whole_str.substr(max(((int)whole_str.size())-10000000,0), whole_str.size());
+    //     for(auto e: enzymes){
+    //         cur_front += stringCount(ff,e);
+    //         cur_back += stringCount(fb,e);
+    //     }
+    //     front_re.push_back(cur_front);
+    //     back_re.push_back(cur_back);
     // }
-    
+
+    // ofstream outFileRECount;
+    // outFileRECount.open(string(output_directory)+string("/re_count.txt"), ofstream::out | ofstream::trunc);
+    // for(int i = 0; i < len*2; i++){
+    //     outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Front" << "\t" << front_re[i<<1] << endl;
+    //     outFileRECount << string(graph->seq[(*step.beg_node)[i>>1]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>1]>>1].name)) << "_haplo_" << (i%2)+1 << "\t" << "Back" << "\t" << back_re[i<<1] << endl;
+    // }
+    // outFileRECount.close();
+
+    // for(int i = 0; i < len*4; i++){
+    //     uint32_t cur_front_i = front_re[i];
+    //     uint32_t cur_back_i = back_re[i];
+    //     for(int j = 0; j < len*4; j++){
+    //         uint32_t cur_front_j = front_re[j];
+    //         uint32_t cur_back_j = back_re[j];
+    //         if(i%2 == 0 && j%2 == 0){
+    //             connect_num[i][j] /= (((double)(cur_back_i))/10000);
+    //             connect_num[i][j] /= (((double)(cur_front_j))/10000);
+    //         }else if(i%2 == 1 && j%2 == 0){
+    //             connect_num[i][j] /= (((double)(cur_front_i))/10000);
+    //             connect_num[i][j] /= (((double)(cur_front_j))/10000);
+    //         }else if(i%2 == 0 && j%2 == 1){
+    //             connect_num[i][j] /= (((double)(cur_back_i))/10000);
+    //             connect_num[i][j] /= (((double)(cur_back_j))/10000);
+    //         }else if(i%2 == 1 && j%2 == 1){
+    //             connect_num[i][j] /= (((double)(cur_front_i))/10000);
+    //             connect_num[i][j] /= (((double)(cur_back_j))/10000);
+    //         }
+    //     }
+    // }
+
+    // for(int i = 0; i < len*4; i++){
+    //     uint32_t cur_front_i = front_re[i];
+    //     uint32_t cur_back_i = back_re[i];
+    //     for(int j = 0; j < len*4; j++){
+    //         uint32_t cur_front_j = front_re[j];
+    //         uint32_t cur_back_j = back_re[j];
+    //         if(i%2 == 0 && j%2 == 0){
+    //             connect_num[i][j] /= (((double)(cur_back_i + cur_front_j))/10000);
+    //         }else if(i%2 == 1 && j%2 == 0){
+    //             connect_num[i][j] /= (((double)(cur_front_i + cur_front_j))/10000);
+    //         }else if(i%2 == 0 && j%2 == 1){
+    //             connect_num[i][j] /= (((double)(cur_back_i + cur_back_j))/10000);
+    //         }else if(i%2 == 1 && j%2 == 1){
+    //             connect_num[i][j] /= (((double)(cur_front_i + cur_back_j))/10000);
+    //         }
+    //     }
+    // }
+
+    // for(int i = 0; i < len*4; i++){
+    //     uint32_t cur_front_i = front_re[i];
+    //     uint32_t cur_back_i = back_re[i];
+    //     for(int j = 0; j < len*4; j++){
+    //         uint32_t cur_front_j = front_re[j];
+    //         uint32_t cur_back_j = back_re[j];
+    //         double ratio = 0;
+    //         if(i%2 == 0 && j%2 == 0){
+    //             ratio = 300000/((double)(cur_back_i + cur_front_j));
+    //         }else if(i%2 == 1 && j%2 == 0){
+    //             ratio = 300000/((double)(cur_front_i + cur_front_j));
+    //         }else if(i%2 == 0 && j%2 == 1){
+    //             ratio = 300000/((double)(cur_back_i + cur_back_j));
+    //         }else if(i%2 == 1 && j%2 == 1){
+    //             ratio = 300000/((double)(cur_front_i + cur_back_j));
+    //         }
+    //         // ratio = 1;
+    //         connect_num[i][j] *= ratio;
+    //     }
+    // }
+    // }
+
     ofstream outFileScaffold;
-    outFileScaffold.open(string(output_directory)+string("/scaffold_connection.txt"), ofstream::out | ofstream::trunc);
-    for(int i = 0; i < len*4; i++){
-        for(int j = 0; j < len*4; j++){
-            if((i&2)==0){
-                connect_num[i][j] += connect_num[i^2][j^2];
-            }else{
+    outFileScaffold.open(string(output_directory) + string("/scaffold_connection.txt"), ofstream::out | ofstream::trunc);
+    for (int i = 0; i < len * 4; i++)
+    {
+        for (int j = 0; j < len * 4; j++)
+        {
+            if ((i & 2) == 0)
+            {
+                connect_num[i][j] += connect_num[i ^ 2][j ^ 2];
+            }
+            else
+            {
                 connect_num[i][j] = 0;
             }
-            if(connect_num[i][j]>0){
-                outFileScaffold << string(graph->seq[(*step.beg_node)[i>>2]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i>>2]>>1].name)) << "_hap" << (i>>1)%2+1 << (i%2==0?"+":"-") << "\t" << string(graph->seq[(*step.beg_node)[j>>2]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[j>>2]>>1].name)) << "_haplo_" << (j>>1)%2+1 << (j%2==0?"+":"-") << "\t" << connect_num[i][j] << endl;
+            if (connect_num[i][j] > 0)
+            {
+                outFileScaffold << string(graph->seq[(*step.beg_node)[i >> 2] >> 1].name) + string("_") + string(string(graph->seq[(*step.end_node)[i >> 2] >> 1].name)) << "_hap" << (i >> 1) % 2 + 1 << (i % 2 == 0 ? "+" : "-") << "\t" << string(graph->seq[(*step.beg_node)[j >> 2] >> 1].name) + string("_") + string(string(graph->seq[(*step.end_node)[j >> 2] >> 1].name)) << "_haplo_" << (j >> 1) % 2 + 1 << (j % 2 == 0 ? "+" : "-") << "\t" << connect_num[i][j] << endl;
             }
         }
     }
@@ -5075,9 +6305,8 @@ std::cout.flush();
     // outFileScaffoldMap.close();
 }
 
-void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1s, map<string, string> contig_hap2s, map<string, uint32_t> contig_lengths, map<string, uint32_t> contig_id, map<uint32_t, string> id_contig, char* output_directory, string identityFile, bool check_identity, uint32_t n_threads){
-
-
+void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1s, map<string, string> contig_hap2s, map<string, uint32_t> contig_lengths, map<string, uint32_t> contig_id, map<uint32_t, string> id_contig, char *output_directory, string identityFile, bool check_identity, uint32_t n_threads)
+{
 
     // ofstream outFileScaffoldSimple;
     // outFileScaffoldSimple.open(string(output_directory)+string("/scaffold_connection_simp.txt"), ofstream::out | ofstream::trunc);
@@ -5097,26 +6326,27 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // outFileScaffoldSimple.close();
 
     uint32_t long_threshold = 5000000;
-	float **best_buddy;
-	bool **seen;
+    float **best_buddy;
+    bool **seen;
     uint32_t len = contig_lengths.size();
-	best_buddy = (float**)calloc(len*4,sizeof(float*));
-	seen = (bool**)calloc(len*4,sizeof(bool*));
+    best_buddy = (float **)calloc(len * 4, sizeof(float *));
+    seen = (bool **)calloc(len * 4, sizeof(bool *));
 
-	for(int i = 0; i < len*4; ++i){
-        best_buddy[i] = (float*)calloc(len*4, sizeof(float));
-        seen[i] = (bool*)calloc(len*4, sizeof(bool));
-	}
+    for (int i = 0; i < len * 4; ++i)
+    {
+        best_buddy[i] = (float *)calloc(len * 4, sizeof(float));
+        seen[i] = (bool *)calloc(len * 4, sizeof(bool));
+    }
 
-
-    
     set<string> exclude_contigs;
 
-    if(check_identity){
+    if (check_identity)
+    {
         bool to_delete = identityFile.size() == 0;
-        if(identityFile.size()==0){
+        if (identityFile.size() == 0)
+        {
             stringstream minimap2_cmd;
-            minimap2_cmd << "minimap2 -I40G -x asm20 -Y -a --eqx -t" << n_threads << " " << string(output_directory)+string("/pred_haplotypes.fa") << " "<< string(output_directory)+string("/pred_haplotypes.fa"); 
+            minimap2_cmd << "minimap2 -I40G -x asm20 -Y -a --eqx -t" << n_threads << " " << string(output_directory) + string("/pred_haplotypes.fa") << " " << string(output_directory) + string("/pred_haplotypes.fa");
             minimap2_cmd << " > " << string(output_directory) << "/haplotype_identity.sam";
 
             system(minimap2_cmd.str().c_str());
@@ -5127,20 +6357,22 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         string contigName1;
         int flag;
         string contigName2;
-        getline(infile,fileLine);
+        getline(infile, fileLine);
         while (getline(infile, fileLine))
         {
             istringstream iss(fileLine);
             iss >> contigName1 >> flag >> contigName2;
-            if(flag!=4 && contigName2 != contigName1){
-                contigName1 = contigName1.substr(0,contigName1.size()-5);
-                contigName2 = contigName2.substr(0,contigName2.size()-5);
+            if (flag != 4 && contigName2 != contigName1)
+            {
+                contigName1 = contigName1.substr(0, contigName1.size() - 5);
+                contigName2 = contigName2.substr(0, contigName2.size() - 5);
                 exclude_contigs.insert(contigName1);
                 exclude_contigs.insert(contigName2);
             }
         }
 
-        if(to_delete){
+        if (to_delete)
+        {
             stringstream rm_cmd;
             rm_cmd << "rm " << identityFile;
             system(rm_cmd.str().c_str());
@@ -5150,19 +6382,24 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         //     cout << i << endl;
         // }
     }
-	for(int i = 0; i < len*4; ++i){
-        best_buddy[i] = (float*)calloc(len*4, sizeof(float));
-        seen[i] = (bool*)calloc(len*4, sizeof(bool));
-	}
-	
+    for (int i = 0; i < len * 4; ++i)
+    {
+        best_buddy[i] = (float *)calloc(len * 4, sizeof(float));
+        seen[i] = (bool *)calloc(len * 4, sizeof(bool));
+    }
+
     uint32_t long_count = 0;
     uint32_t all_count = 0;
-    for(auto n: contig_lengths){
-        if(exclude_contigs.find(n.first)==exclude_contigs.end()){
-            if(n.second > long_threshold){
+    for (auto n : contig_lengths)
+    {
+        if (exclude_contigs.find(n.first) == exclude_contigs.end())
+        {
+            if (n.second > long_threshold)
+            {
                 long_count++;
             }
-            if(n.second > 1500000){
+            if (n.second > 1500000)
+            {
                 all_count++;
             }
         }
@@ -5170,18 +6407,20 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     cout << "All above 5M: " << long_count << endl;
     cout << "All above 1.5M: " << all_count << endl;
 
-    
     uint32_t low_connect = 0;
     vector<uint32_t> all_connect;
-    for(int i = 0; i < len; i++){
-        for(int j = 0; j < len; j++){
-            if( exclude_contigs.find(id_contig[i]) == exclude_contigs.end() && exclude_contigs.find(id_contig[j]) == exclude_contigs.end()
-                && connect_num[i][j] !=0 && i != j && contig_lengths[id_contig[i]] >= long_threshold && contig_lengths[id_contig[j]] >= long_threshold 
-            ){
+    for (int i = 0; i < len; i++)
+    {
+        for (int j = 0; j < len; j++)
+        {
+            if (exclude_contigs.find(id_contig[i]) == exclude_contigs.end() && exclude_contigs.find(id_contig[j]) == exclude_contigs.end() && connect_num[i][j] != 0 && i != j && contig_lengths[id_contig[i]] >= long_threshold && contig_lengths[id_contig[j]] >= long_threshold)
+            {
                 uint32_t max_count = 0;
-                for(int i_s = 0; i_s<4; i_s++){
-                    for(int j_s = 0; j_s<4; j_s++){
-                        max_count = max(max_count, connect_num[(i<<2)+i_s][(j<<2)+j_s]);
+                for (int i_s = 0; i_s < 4; i_s++)
+                {
+                    for (int j_s = 0; j_s < 4; j_s++)
+                    {
+                        max_count = max(max_count, connect_num[(i << 2) + i_s][(j << 2) + j_s]);
                     }
                 }
                 all_connect.push_back(max_count);
@@ -5189,38 +6428,46 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         }
     }
     sort(all_connect.begin(), all_connect.end());
-    low_connect = all_connect[all_connect.size()* 0.9];
+    low_connect = all_connect[all_connect.size() * 0.9];
 
-	set<uint32_t> seen_node;
-	vector<vector<uint32_t>> graph_connection;
+    set<uint32_t> seen_node;
+    vector<vector<uint32_t>> graph_connection;
     map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation;
     uint32_t first_max_iter = 3;
-    while(first_max_iter > 0){
+    while (first_max_iter > 0)
+    {
         first_max_iter--;
 
         uint32_t total_greaters = 0;
-        for(int i = 0; i < len*4; i++){
-            if(i%4==0 && contig_lengths[id_contig[i>>2]] >= long_threshold && exclude_contigs.find(id_contig[i>>2]) == exclude_contigs.end() ){
+        for (int i = 0; i < len * 4; i++)
+        {
+            if (i % 4 == 0 && contig_lengths[id_contig[i >> 2]] >= long_threshold && exclude_contigs.find(id_contig[i >> 2]) == exclude_contigs.end())
+            {
                 total_greaters++;
             }
-            for(int j = 0; j < len*4; j++){
+            for (int j = 0; j < len * 4; j++)
+            {
                 bool to_exclude = false;
                 uint32_t max_count = 0;
                 uint32_t min_count = connect_num[i][j];
-                for(int i_s = 0; i_s<2; i_s++){
-                    for(int j_s = 0; j_s<4; j_s++){
-                        max_count = max(max_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
-                        min_count = min(min_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
+                for (int i_s = 0; i_s < 2; i_s++)
+                {
+                    for (int j_s = 0; j_s < 4; j_s++)
+                    {
+                        max_count = max(max_count, connect_num[((i >> 2) << 2) + i_s][((j >> 2) << 2) + j_s]);
+                        min_count = min(min_count, connect_num[((i >> 2) << 2) + i_s][((j >> 2) << 2) + j_s]);
                     }
                 }
-                if(min_count * 10 <= max_count){
+                if (min_count * 10 <= max_count)
+                {
                     to_exclude = true;
                 }
-                if( exclude_contigs.find(id_contig[i>>2]) != exclude_contigs.end() || exclude_contigs.find(id_contig[j>>2]) != exclude_contigs.end()
-                || connect_num[i][j] ==0 || i == j || contig_lengths[id_contig[i>>2]] < long_threshold || contig_lengths[id_contig[j>>2]] < long_threshold 
-                || (seen_node.find(i>>2) != seen_node.end() && seen_node.find(j>>2) != seen_node.end()) || to_exclude){
+                if (exclude_contigs.find(id_contig[i >> 2]) != exclude_contigs.end() || exclude_contigs.find(id_contig[j >> 2]) != exclude_contigs.end() || connect_num[i][j] == 0 || i == j || contig_lengths[id_contig[i >> 2]] < long_threshold || contig_lengths[id_contig[j >> 2]] < long_threshold || (seen_node.find(i >> 2) != seen_node.end() && seen_node.find(j >> 2) != seen_node.end()) || to_exclude)
+                {
                     seen[i][j] = true;
-                }else{
+                }
+                else
+                {
                     seen[i][j] = false;
                 }
                 // if(connect_num[i][j] ==0 || i == j || max_count > 10000){
@@ -5234,41 +6481,51 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         uint32_t safe_break = 0;
         uint32_t iteration = 0;
         // while(next){
-        
-        while(seen_node.size()<len && safe_break <= 5 && next){
+
+        while (seen_node.size() < len && safe_break <= 5 && next)
+        {
             next = false;
             safe_break++;
             // for(auto n: seen_node){
             // 	printf("%d, ",n);
             // }
             // printf("\n");
-            vector<pair<float, pair<uint32_t,uint32_t>>> result;
+            vector<pair<float, pair<uint32_t, uint32_t>>> result;
             // next = false;
-            update_best_buddy_haplo(seen, best_buddy,connect_num,len);
+            update_best_buddy_haplo(seen, best_buddy, connect_num, len);
             cout << "Update best buddy score." << endl;
-            for(int i = 0; i < len*4; i++){
-                for(int j = 0; j < len*4; j++){
-                    if(best_buddy[i][j] > 0.999){
-                        if(connect_num[i][j]>low_connect){
+            for (int i = 0; i < len * 4; i++)
+            {
+                for (int j = 0; j < len * 4; j++)
+                {
+                    if (best_buddy[i][j] > 0.999)
+                    {
+                        if (connect_num[i][j] > low_connect)
+                        {
                             next = true;
                         }
-                        result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
+                        result.push_back(make_pair(best_buddy[i][j], make_pair(i, j)));
                     }
                 }
             }
-            if(!next){
+            if (!next)
+            {
                 break;
             }
             sort(result.begin(), result.end(),
-            [](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-                return r1.first > r2.first;
-            });
+                 [](const pair<float, pair<uint32_t, uint32_t>> &r1, const pair<float, pair<uint32_t, uint32_t>> &r2)
+                 {
+                     return r1.first > r2.first;
+                 });
             cout << "Get potential connections " << result.size() << "." << endl;
 
-            for(auto res:result){
-                if(!seen[res.second.first][res.second.second]){
+            for (auto res : result)
+            {
+                if (!seen[res.second.first][res.second.second])
+                {
                     bool erase_connection = false;
-                    if(connect_num[res.second.first][res.second.second]<low_connect){
+                    if (connect_num[res.second.first][res.second.second] < low_connect)
+                    {
                         erase_connection = true;
                     }
                     safe_break = 0;
@@ -5277,19 +6534,26 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                     uint16_t idx_j = 65535;
                     uint16_t idx_i_sub = 65535;
                     uint16_t idx_j_sub = 65535;
-                    for(int i = 0; i < graph_connection.size(); i++){
-                        if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first>>2))!=graph_connection[i].end()){
-                            for(int idx=0; idx<graph_connection[i].size(); idx++){
-                                if(graph_connection[i][idx]==(res.second.first>>2)){
+                    for (int i = 0; i < graph_connection.size(); i++)
+                    {
+                        if (find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first >> 2)) != graph_connection[i].end())
+                        {
+                            for (int idx = 0; idx < graph_connection[i].size(); idx++)
+                            {
+                                if (graph_connection[i][idx] == (res.second.first >> 2))
+                                {
                                     idx_i_sub = idx;
                                 }
                             }
                             idx_i = i;
                             found = true;
                         }
-                        if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second>>2))!=graph_connection[i].end()){
-                            for(int idx=0; idx<graph_connection[i].size(); idx++){
-                                if(graph_connection[i][idx]==(res.second.second>>2)){
+                        if (find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second >> 2)) != graph_connection[i].end())
+                        {
+                            for (int idx = 0; idx < graph_connection[i].size(); idx++)
+                            {
+                                if (graph_connection[i][idx] == (res.second.second >> 2))
+                                {
                                     idx_j_sub = idx;
                                 }
                             }
@@ -5298,100 +6562,129 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         }
                     }
 
-                    if(erase_connection){
-
-                    }else if(found && idx_i == idx_j){
+                    if (erase_connection)
+                    {
+                    }
+                    else if (found && idx_i == idx_j)
+                    {
                         erase_connection = true;
-                    }else if(!found){
+                    }
+                    else if (!found)
+                    {
                         vector<uint32_t> buf;
-                        buf.push_back(res.second.first>>2);
-                        buf.push_back(res.second.second>>2);
+                        buf.push_back(res.second.first >> 2);
+                        buf.push_back(res.second.second >> 2);
                         graph_connection.push_back(buf);
-                    }else if(idx_j!=65535 && idx_i!=65535){
+                    }
+                    else if (idx_j != 65535 && idx_i != 65535)
+                    {
 
                         // assert(idx_j_sub == 0);
                         // assert(idx_i_sub == graph_connection[idx_i].size()-1);
 
-
                         uint32_t adj_connection = 65335;
-                        adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
-                        adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
+                        adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size() - 2] << 2][res.second.second]);
+                        adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1] << 2]);
                         uint32_t average_connection = 0;
-                        for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                            pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
+                        for (int i_c = 0; i_c < graph_connection[idx_i].size() - 1; i_c++)
+                        {
+                            pair<float, pair<uint32_t, uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c + 1]];
                             average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
                         }
-                        for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                            pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
+                        for (int j_c = 0; j_c < graph_connection[idx_j].size() - 1; j_c++)
+                        {
+                            pair<float, pair<uint32_t, uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c + 1]];
                             average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
                         }
-                        average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
-                        if(average_connection*0.3>connect_num[res.second.first][res.second.second] ){
-                        // if(average_connection*0.3>connect_num[res.second.first][res.second.second] || adj_connection < 230|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                        average_connection /= graph_connection[idx_i].size() + graph_connection[idx_j].size() - 2;
+                        if (average_connection * 0.3 > connect_num[res.second.first][res.second.second])
+                        {
+                            // if(average_connection*0.3>connect_num[res.second.first][res.second.second] || adj_connection < 230|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
                             erase_connection = true;
-                        }else{
+                        }
+                        else
+                        {
                             graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
-                            graph_connection.erase(graph_connection.begin()+idx_j);
-                        }
-                    }else if(idx_j!=65535){
-                        // assert(idx_j_sub == 0);
-                        uint32_t adj_connection = 65335;
-                        adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]<<2]);
-                        uint32_t average_connection = 0;
-                        for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                            pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
-                            average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                        }
-                        average_connection/=graph_connection[idx_j].size()-1;
-                        // if(average_connection*0.3>connect_num[res.second.first][res.second.second] || adj_connection < 230|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                        if(average_connection*0.3>connect_num[res.second.first][res.second.second]){
-                            erase_connection = true;
-                        }else{
-                            graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first>>2));
-                        }
-                    }else if(idx_i!=65535){
-                        // assert(idx_i_sub == graph_connection[idx_i].size()-1);
-                        uint32_t adj_connection = 65335;
-                        adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]<<2][res.second.second]);
-                        uint32_t average_connection = 0;
-                        for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                            pair<float,pair<uint32_t,uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
-                            average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
-                        }
-                        average_connection/=graph_connection[idx_i].size()-1;
-                        // if(average_connection*0.3>connect_num[res.second.first][res.second.second] || adj_connection < 230|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                        if(average_connection*0.3>connect_num[res.second.first][res.second.second]){
-                            erase_connection = true;
-                        }else{
-                            graph_connection[idx_i].push_back((res.second.second>>2));
+                            graph_connection.erase(graph_connection.begin() + idx_j);
                         }
                     }
-                    
-                    
-                    if(!erase_connection){
-                        for(int q = 0; q < len*4; q++){
-                            for(int i_s = 0; i_s < 4; i_s++){
-                                for(int j_s = 0; j_s < 4; j_s++){
-                                    seen[((res.second.first>>2)<<2)+i_s][q] = true;
-                                    seen[q][((res.second.second>>2)<<2)+j_s] = true;
-                                    seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
+                    else if (idx_j != 65535)
+                    {
+                        // assert(idx_j_sub == 0);
+                        uint32_t adj_connection = 65335;
+                        adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1] << 2]);
+                        uint32_t average_connection = 0;
+                        for (int j_c = 0; j_c < graph_connection[idx_j].size() - 1; j_c++)
+                        {
+                            pair<float, pair<uint32_t, uint32_t>> connect_buf = connection_relation[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c + 1]];
+                            average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
+                        }
+                        average_connection /= graph_connection[idx_j].size() - 1;
+                        // if(average_connection*0.3>connect_num[res.second.first][res.second.second] || adj_connection < 230|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                        if (average_connection * 0.3 > connect_num[res.second.first][res.second.second])
+                        {
+                            erase_connection = true;
+                        }
+                        else
+                        {
+                            graph_connection[idx_j].insert(graph_connection[idx_j].begin(), (res.second.first >> 2));
+                        }
+                    }
+                    else if (idx_i != 65535)
+                    {
+                        // assert(idx_i_sub == graph_connection[idx_i].size()-1);
+                        uint32_t adj_connection = 65335;
+                        adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size() - 2] << 2][res.second.second]);
+                        uint32_t average_connection = 0;
+                        for (int i_c = 0; i_c < graph_connection[idx_i].size() - 1; i_c++)
+                        {
+                            pair<float, pair<uint32_t, uint32_t>> connect_buf = connection_relation[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c + 1]];
+                            average_connection += connect_num[connect_buf.second.first][connect_buf.second.second];
+                        }
+                        average_connection /= graph_connection[idx_i].size() - 1;
+                        // if(average_connection*0.3>connect_num[res.second.first][res.second.second] || adj_connection < 230|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                        if (average_connection * 0.3 > connect_num[res.second.first][res.second.second])
+                        {
+                            erase_connection = true;
+                        }
+                        else
+                        {
+                            graph_connection[idx_i].push_back((res.second.second >> 2));
+                        }
+                    }
+
+                    if (!erase_connection)
+                    {
+                        for (int q = 0; q < len * 4; q++)
+                        {
+                            for (int i_s = 0; i_s < 4; i_s++)
+                            {
+                                for (int j_s = 0; j_s < 4; j_s++)
+                                {
+                                    seen[((res.second.first >> 2) << 2) + i_s][q] = true;
+                                    seen[q][((res.second.second >> 2) << 2) + j_s] = true;
+                                    seen[((res.second.second >> 2) << 2) + j_s][((res.second.first >> 2) << 2) + i_s] = true;
                                 }
                             }
                         }
-                        
-                        if(connection_relation.find(res.second.first>>2) == connection_relation.end()){
-                            connection_relation[res.second.first>>2] = map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>();
+
+                        if (connection_relation.find(res.second.first >> 2) == connection_relation.end())
+                        {
+                            connection_relation[res.second.first >> 2] = map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>();
                         }
-                        
-                        connection_relation[res.second.first>>2][res.second.second>>2] = res;
-                        seen_node.insert((res.second.first>>2));
-                        seen_node.insert((res.second.second>>2));
-                        
-                    }else{
-                        for(int i_s = 0; i_s < 4; i_s++){
-                            for(int j_s = 0; j_s < 4; j_s++){
-                                seen[((res.second.first>>2)<<2)+i_s][((res.second.second>>2)<<2)+j_s] = true;
-                                seen[((res.second.second>>2)<<2)+j_s][((res.second.first>>2)<<2)+i_s] = true;
+
+                        connection_relation[res.second.first >> 2][res.second.second >> 2] = res;
+                        seen_node.insert((res.second.first >> 2));
+                        seen_node.insert((res.second.second >> 2));
+                    }
+                    else
+                    {
+                        for (int i_s = 0; i_s < 4; i_s++)
+                        {
+                            for (int j_s = 0; j_s < 4; j_s++)
+                            {
+                                seen[((res.second.first >> 2) << 2) + i_s][((res.second.second >> 2) << 2) + j_s] = true;
+                                seen[((res.second.second >> 2) << 2) + j_s][((res.second.first >> 2) << 2) + i_s] = true;
                             }
                         }
                     }
@@ -5401,9 +6694,12 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             cout << "Save graphs and scores." << endl;
 
             uint32_t counting_left = 0;
-            for(int i = 0; i < len*4 ; i++){
-                for(int j = 0; j < len*4 ; j++){
-                    if(!seen[i][j]){
+            for (int i = 0; i < len * 4; i++)
+            {
+                for (int j = 0; j < len * 4; j++)
+                {
+                    if (!seen[i][j])
+                    {
                         next = true;
                         counting_left++;
                     }
@@ -5414,50 +6710,55 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             iteration++;
         }
     }
-	
+
     cout << "Finish get first scaffolds." << endl;
-
-
-
-
 
     vector<vector<uint32_t>> cur_scaffold_result = graph_connection;
 
-
-    vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
+    vector<pair<uint32_t, uint32_t>> not_seen_nodes_len;
     vector<uint32_t> nodes_to_insert;
 
-    
-    for(int i = 0; i < len; i++){
-        if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > long_threshold && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
-            not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+    for (int i = 0; i < len; i++)
+    {
+        if (seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > long_threshold && exclude_contigs.find(id_contig[i]) == exclude_contigs.end())
+        {
+            not_seen_nodes_len.push_back(make_pair(i, contig_lengths[id_contig[i]]));
         }
     }
     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
-    [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
-        return r1.second > r2.second;
-    });
-    
-    for(auto n: not_seen_nodes_len){
+         [](const pair<uint32_t, uint32_t> &r1, const pair<uint32_t, uint32_t> &r2)
+         {
+             return r1.second > r2.second;
+         });
+
+    for (auto n : not_seen_nodes_len)
+    {
         nodes_to_insert.push_back(n.first);
     }
 
     vector<vector<uint32_t>> new_scaffold_result = cur_scaffold_result;
-    for(auto n : nodes_to_insert){
+    for (auto n : nodes_to_insert)
+    {
         // cout << id_contig[n] << endl;
         vector<uint32_t> scores;
-        for(auto s: cur_scaffold_result){
-            vector<uint32_t> best_2(1,0);
-            for(auto sn : s){
+        for (auto s : cur_scaffold_result)
+        {
+            vector<uint32_t> best_2(1, 0);
+            for (auto sn : s)
+            {
                 uint32_t max_count = 0;
-                for(int i_s = 0; i_s<4; i_s++){
-                    for(int j_s = 0; j_s<4; j_s++){
-                        max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
-                        max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
+                for (int i_s = 0; i_s < 4; i_s++)
+                {
+                    for (int j_s = 0; j_s < 4; j_s++)
+                    {
+                        max_count = max(max_count, connect_num[(sn << 2) + i_s][(n << 2) + j_s]);
+                        max_count = max(max_count, connect_num[(n << 2) + j_s][(sn << 2) + i_s]);
                     }
                 }
-                for(int i = 0; i < best_2.size(); i++){
-                    if(max_count > best_2[i]){
+                for (int i = 0; i < best_2.size(); i++)
+                {
+                    if (max_count > best_2[i])
+                    {
                         uint32_t buf = max_count;
                         max_count = best_2[i];
                         best_2[i] = buf;
@@ -5466,129 +6767,139 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             }
             bool valid = true;
             uint32_t idx_0 = 1;
-            for(int i = 0; i < best_2.size()-1; i++){
-                if(best_2[i+1] > 0){
+            for (int i = 0; i < best_2.size() - 1; i++)
+            {
+                if (best_2[i + 1] > 0)
+                {
                     idx_0++;
-                    if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+                    if (best_2[i] * 0.3 > best_2[i + 1] || best_2[i] < 100 * (3 - i) || best_2[i + 1] < 100 * (2 - i))
+                    {
                         valid = false;
                         break;
                     }
-                }else{
+                }
+                else
+                {
                     break;
                 }
             }
             uint32_t best_2_total = 0;
-            for(auto i : best_2){
+            for (auto i : best_2)
+            {
                 best_2_total += i;
             }
-            if(!valid){
+            if (!valid)
+            {
                 scores.push_back(0);
-            }else{
-                scores.push_back(best_2_total/idx_0);
+            }
+            else
+            {
+                scores.push_back(best_2_total / idx_0);
             }
         }
-        
+
         uint32_t max_idx = 0;
         uint32_t max_score = 65535;
-        for(int i = 0; i < scores.size(); i++){
-            if(max_score < scores[i]){
+        for (int i = 0; i < scores.size(); i++)
+        {
+            if (max_score < scores[i])
+            {
                 max_score = scores[i];
                 max_idx = i;
             }
         }
-        if(max_idx!=65535 && max_score > low_connect){
+        if (max_idx != 65535 && max_score > low_connect)
+        {
             cur_scaffold_result[max_idx].push_back(n);
             seen_node.insert(n);
-        }else{
+        }
+        else
+        {
             vector<uint32_t> buf;
             buf.push_back(n);
             cur_scaffold_result.push_back(buf);
         }
     }
 
-// //    vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
-// //     vector<uint32_t> nodes_to_insert;
-//     not_seen_nodes_len = vector<pair<uint32_t,uint32_t>>();
-//     nodes_to_insert = vector<uint32_t>();
+    // //    vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
+    // //     vector<uint32_t> nodes_to_insert;
+    //     not_seen_nodes_len = vector<pair<uint32_t,uint32_t>>();
+    //     nodes_to_insert = vector<uint32_t>();
 
-    
-//     for(int i = 0; i < len; i++){
-//         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
-//             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
-//         }
-//     }
-//     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
-//     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
-//         return r1.second > r2.second;
-//     });
-    
-//     for(auto n: not_seen_nodes_len){
-//         nodes_to_insert.push_back(n.first);
-//     }
+    //     for(int i = 0; i < len; i++){
+    //         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+    //             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+    //         }
+    //     }
+    //     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+    //     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+    //         return r1.second > r2.second;
+    //     });
 
-//     for(auto n : nodes_to_insert){
-//         cout << id_contig[n] << endl;
-//         vector<uint32_t> scores;
-//         for(auto s: cur_scaffold_result){
-//             vector<uint32_t> best_2(1,0);
-//             for(auto sn : s){
-//                 uint32_t max_count = 0;
-//                 for(int i_s = 0; i_s<4; i_s++){
-//                     for(int j_s = 0; j_s<4; j_s++){
-//                         max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
-//                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
-//                     }
-//                 }
-//                 for(int i = 0; i < best_2.size(); i++){
-//                     if(max_count > best_2[i]){
-//                         uint32_t buf = max_count;
-//                         max_count = best_2[i];
-//                         best_2[i] = buf;
-//                     }
-//                 }
-//             }
-//             bool valid = true;
-//             uint32_t idx_0 = 1;
-//             for(int i = 0; i < best_2.size()-1; i++){
-//                 if(best_2[i+1] > 0){
-//                     idx_0++;
-//                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
-//                         // valid = false;
-//                         break;
-//                     }
-//                 }else{
-//                     break;
-//                 }
-//             }
-//             uint32_t best_2_total = 0;
-//             for(auto i : best_2){
-//                 best_2_total += i;
-//             }
-//             if(!valid){
-//                 scores.push_back(0);
-//             }else{
-//                 scores.push_back(best_2_total/idx_0);
-//             }
-//         }
-        
-//         uint32_t max_idx = 0;
-//         uint32_t max_score = 900;
-//         for(int i = 0; i < scores.size(); i++){
-//             if(max_score < scores[i]){
-//                 max_score = scores[i];
-//                 max_idx = i;
-//             }
-//         }
-//         if(max_idx!=900){
-//             cur_scaffold_result[max_idx].push_back(n);
-//             seen_node.insert(n);
-//         }
-//     }
+    //     for(auto n: not_seen_nodes_len){
+    //         nodes_to_insert.push_back(n.first);
+    //     }
+
+    //     for(auto n : nodes_to_insert){
+    //         cout << id_contig[n] << endl;
+    //         vector<uint32_t> scores;
+    //         for(auto s: cur_scaffold_result){
+    //             vector<uint32_t> best_2(1,0);
+    //             for(auto sn : s){
+    //                 uint32_t max_count = 0;
+    //                 for(int i_s = 0; i_s<4; i_s++){
+    //                     for(int j_s = 0; j_s<4; j_s++){
+    //                         max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+    //                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
+    //                     }
+    //                 }
+    //                 for(int i = 0; i < best_2.size(); i++){
+    //                     if(max_count > best_2[i]){
+    //                         uint32_t buf = max_count;
+    //                         max_count = best_2[i];
+    //                         best_2[i] = buf;
+    //                     }
+    //                 }
+    //             }
+    //             bool valid = true;
+    //             uint32_t idx_0 = 1;
+    //             for(int i = 0; i < best_2.size()-1; i++){
+    //                 if(best_2[i+1] > 0){
+    //                     idx_0++;
+    //                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+    //                         // valid = false;
+    //                         break;
+    //                     }
+    //                 }else{
+    //                     break;
+    //                 }
+    //             }
+    //             uint32_t best_2_total = 0;
+    //             for(auto i : best_2){
+    //                 best_2_total += i;
+    //             }
+    //             if(!valid){
+    //                 scores.push_back(0);
+    //             }else{
+    //                 scores.push_back(best_2_total/idx_0);
+    //             }
+    //         }
+
+    //         uint32_t max_idx = 0;
+    //         uint32_t max_score = 900;
+    //         for(int i = 0; i < scores.size(); i++){
+    //             if(max_score < scores[i]){
+    //                 max_score = scores[i];
+    //                 max_idx = i;
+    //             }
+    //         }
+    //         if(max_idx!=900){
+    //             cur_scaffold_result[max_idx].push_back(n);
+    //             seen_node.insert(n);
+    //         }
+    //     }
 
     // new_scaffold_result = cur_scaffold_result;
-
-
-
 
     uint32_t to_break_stable = 0;
     uint32_t iteration_num = 10;
@@ -5723,9 +7034,8 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }else{
     //         to_break_stable = 0;
     //     }
-    //     cur_scaffold_result = separated_connections; 
+    //     cur_scaffold_result = separated_connections;
     // }
-    
 
     // cout << "Start bringing back short contigs." << endl;
 
@@ -5749,8 +7059,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }
     // }
 
-
-
     // vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
     // for(int i = 0; i < len; i++){
     //     if(seen_node.find(i) == seen_node.end()){
@@ -5762,63 +7070,59 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     return r1.second > r2.second;
     // });
 
-    
-    
-    
     // for(int i = 0; i < len*4; i++){
-	// 	for(int j = 0; j < len*4; j++){
+    // 	for(int j = 0; j < len*4; j++){
     //         uint32_t max_count = 0;
     //         for(int i_s = 0; i_s<4; i_s++){
     //             for(int j_s = 0; j_s<4; j_s++){
     //                 max_count = max(max_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
     //             }
     //         }
-	// 		if(connect_num[i][j] ==0 || i == j || !(seen_node.find(i>>2)!= seen_node.end() ^ seen_node.find(j>>2)!= seen_node.end()) 
+    // 		if(connect_num[i][j] ==0 || i == j || !(seen_node.find(i>>2)!= seen_node.end() ^ seen_node.find(j>>2)!= seen_node.end())
     //         || contig_lengths[id_contig[i>>1]] < long_threshold || contig_lengths[id_contig[j>>1]]  < long_threshold || max_count > 10000){
-	// 			seen[i][j] = true;
-	// 		}else{
+    // 			seen[i][j] = true;
+    // 		}else{
     //             seen[i][j] = false;
     //         }
-	// 	}
-	// }
+    // 	}
+    // }
 
-
-	// vector<vector<uint32_t>> graph_connection_buf;
+    // vector<vector<uint32_t>> graph_connection_buf;
     // // map<pair<uint32_t,uint32_t>, pair<uint32_t, uint32_t>> connection_relation;
     // map<uint32_t, map<uint32_t, pair<float, pair<uint32_t, uint32_t>>>> connection_relation_buf;
-	// next = true;
-	// set<uint32_t> seen_node_buf;
+    // next = true;
+    // set<uint32_t> seen_node_buf;
     // uint32_t safe_break_buf = 0;
     // uint32_t iteration_buf = 300;
-	// // while(next){
-	// while(seen_node_buf.size()<len && safe_break_buf <= 5 && next){
+    // // while(next){
+    // while(seen_node_buf.size()<len && safe_break_buf <= 5 && next){
     //     next = false;
     //     safe_break_buf++;
-	// 	// for(auto n: seen_node_buf){
-	// 	// 	printf("%d, ",n);
-	// 	// }
-	// 	// printf("\n");
-	// 	vector<pair<float, pair<uint32_t,uint32_t>>> result;
-	// 	// next = false;
-	// 	update_best_buddy_haplo(seen, best_buddy, connect_num,len);
+    // 	// for(auto n: seen_node_buf){
+    // 	// 	printf("%d, ",n);
+    // 	// }
+    // 	// printf("\n");
+    // 	vector<pair<float, pair<uint32_t,uint32_t>>> result;
+    // 	// next = false;
+    // 	update_best_buddy_haplo(seen, best_buddy, connect_num,len);
     //     cout << "Update best buddy score." << endl;
-	// 	for(int i = 0; i < len*4; i++){
-	// 		for(int j = 0; j < len*4; j++){
-	// 			if(best_buddy[i][j] > 0.999){
+    // 	for(int i = 0; i < len*4; i++){
+    // 		for(int j = 0; j < len*4; j++){
+    // 			if(best_buddy[i][j] > 0.999){
     //                 if(connect_num[i][j]>300){
     //                     next = true;
     //                 }
-	// 				result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-	// 			}
-	// 		}
-	// 	}
-	// 	if(!next){
+    // 				result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
+    // 			}
+    // 		}
+    // 	}
+    // 	if(!next){
     //         break;
     //     }
-	// 	sort(result.begin(), result.end(),
-	// 	[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-	// 		return r1.first > r2.first;
-	// 	});
+    // 	sort(result.begin(), result.end(),
+    // 	[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
+    // 		return r1.first > r2.first;
+    // 	});
     //     cout << "Get potential connections " << result.size() << "." << endl;
 
     //     for(auto res:result){
@@ -5918,7 +7222,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                         }
     //                     }
     //                     if(anchor_in_i && anchor_in_j){
-                            
+
     //                     }else if(anchor_in_i || anchor_in_j){
     //                         graph_connection_buf[idx_i].insert(graph_connection_buf[idx_i].end(), graph_connection_buf[idx_j].begin(), graph_connection_buf[idx_j].end());
     //                         for(auto i : graph_connection_buf[idx_i]){
@@ -5992,75 +7296,72 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //             }
     //         }
     //     }
-	// 	cout << "Nodes in graph: " << seen_node_buf.size() << "." << endl;
-	// 	cout << "Left edges: " << counting_left << "." << endl;
+    // 	cout << "Nodes in graph: " << seen_node_buf.size() << "." << endl;
+    // 	cout << "Left edges: " << counting_left << "." << endl;
     //     iteration_buf++;
-	// }
+    // }
 
     // cout << "Finish bring back short contigs." << endl;
 
-// {
-//         uint32_t scaffold_len = cur_scaffold_result.size();
-//         uint32_t** scaffold_connect_num;
-//         float **scaffold_best_buddy;
-//         bool **scaffold_seen;
-//         scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
-//         scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
-//         scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-//         for(int i = 0; i < scaffold_len; ++i){
-//             scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
-//             scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
-//             scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
-//         }
+    // {
+    //         uint32_t scaffold_len = cur_scaffold_result.size();
+    //         uint32_t** scaffold_connect_num;
+    //         float **scaffold_best_buddy;
+    //         bool **scaffold_seen;
+    //         scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
+    //         scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
+    //         scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
+    //         for(int i = 0; i < scaffold_len; ++i){
+    //             scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
+    //             scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
+    //             scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+    //         }
 
-//         for(int i = 0; i < scaffold_len; i++){
-//             for(int j = 0; j< scaffold_len; j++){
-//                 if(i==j){
-//                     scaffold_seen[i][j] = true;
-//                 }else{
-//                     for(auto n1: cur_scaffold_result[i]){
-//                         for(auto n2: cur_scaffold_result[j]){
-//                             scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
-//                         }
-//                     }
-//                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-//                     if(!check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
-//                         scaffold_connect_num[i][j]*=4;
-//                     }
-//                 }
-//             }
-//         }
+    //         for(int i = 0; i < scaffold_len; i++){
+    //             for(int j = 0; j< scaffold_len; j++){
+    //                 if(i==j){
+    //                     scaffold_seen[i][j] = true;
+    //                 }else{
+    //                     for(auto n1: cur_scaffold_result[i]){
+    //                         for(auto n2: cur_scaffold_result[j]){
+    //                             scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
+    //                         }
+    //                     }
+    //                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+    //                     if(!check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+    //                         scaffold_connect_num[i][j]*=4;
+    //                     }
+    //                 }
+    //             }
+    //         }
 
+    //         vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23);
+    //         vector<vector<uint32_t>> new_scaffold_result;
+    //         set<uint32_t> seen_idx;
+    //         for(auto i : scaffold_graph){
+    //             vector<uint32_t> merged_graph;
+    //             for(auto j:i){
+    //                 merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+    //                 seen_idx.insert(j);
+    //             }
+    //             new_scaffold_result.push_back(merged_graph);
+    //         }
+    //         for(int i = 0; i<cur_scaffold_result.size();i++){
+    //             if(seen_idx.find(i)==seen_idx.end()){
+    //                 new_scaffold_result.push_back(cur_scaffold_result[i]);
+    //             }
+    //         }
 
-
-//         vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23);
-//         vector<vector<uint32_t>> new_scaffold_result;
-//         set<uint32_t> seen_idx;
-//         for(auto i : scaffold_graph){
-//             vector<uint32_t> merged_graph;
-//             for(auto j:i){
-//                 merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
-//                 seen_idx.insert(j);
-//             }
-//             new_scaffold_result.push_back(merged_graph);
-//         }
-//         for(int i = 0; i<cur_scaffold_result.size();i++){
-//             if(seen_idx.find(i)==seen_idx.end()){
-//                 new_scaffold_result.push_back(cur_scaffold_result[i]);
-//             }
-//         }
-
-//         for(int i = 0; i < scaffold_len; ++i){
-//             free(scaffold_connect_num[i]);
-//             free(scaffold_best_buddy[i]);
-//             free(scaffold_seen[i]);
-//         }
-//         free(scaffold_connect_num);
-//         free(scaffold_best_buddy);
-//         free(scaffold_seen);
-//     cur_scaffold_result = new_scaffold_result;
-// }
-    
+    //         for(int i = 0; i < scaffold_len; ++i){
+    //             free(scaffold_connect_num[i]);
+    //             free(scaffold_best_buddy[i]);
+    //             free(scaffold_seen[i]);
+    //         }
+    //         free(scaffold_connect_num);
+    //         free(scaffold_best_buddy);
+    //         free(scaffold_seen);
+    //     cur_scaffold_result = new_scaffold_result;
+    // }
 
     // vector<set<uint32_t>> include_missing_long_ones;
     // for(auto i : cur_scaffold_result){
@@ -6094,7 +7395,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }
     // }
 
-
     // graph_connection = vector<vector<uint32_t>>();
     // set<uint32_t> current_seen = set<uint32_t>();
     // for(auto i : include_missing_long_ones){
@@ -6112,42 +7412,54 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }
     // }
 
-
     // cur_scaffold_result = graph_connection;
     to_break_stable = 0;
     iteration_num = 100;
-    while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=23 && to_break_stable>5 ) && iteration_num > 0){
+    while (!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size() >= 23 && to_break_stable > 5) && iteration_num > 0)
+    {
         iteration_num--;
         uint32_t scaffold_len = cur_scaffold_result.size();
-        uint32_t** scaffold_connect_num;
+        uint32_t **scaffold_connect_num;
         float **scaffold_best_buddy;
         bool **scaffold_seen;
-        scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
-        scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
-        scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-        for(int i = 0; i < scaffold_len; ++i){
-            scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
-            scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
-            scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+        scaffold_connect_num = (uint32_t **)calloc(scaffold_len, sizeof(uint32_t *));
+        scaffold_best_buddy = (float **)calloc(scaffold_len, sizeof(float *));
+        scaffold_seen = (bool **)calloc(scaffold_len, sizeof(bool *));
+        for (int i = 0; i < scaffold_len; ++i)
+        {
+            scaffold_connect_num[i] = (uint32_t *)calloc(scaffold_len, sizeof(uint32_t));
+            scaffold_best_buddy[i] = (float *)calloc(scaffold_len, sizeof(float));
+            scaffold_seen[i] = (bool *)calloc(scaffold_len, sizeof(bool));
         }
 
-        for(int i = 0; i < scaffold_len; i++){
-            for(int j = 0; j< scaffold_len; j++){
-                if(i==j){
+        for (int i = 0; i < scaffold_len; i++)
+        {
+            for (int j = 0; j < scaffold_len; j++)
+            {
+                if (i == j)
+                {
                     scaffold_seen[i][j] = true;
-                }else{
-                    vector<uint32_t> best_2(2,0);
-                    for(auto n1: cur_scaffold_result[i]){
-                        for(auto n2: cur_scaffold_result[j]){
+                }
+                else
+                {
+                    vector<uint32_t> best_2(2, 0);
+                    for (auto n1 : cur_scaffold_result[i])
+                    {
+                        for (auto n2 : cur_scaffold_result[j])
+                        {
                             uint32_t this_max = 0;
-                            for(uint32_t n1_s = 0; n1_s < 4; n1_s++){
-                                for(uint32_t n2_s = 0; n2_s < 4; n2_s++){
-                                    this_max = max(this_max, connect_num[(n1<<2)+n1_s][(n2<<2)+n2_s]);
+                            for (uint32_t n1_s = 0; n1_s < 4; n1_s++)
+                            {
+                                for (uint32_t n2_s = 0; n2_s < 4; n2_s++)
+                                {
+                                    this_max = max(this_max, connect_num[(n1 << 2) + n1_s][(n2 << 2) + n2_s]);
                                 }
                             }
                             scaffold_connect_num[i][j] += this_max;
-                            for(int i = 0; i<best_2.size(); i++){
-                                if(best_2[i]<this_max){
+                            for (int i = 0; i < best_2.size(); i++)
+                            {
+                                if (best_2[i] < this_max)
+                                {
                                     uint32_t buf = best_2[i];
                                     best_2[i] = this_max;
                                     this_max = buf;
@@ -6156,81 +7468,104 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         }
                     }
                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-                    if(best_2[1]>0 && best_2[0]*0.2>best_2[1]){
-                        scaffold_connect_num[i][j] -= best_2[0]/(cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+                    if (best_2[1] > 0 && best_2[0] * 0.2 > best_2[1])
+                    {
+                        scaffold_connect_num[i][j] -= best_2[0] / (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
                     }
-                    if((cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1) && !check_identity){
-                        scaffold_connect_num[i][j]*=4;
+                    if ((cur_scaffold_result[i].size() == 1 || cur_scaffold_result[j].size() == 1) && !check_identity)
+                    {
+                        scaffold_connect_num[i][j] *= 4;
                     }
                 }
             }
         }
 
         vector<uint32_t> inside_connections;
-        for(int i = 0; i < scaffold_len; i++){
+        for (int i = 0; i < scaffold_len; i++)
+        {
             uint32_t connection_counter = 0;
             uint32_t total_connection = 0;
-            if(cur_scaffold_result[i].size()>1){
-                for(auto p : cur_scaffold_result[i]){
-                    for(auto q: cur_scaffold_result[i]){
-                        if(p!=q){
+            if (cur_scaffold_result[i].size() > 1)
+            {
+                for (auto p : cur_scaffold_result[i])
+                {
+                    for (auto q : cur_scaffold_result[i])
+                    {
+                        if (p != q)
+                        {
                             uint32_t max_count = 0;
-                            for(int i_c = 0; i_c < 4; i_c++){
-                                for(int j_c = 0; j_c < 4; j_c++){
-                                    max_count = max(max_count, connect_num[(p<<2)+i_c][(q<<2)+j_c]);
-                                    max_count = max(max_count, connect_num[(q<<2)+i_c][(p<<2)+j_c]);
+                            for (int i_c = 0; i_c < 4; i_c++)
+                            {
+                                for (int j_c = 0; j_c < 4; j_c++)
+                                {
+                                    max_count = max(max_count, connect_num[(p << 2) + i_c][(q << 2) + j_c]);
+                                    max_count = max(max_count, connect_num[(q << 2) + i_c][(p << 2) + j_c]);
                                 }
                             }
-                            total_connection+=max_count;
+                            total_connection += max_count;
                             connection_counter++;
                         }
                     }
                 }
-                if (total_connection!=0 && connection_counter!=0){
-                float f =total_connection/connection_counter;
-                inside_connections.push_back(static_cast<uint32_t>(f));
-                }else
-                inside_connections.push_back(0);
-            }else{
+                if (total_connection != 0 && connection_counter != 0)
+                {
+                    float f = total_connection / connection_counter;
+                    inside_connections.push_back(static_cast<uint32_t>(f));
+                }
+                else
+                    inside_connections.push_back(0);
+            }
+            else
+            {
                 inside_connections.push_back(0);
             }
         }
         uint32_t average_inside_connections = 0;
         uint32_t valid_counter = 0;
-        
-        for(int i = 0; i < scaffold_len; i++){
-            if(inside_connections[i]>0){
+
+        for (int i = 0; i < scaffold_len; i++)
+        {
+            if (inside_connections[i] > 0)
+            {
                 average_inside_connections += inside_connections[i];
                 valid_counter++;
             }
         }
-        if(valid_counter > 0){
-            average_inside_connections/=valid_counter;
+        if (valid_counter > 0)
+        {
+            average_inside_connections /= valid_counter;
         }
 
-        for(int i = 0; i < scaffold_len; i++){
-            if(inside_connections[i]==0){
+        for (int i = 0; i < scaffold_len; i++)
+        {
+            if (inside_connections[i] == 0)
+            {
                 inside_connections[i] = average_inside_connections;
             }
         }
         vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections, check_identity);
         vector<vector<uint32_t>> new_scaffold_result;
         set<uint32_t> seen_idx;
-        for(auto i : scaffold_graph){
+        for (auto i : scaffold_graph)
+        {
             vector<uint32_t> merged_graph;
-            for(auto j:i){
-                merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+            for (auto j : i)
+            {
+                merged_graph.insert(merged_graph.end(), cur_scaffold_result[j].begin(), cur_scaffold_result[j].end());
                 seen_idx.insert(j);
             }
             new_scaffold_result.push_back(merged_graph);
         }
-        for(int i = 0; i<cur_scaffold_result.size();i++){
-            if(seen_idx.find(i)==seen_idx.end()){
+        for (int i = 0; i < cur_scaffold_result.size(); i++)
+        {
+            if (seen_idx.find(i) == seen_idx.end())
+            {
                 new_scaffold_result.push_back(cur_scaffold_result[i]);
             }
         }
 
-        for(int i = 0; i < scaffold_len; ++i){
+        for (int i = 0; i < scaffold_len; ++i)
+        {
             free(scaffold_connect_num[i]);
             free(scaffold_best_buddy[i]);
             free(scaffold_seen[i]);
@@ -6240,44 +7575,56 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         free(scaffold_seen);
 
         vector<vector<uint32_t>> separated_connections;
-        for(auto i : new_scaffold_result){
+        for (auto i : new_scaffold_result)
+        {
             vector<uint32_t> nodes = i;
             uint32_t single_len = nodes.size();
-            uint32_t** single_connect_num;
+            uint32_t **single_connect_num;
             float **single_best_buddy;
             bool **single_seen;
-            single_connect_num = (uint32_t**)calloc(single_len,sizeof(uint32_t*));
-            single_best_buddy = (float**)calloc(single_len,sizeof(float*));
-            single_seen = (bool**)calloc(single_len,sizeof(bool*));
-            for(int i = 0; i < single_len; ++i){
-                single_connect_num[i] = (uint32_t*)calloc(single_len, sizeof(uint32_t));
-                single_best_buddy[i] = (float*)calloc(single_len, sizeof(float));
-                single_seen[i] = (bool*)calloc(single_len, sizeof(bool));
+            single_connect_num = (uint32_t **)calloc(single_len, sizeof(uint32_t *));
+            single_best_buddy = (float **)calloc(single_len, sizeof(float *));
+            single_seen = (bool **)calloc(single_len, sizeof(bool *));
+            for (int i = 0; i < single_len; ++i)
+            {
+                single_connect_num[i] = (uint32_t *)calloc(single_len, sizeof(uint32_t));
+                single_best_buddy[i] = (float *)calloc(single_len, sizeof(float));
+                single_seen[i] = (bool *)calloc(single_len, sizeof(bool));
             }
-            for(int i = 0; i < nodes.size(); i++){
-                for(int j = 0; j< nodes.size(); j++){
+            for (int i = 0; i < nodes.size(); i++)
+            {
+                for (int j = 0; j < nodes.size(); j++)
+                {
                     uint32_t max_connect = 0;
-                    for(int i_s = 0; i_s < 4; i_s++){
-                        for(int j_s = 0; j_s < 4; j_s++){
-                            max_connect = max(max_connect, connect_num[i_s+(nodes[i]<<2)][j_s+(nodes[j]<<2)]);
+                    for (int i_s = 0; i_s < 4; i_s++)
+                    {
+                        for (int j_s = 0; j_s < 4; j_s++)
+                        {
+                            max_connect = max(max_connect, connect_num[i_s + (nodes[i] << 2)][j_s + (nodes[j] << 2)]);
                         }
                     }
-                    if(i==j){
+                    if (i == j)
+                    {
                         single_seen[i][j] = true;
-                    }else{
+                    }
+                    else
+                    {
                         single_connect_num[i][j] = max_connect;
                     }
                 }
             }
 
             vector<vector<uint32_t>> single_graph = best_buddy_separate(single_seen, single_best_buddy, single_connect_num, single_len);
-            for(int i = 0; i < single_graph.size(); i++){
-                for(int j = 0; j< single_graph[i].size(); j++){
+            for (int i = 0; i < single_graph.size(); i++)
+            {
+                for (int j = 0; j < single_graph[i].size(); j++)
+                {
                     single_graph[i][j] = nodes[single_graph[i][j]];
                 }
             }
-            separated_connections.insert(separated_connections.end(),single_graph.begin(), single_graph.end());
-            for(int i = 0; i < single_len; ++i){
+            separated_connections.insert(separated_connections.end(), single_graph.begin(), single_graph.end());
+            for (int i = 0; i < single_len; ++i)
+            {
                 free(single_connect_num[i]);
                 free(single_best_buddy[i]);
                 free(single_seen[i]);
@@ -6286,46 +7633,62 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
             free(single_best_buddy);
             free(single_seen);
         }
-        if(cur_scaffold_result.size() == separated_connections.size()){
+        if (cur_scaffold_result.size() == separated_connections.size())
+        {
             to_break_stable++;
-        }else{
+        }
+        else
+        {
             to_break_stable = 0;
         }
-        cur_scaffold_result = separated_connections; 
+        cur_scaffold_result = separated_connections;
     }
     uint32_t max_iter = 100;
-    while(cur_scaffold_result.size()!=23 && max_iter > 0){
+    while (cur_scaffold_result.size() != 23 && max_iter > 0)
+    {
         max_iter--;
         uint32_t scaffold_len = cur_scaffold_result.size();
-        uint32_t** scaffold_connect_num;
+        uint32_t **scaffold_connect_num;
         float **scaffold_best_buddy;
         bool **scaffold_seen;
-        scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
-        scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
-        scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-        for(int i = 0; i < scaffold_len; ++i){
-            scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
-            scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
-            scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+        scaffold_connect_num = (uint32_t **)calloc(scaffold_len, sizeof(uint32_t *));
+        scaffold_best_buddy = (float **)calloc(scaffold_len, sizeof(float *));
+        scaffold_seen = (bool **)calloc(scaffold_len, sizeof(bool *));
+        for (int i = 0; i < scaffold_len; ++i)
+        {
+            scaffold_connect_num[i] = (uint32_t *)calloc(scaffold_len, sizeof(uint32_t));
+            scaffold_best_buddy[i] = (float *)calloc(scaffold_len, sizeof(float));
+            scaffold_seen[i] = (bool *)calloc(scaffold_len, sizeof(bool));
         }
 
-        for(int i = 0; i < scaffold_len; i++){
-            for(int j = 0; j< scaffold_len; j++){
-                if(i==j){
+        for (int i = 0; i < scaffold_len; i++)
+        {
+            for (int j = 0; j < scaffold_len; j++)
+            {
+                if (i == j)
+                {
                     scaffold_seen[i][j] = true;
-                }else{
-                    vector<uint32_t> best_2(2,0);
-                    for(auto n1: cur_scaffold_result[i]){
-                        for(auto n2: cur_scaffold_result[j]){
+                }
+                else
+                {
+                    vector<uint32_t> best_2(2, 0);
+                    for (auto n1 : cur_scaffold_result[i])
+                    {
+                        for (auto n2 : cur_scaffold_result[j])
+                        {
                             uint32_t this_max = 0;
-                            for(uint32_t n1_s = 0; n1_s < 4; n1_s++){
-                                for(uint32_t n2_s = 0; n2_s < 4; n2_s++){
-                                    this_max = max(this_max, connect_num[(n1<<2)+n1_s][(n2<<2)+n2_s]);
+                            for (uint32_t n1_s = 0; n1_s < 4; n1_s++)
+                            {
+                                for (uint32_t n2_s = 0; n2_s < 4; n2_s++)
+                                {
+                                    this_max = max(this_max, connect_num[(n1 << 2) + n1_s][(n2 << 2) + n2_s]);
                                 }
                             }
                             scaffold_connect_num[i][j] += this_max;
-                            for(int i = 0; i<best_2.size(); i++){
-                                if(best_2[i]<this_max){
+                            for (int i = 0; i < best_2.size(); i++)
+                            {
+                                if (best_2[i] < this_max)
+                                {
                                     uint32_t buf = best_2[i];
                                     best_2[i] = this_max;
                                     this_max = buf;
@@ -6334,28 +7697,37 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         }
                     }
                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-                    if(best_2[1]>0 && best_2[0]*0.2>best_2[1]){
-                        scaffold_connect_num[i][j] -= best_2[0]/(cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+                    if (best_2[1] > 0 && best_2[0] * 0.2 > best_2[1])
+                    {
+                        scaffold_connect_num[i][j] -= best_2[0] / (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
                     }
-                    if((cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1) && !check_identity){
-                        scaffold_connect_num[i][j]*=4;
+                    if ((cur_scaffold_result[i].size() == 1 || cur_scaffold_result[j].size() == 1) && !check_identity)
+                    {
+                        scaffold_connect_num[i][j] *= 4;
                     }
                 }
             }
         }
         vector<uint32_t> inside_connections;
-        for(int i = 0; i < scaffold_len; i++){
+        for (int i = 0; i < scaffold_len; i++)
+        {
             uint32_t connection_counter = 0;
             uint32_t total_connection = 0;
-            if(cur_scaffold_result[i].size()>1){
-                for(auto p : cur_scaffold_result[i]){
-                    for(auto q: cur_scaffold_result[i]){
-                        if(p!=q){
+            if (cur_scaffold_result[i].size() > 1)
+            {
+                for (auto p : cur_scaffold_result[i])
+                {
+                    for (auto q : cur_scaffold_result[i])
+                    {
+                        if (p != q)
+                        {
                             uint32_t max_count = 0;
-                            for(int i_c = 0; i_c < 4; i_c++){
-                                for(int j_c = 0; j_c < 4; j_c++){
-                                    max_count = max(max_count, connect_num[(p<<2)+i_c][(q<<2)+j_c]);
-                                    max_count = max(max_count, connect_num[(q<<2)+i_c][(p<<2)+j_c]);
+                            for (int i_c = 0; i_c < 4; i_c++)
+                            {
+                                for (int j_c = 0; j_c < 4; j_c++)
+                                {
+                                    max_count = max(max_count, connect_num[(p << 2) + i_c][(q << 2) + j_c]);
+                                    max_count = max(max_count, connect_num[(q << 2) + i_c][(p << 2) + j_c]);
                                 }
                             }
                             // total_connection= max(total_connection,max_count);
@@ -6364,29 +7736,37 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         }
                     }
                 }
-                if (total_connection!=0 && connection_counter!=0){
-                float f =total_connection/connection_counter;
-                inside_connections.push_back(static_cast<uint32_t>(f));
-                }else
-                inside_connections.push_back(0);
+                if (total_connection != 0 && connection_counter != 0)
+                {
+                    float f = total_connection / connection_counter;
+                    inside_connections.push_back(static_cast<uint32_t>(f));
+                }
+                else
+                    inside_connections.push_back(0);
                 // inside_connections.push_back(total_connection);
-            }else{
+            }
+            else
+            {
                 inside_connections.push_back(0);
             }
         }
         uint32_t average_inside_connections = 0;
         uint32_t valid_counter = 0;
-        for(int i = 0; i < scaffold_len; i++){
-            if(inside_connections[i]>0){
+        for (int i = 0; i < scaffold_len; i++)
+        {
+            if (inside_connections[i] > 0)
+            {
                 average_inside_connections += inside_connections[i];
                 valid_counter++;
             }
         }
 
-        average_inside_connections/=valid_counter;
+        average_inside_connections /= valid_counter;
 
-        for(int i = 0; i < scaffold_len; i++){
-            if(inside_connections[i]==0){
+        for (int i = 0; i < scaffold_len; i++)
+        {
+            if (inside_connections[i] == 0)
+            {
                 inside_connections[i] = average_inside_connections;
             }
         }
@@ -6400,21 +7780,26 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         // }
         vector<vector<uint32_t>> new_scaffold_result;
         set<uint32_t> seen_idx;
-        for(auto i : scaffold_graph){
+        for (auto i : scaffold_graph)
+        {
             vector<uint32_t> merged_graph;
-            for(auto j:i){
-                merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+            for (auto j : i)
+            {
+                merged_graph.insert(merged_graph.end(), cur_scaffold_result[j].begin(), cur_scaffold_result[j].end());
                 seen_idx.insert(j);
             }
             new_scaffold_result.push_back(merged_graph);
         }
-        for(int i = 0; i<cur_scaffold_result.size();i++){
-            if(seen_idx.find(i)==seen_idx.end()){
+        for (int i = 0; i < cur_scaffold_result.size(); i++)
+        {
+            if (seen_idx.find(i) == seen_idx.end())
+            {
                 new_scaffold_result.push_back(cur_scaffold_result[i]);
             }
         }
 
-        for(int i = 0; i < scaffold_len; ++i){
+        for (int i = 0; i < scaffold_len; ++i)
+        {
             free(scaffold_connect_num[i]);
             free(scaffold_best_buddy[i]);
             free(scaffold_seen[i]);
@@ -6437,7 +7822,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     max_count = max(max_count, connect_num[((i>>2)<<2)+i_s][((j>>2)<<2)+j_s]);
     //                 }
     //             }
-    //             if(connect_num[i][j] ==0 || i == j || !(seen_node.find(i>>2)!= seen_node.end() ^ seen_node.find(j>>2)!= seen_node.end()) 
+    //             if(connect_num[i][j] ==0 || i == j || !(seen_node.find(i>>2)!= seen_node.end() ^ seen_node.find(j>>2)!= seen_node.end())
     //             || contig_lengths[id_contig[i>>1]] < long_threshold || contig_lengths[id_contig[j>>1]] < long_threshold || max_count > 10000){
     //                 seen[i][j] = true;
     //             }else{
@@ -6445,7 +7830,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //             }
     //         }
     //     }
-
 
     //     vector<vector<uint32_t>> graph_connection_buf;
     //     // map<pair<uint32_t,uint32_t>, pair<uint32_t, uint32_t>> connection_relation;
@@ -6582,7 +7966,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                             }
     //                         }
     //                         if(anchor_in_i && anchor_in_j){
-                                
+
     //                         }else if(anchor_in_i || anchor_in_j){
     //                             graph_connection_buf[idx_i].insert(graph_connection_buf[idx_i].end(), graph_connection_buf[idx_j].begin(), graph_connection_buf[idx_j].end());
     //                             for(auto i : graph_connection_buf[idx_i]){
@@ -6692,7 +8076,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //         }
     //     }
 
-
     //     cur_scaffold_result = vector<vector<uint32_t>>();
     //     for(auto i : include_missing_long_ones){
     //         cur_scaffold_result.push_back(vector<uint32_t>());
@@ -6704,342 +8087,333 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     cout << "Finish bring back short contigs." << endl;
     // }
 
+    //     to_break_stable = 0;
+    //     iteration_num = 10;
+    //     while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=23 && to_break_stable>5 ) && iteration_num > 0){
+    //         iteration_num--;
+    //         uint32_t scaffold_len = cur_scaffold_result.size();
+    //         uint32_t** scaffold_connect_num;
+    //         float **scaffold_best_buddy;
+    //         bool **scaffold_seen;
+    //         scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
+    //         scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
+    //         scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
+    //         for(int i = 0; i < scaffold_len; ++i){
+    //             scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
+    //             scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
+    //             scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+    //         }
 
-    
-//     to_break_stable = 0;
-//     iteration_num = 10;
-//     while(!(cur_scaffold_result.size() <= 25 && cur_scaffold_result.size()>=23 && to_break_stable>5 ) && iteration_num > 0){
-//         iteration_num--;
-//         uint32_t scaffold_len = cur_scaffold_result.size();
-//         uint32_t** scaffold_connect_num;
-//         float **scaffold_best_buddy;
-//         bool **scaffold_seen;
-//         scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
-//         scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
-//         scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-//         for(int i = 0; i < scaffold_len; ++i){
-//             scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
-//             scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
-//             scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
-//         }
+    //         for(int i = 0; i < scaffold_len; i++){
+    //             for(int j = 0; j< scaffold_len; j++){
+    //                 if(i==j){
+    //                     scaffold_seen[i][j] = true;
+    //                 }else{
+    //                     for(auto n1: cur_scaffold_result[i]){
+    //                         for(auto n2: cur_scaffold_result[j]){
+    //                             scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
+    //                         }
+    //                     }
+    //                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+    //                     if(!check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+    //                         scaffold_connect_num[i][j]*=4;
+    //                     }
+    //                 }
+    //             }
+    //         }
 
-//         for(int i = 0; i < scaffold_len; i++){
-//             for(int j = 0; j< scaffold_len; j++){
-//                 if(i==j){
-//                     scaffold_seen[i][j] = true;
-//                 }else{
-//                     for(auto n1: cur_scaffold_result[i]){
-//                         for(auto n2: cur_scaffold_result[j]){
-//                             scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
-//                         }
-//                     }
-//                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-//                     if(!check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
-//                         scaffold_connect_num[i][j]*=4;
-//                     }
-//                 }
-//             }
-//         }
+    //         vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23);
+    //         vector<vector<uint32_t>> new_scaffold_result;
+    //         set<uint32_t> seen_idx;
+    //         for(auto i : scaffold_graph){
+    //             vector<uint32_t> merged_graph;
+    //             for(auto j:i){
+    //                 merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+    //                 seen_idx.insert(j);
+    //             }
+    //             new_scaffold_result.push_back(merged_graph);
+    //         }
+    //         for(int i = 0; i<cur_scaffold_result.size();i++){
+    //             if(seen_idx.find(i)==seen_idx.end()){
+    //                 new_scaffold_result.push_back(cur_scaffold_result[i]);
+    //             }
+    //         }
 
+    //         for(int i = 0; i < scaffold_len; ++i){
+    //             free(scaffold_connect_num[i]);
+    //             free(scaffold_best_buddy[i]);
+    //             free(scaffold_seen[i]);
+    //         }
+    //         free(scaffold_connect_num);
+    //         free(scaffold_best_buddy);
+    //         free(scaffold_seen);
 
+    //         vector<vector<uint32_t>> separated_connections;
+    //         for(auto i : new_scaffold_result){
+    //             vector<uint32_t> nodes = i;
+    //             uint32_t single_len = nodes.size();
+    //             uint32_t** single_connect_num;
+    //             float **single_best_buddy;
+    //             bool **single_seen;
+    //             single_connect_num = (uint32_t**)calloc(single_len,sizeof(uint32_t*));
+    //             single_best_buddy = (float**)calloc(single_len,sizeof(float*));
+    //             single_seen = (bool**)calloc(single_len,sizeof(bool*));
+    //             for(int i = 0; i < single_len; ++i){
+    //                 single_connect_num[i] = (uint32_t*)calloc(single_len, sizeof(uint32_t));
+    //                 single_best_buddy[i] = (float*)calloc(single_len, sizeof(float));
+    //                 single_seen[i] = (bool*)calloc(single_len, sizeof(bool));
+    //             }
+    //             for(int i = 0; i < nodes.size(); i++){
+    //                 for(int j = 0; j< nodes.size(); j++){
+    //                     if(i==j){
+    //                         single_seen[i][j] = true;
+    //                     }else{
+    //                         single_connect_num[i][j] = connect_num[nodes[i]<<2][nodes[j]<<2];
+    //                     }
+    //                 }
+    //             }
 
-//         vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23);
-//         vector<vector<uint32_t>> new_scaffold_result;
-//         set<uint32_t> seen_idx;
-//         for(auto i : scaffold_graph){
-//             vector<uint32_t> merged_graph;
-//             for(auto j:i){
-//                 merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
-//                 seen_idx.insert(j);
-//             }
-//             new_scaffold_result.push_back(merged_graph);
-//         }
-//         for(int i = 0; i<cur_scaffold_result.size();i++){
-//             if(seen_idx.find(i)==seen_idx.end()){
-//                 new_scaffold_result.push_back(cur_scaffold_result[i]);
-//             }
-//         }
+    //             vector<vector<uint32_t>> single_graph = best_buddy_separate(single_seen, single_best_buddy, single_connect_num, single_len);
+    //             for(int i = 0; i < single_graph.size(); i++){
+    //                 for(int j = 0; j< single_graph[i].size(); j++){
+    //                     single_graph[i][j] = nodes[single_graph[i][j]];
+    //                 }
+    //             }
+    //             separated_connections.insert(separated_connections.end(),single_graph.begin(), single_graph.end());
+    //             for(int i = 0; i < single_len; ++i){
+    //                 free(single_connect_num[i]);
+    //                 free(single_best_buddy[i]);
+    //                 free(single_seen[i]);
+    //             }
+    //             free(single_connect_num);
+    //             free(single_best_buddy);
+    //             free(single_seen);
+    //         }
+    //         if(cur_scaffold_result.size() == separated_connections.size()){
+    //             to_break_stable++;
+    //         }else{
+    //             to_break_stable = 0;
+    //         }
+    //         cur_scaffold_result = separated_connections;
+    //     }
 
-//         for(int i = 0; i < scaffold_len; ++i){
-//             free(scaffold_connect_num[i]);
-//             free(scaffold_best_buddy[i]);
-//             free(scaffold_seen[i]);
-//         }
-//         free(scaffold_connect_num);
-//         free(scaffold_best_buddy);
-//         free(scaffold_seen);
+    // {
+    //         uint32_t scaffold_len = cur_scaffold_result.size();
+    //         uint32_t** scaffold_connect_num;
+    //         float **scaffold_best_buddy;
+    //         bool **scaffold_seen;
+    //         scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
+    //         scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
+    //         scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
+    //         for(int i = 0; i < scaffold_len; ++i){
+    //             scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
+    //             scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
+    //             scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+    //         }
 
-//         vector<vector<uint32_t>> separated_connections;
-//         for(auto i : new_scaffold_result){
-//             vector<uint32_t> nodes = i;
-//             uint32_t single_len = nodes.size();
-//             uint32_t** single_connect_num;
-//             float **single_best_buddy;
-//             bool **single_seen;
-//             single_connect_num = (uint32_t**)calloc(single_len,sizeof(uint32_t*));
-//             single_best_buddy = (float**)calloc(single_len,sizeof(float*));
-//             single_seen = (bool**)calloc(single_len,sizeof(bool*));
-//             for(int i = 0; i < single_len; ++i){
-//                 single_connect_num[i] = (uint32_t*)calloc(single_len, sizeof(uint32_t));
-//                 single_best_buddy[i] = (float*)calloc(single_len, sizeof(float));
-//                 single_seen[i] = (bool*)calloc(single_len, sizeof(bool));
-//             }
-//             for(int i = 0; i < nodes.size(); i++){
-//                 for(int j = 0; j< nodes.size(); j++){
-//                     if(i==j){
-//                         single_seen[i][j] = true;
-//                     }else{
-//                         single_connect_num[i][j] = connect_num[nodes[i]<<2][nodes[j]<<2];
-//                     }
-//                 }
-//             }
+    //         for(int i = 0; i < scaffold_len; i++){
+    //             for(int j = 0; j< scaffold_len; j++){
+    //                 if(i==j){
+    //                     scaffold_seen[i][j] = true;
+    //                 }else{
+    //                     for(auto n1: cur_scaffold_result[i]){
+    //                         for(auto n2: cur_scaffold_result[j]){
+    //                             scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
+    //                         }
+    //                     }
+    //                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+    //                     if(!check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
+    //                         scaffold_connect_num[i][j]*=4;
+    //                     }
+    //                 }
+    //             }
+    //         }
 
-//             vector<vector<uint32_t>> single_graph = best_buddy_separate(single_seen, single_best_buddy, single_connect_num, single_len);
-//             for(int i = 0; i < single_graph.size(); i++){
-//                 for(int j = 0; j< single_graph[i].size(); j++){
-//                     single_graph[i][j] = nodes[single_graph[i][j]];
-//                 }
-//             }
-//             separated_connections.insert(separated_connections.end(),single_graph.begin(), single_graph.end());
-//             for(int i = 0; i < single_len; ++i){
-//                 free(single_connect_num[i]);
-//                 free(single_best_buddy[i]);
-//                 free(single_seen[i]);
-//             }
-//             free(single_connect_num);
-//             free(single_best_buddy);
-//             free(single_seen);
-//         }
-//         if(cur_scaffold_result.size() == separated_connections.size()){
-//             to_break_stable++;
-//         }else{
-//             to_break_stable = 0;
-//         }
-//         cur_scaffold_result = separated_connections; 
-//     }
+    //         vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23);
+    //         vector<vector<uint32_t>> new_scaffold_result;
+    //         set<uint32_t> seen_idx;
+    //         for(auto i : scaffold_graph){
+    //             vector<uint32_t> merged_graph;
+    //             for(auto j:i){
+    //                 merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+    //                 seen_idx.insert(j);
+    //             }
+    //             new_scaffold_result.push_back(merged_graph);
+    //         }
+    //         for(int i = 0; i<cur_scaffold_result.size();i++){
+    //             if(seen_idx.find(i)==seen_idx.end()){
+    //                 new_scaffold_result.push_back(cur_scaffold_result[i]);
+    //             }
+    //         }
 
-// {
-//         uint32_t scaffold_len = cur_scaffold_result.size();
-//         uint32_t** scaffold_connect_num;
-//         float **scaffold_best_buddy;
-//         bool **scaffold_seen;
-//         scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
-//         scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
-//         scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-//         for(int i = 0; i < scaffold_len; ++i){
-//             scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
-//             scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
-//             scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
-//         }
+    //         for(int i = 0; i < scaffold_len; ++i){
+    //             free(scaffold_connect_num[i]);
+    //             free(scaffold_best_buddy[i]);
+    //             free(scaffold_seen[i]);
+    //         }
+    //         free(scaffold_connect_num);
+    //         free(scaffold_best_buddy);
+    //         free(scaffold_seen);
+    //     cur_scaffold_result = new_scaffold_result;
+    // }
 
-//         for(int i = 0; i < scaffold_len; i++){
-//             for(int j = 0; j< scaffold_len; j++){
-//                 if(i==j){
-//                     scaffold_seen[i][j] = true;
-//                 }else{
-//                     for(auto n1: cur_scaffold_result[i]){
-//                         for(auto n2: cur_scaffold_result[j]){
-//                             scaffold_connect_num[i][j] += connect_num[n1<<2][n2<<2];
-//                         }
-//                     }
-//                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-//                     if(!check_identity && (cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1)){
-//                         scaffold_connect_num[i][j]*=4;
-//                     }
-//                 }
-//             }
-//         }
+    //     vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
+    //     vector<uint32_t> nodes_to_insert;
 
+    //     for(int i = 0; i < len; i++){
+    //         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 10000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+    //             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+    //         }
+    //     }
+    //     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+    //     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+    //         return r1.second > r2.second;
+    //     });
 
+    //     for(auto n: not_seen_nodes_len){
+    //         nodes_to_insert.push_back(n.first);
+    //     }
 
-//         vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23);
-//         vector<vector<uint32_t>> new_scaffold_result;
-//         set<uint32_t> seen_idx;
-//         for(auto i : scaffold_graph){
-//             vector<uint32_t> merged_graph;
-//             for(auto j:i){
-//                 merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
-//                 seen_idx.insert(j);
-//             }
-//             new_scaffold_result.push_back(merged_graph);
-//         }
-//         for(int i = 0; i<cur_scaffold_result.size();i++){
-//             if(seen_idx.find(i)==seen_idx.end()){
-//                 new_scaffold_result.push_back(cur_scaffold_result[i]);
-//             }
-//         }
+    //     vector<vector<uint32_t>> new_scaffold_result = cur_scaffold_result;
+    //     for(auto n : nodes_to_insert){
+    //         cout << id_contig[n] << endl;
+    //         vector<uint32_t> scores;
+    //         for(auto s: cur_scaffold_result){
+    //             vector<uint32_t> best_2(1,0);
+    //             for(auto sn : s){
+    //                 uint32_t max_count = 0;
+    //                 for(int i_s = 0; i_s<4; i_s++){
+    //                     for(int j_s = 0; j_s<4; j_s++){
+    //                         max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+    //                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
+    //                     }
+    //                 }
+    //                 for(int i = 0; i < best_2.size(); i++){
+    //                     if(max_count > best_2[i]){
+    //                         uint32_t buf = max_count;
+    //                         max_count = best_2[i];
+    //                         best_2[i] = buf;
+    //                     }
+    //                 }
+    //             }
+    //             bool valid = true;
+    //             uint32_t idx_0 = 1;
+    //             for(int i = 0; i < best_2.size()-1; i++){
+    //                 if(best_2[i+1] > 0){
+    //                     idx_0++;
+    //                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+    //                         valid = false;
+    //                         break;
+    //                     }
+    //                 }else{
+    //                     break;
+    //                 }
+    //             }
+    //             uint32_t best_2_total = 0;
+    //             for(auto i : best_2){
+    //                 best_2_total += i;
+    //             }
+    //             if(!valid){
+    //                 scores.push_back(0);
+    //             }else{
+    //                 scores.push_back(best_2_total/idx_0);
+    //             }
+    //         }
 
-//         for(int i = 0; i < scaffold_len; ++i){
-//             free(scaffold_connect_num[i]);
-//             free(scaffold_best_buddy[i]);
-//             free(scaffold_seen[i]);
-//         }
-//         free(scaffold_connect_num);
-//         free(scaffold_best_buddy);
-//         free(scaffold_seen);
-//     cur_scaffold_result = new_scaffold_result;
-// }
+    //         uint32_t max_idx = 0;
+    //         uint32_t max_score = 900;
+    //         for(int i = 0; i < scores.size(); i++){
+    //             if(max_score < scores[i]){
+    //                 max_score = scores[i];
+    //                 max_idx = i;
+    //             }
+    //         }
+    //         if(max_idx!=900){
+    //             cur_scaffold_result[max_idx].push_back(n);
+    //             seen_node.insert(n);
+    //         }
+    //     }
+    //     cur_scaffold_result = new_scaffold_result;
 
-//     vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
-//     vector<uint32_t> nodes_to_insert;
+    // //    vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
+    // //     vector<uint32_t> nodes_to_insert;
+    //     not_seen_nodes_len = vector<pair<uint32_t,uint32_t>>();
+    //     nodes_to_insert = vector<uint32_t>();
 
-    
-//     for(int i = 0; i < len; i++){
-//         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 10000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
-//             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
-//         }
-//     }
-//     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
-//     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
-//         return r1.second > r2.second;
-//     });
-    
-//     for(auto n: not_seen_nodes_len){
-//         nodes_to_insert.push_back(n.first);
-//     }
+    //     for(int i = 0; i < len; i++){
+    //         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
+    //             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
+    //         }
+    //     }
+    //     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
+    //     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
+    //         return r1.second > r2.second;
+    //     });
 
-//     vector<vector<uint32_t>> new_scaffold_result = cur_scaffold_result;
-//     for(auto n : nodes_to_insert){
-//         cout << id_contig[n] << endl;
-//         vector<uint32_t> scores;
-//         for(auto s: cur_scaffold_result){
-//             vector<uint32_t> best_2(1,0);
-//             for(auto sn : s){
-//                 uint32_t max_count = 0;
-//                 for(int i_s = 0; i_s<4; i_s++){
-//                     for(int j_s = 0; j_s<4; j_s++){
-//                         max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
-//                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
-//                     }
-//                 }
-//                 for(int i = 0; i < best_2.size(); i++){
-//                     if(max_count > best_2[i]){
-//                         uint32_t buf = max_count;
-//                         max_count = best_2[i];
-//                         best_2[i] = buf;
-//                     }
-//                 }
-//             }
-//             bool valid = true;
-//             uint32_t idx_0 = 1;
-//             for(int i = 0; i < best_2.size()-1; i++){
-//                 if(best_2[i+1] > 0){
-//                     idx_0++;
-//                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
-//                         valid = false;
-//                         break;
-//                     }
-//                 }else{
-//                     break;
-//                 }
-//             }
-//             uint32_t best_2_total = 0;
-//             for(auto i : best_2){
-//                 best_2_total += i;
-//             }
-//             if(!valid){
-//                 scores.push_back(0);
-//             }else{
-//                 scores.push_back(best_2_total/idx_0);
-//             }
-//         }
-        
-//         uint32_t max_idx = 0;
-//         uint32_t max_score = 900;
-//         for(int i = 0; i < scores.size(); i++){
-//             if(max_score < scores[i]){
-//                 max_score = scores[i];
-//                 max_idx = i;
-//             }
-//         }
-//         if(max_idx!=900){
-//             cur_scaffold_result[max_idx].push_back(n);
-//             seen_node.insert(n);
-//         }
-//     }
-//     cur_scaffold_result = new_scaffold_result;
+    //     for(auto n: not_seen_nodes_len){
+    //         nodes_to_insert.push_back(n.first);
+    //     }
 
-// //    vector<pair<uint32_t,uint32_t>> not_seen_nodes_len;
-// //     vector<uint32_t> nodes_to_insert;
-//     not_seen_nodes_len = vector<pair<uint32_t,uint32_t>>();
-//     nodes_to_insert = vector<uint32_t>();
+    //     new_scaffold_result = cur_scaffold_result;
+    //     for(auto n : nodes_to_insert){
+    //         cout << id_contig[n] << endl;
+    //         vector<uint32_t> scores;
+    //         for(auto s: cur_scaffold_result){
+    //             vector<uint32_t> best_2(1,0);
+    //             for(auto sn : s){
+    //                 uint32_t max_count = 0;
+    //                 for(int i_s = 0; i_s<4; i_s++){
+    //                     for(int j_s = 0; j_s<4; j_s++){
+    //                         max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
+    //                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
+    //                     }
+    //                 }
+    //                 for(int i = 0; i < best_2.size(); i++){
+    //                     if(max_count > best_2[i]){
+    //                         uint32_t buf = max_count;
+    //                         max_count = best_2[i];
+    //                         best_2[i] = buf;
+    //                     }
+    //                 }
+    //             }
+    //             bool valid = true;
+    //             uint32_t idx_0 = 1;
+    //             for(int i = 0; i < best_2.size()-1; i++){
+    //                 if(best_2[i+1] > 0){
+    //                     idx_0++;
+    //                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
+    //                         // valid = false;
+    //                         break;
+    //                     }
+    //                 }else{
+    //                     break;
+    //                 }
+    //             }
+    //             uint32_t best_2_total = 0;
+    //             for(auto i : best_2){
+    //                 best_2_total += i;
+    //             }
+    //             if(!valid){
+    //                 scores.push_back(0);
+    //             }else{
+    //                 scores.push_back(best_2_total/idx_0);
+    //             }
+    //         }
 
-    
-//     for(int i = 0; i < len; i++){
-//         if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
-//             not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
-//         }
-//     }
-//     sort(not_seen_nodes_len.begin(), not_seen_nodes_len.end(),
-//     [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
-//         return r1.second > r2.second;
-//     });
-    
-//     for(auto n: not_seen_nodes_len){
-//         nodes_to_insert.push_back(n.first);
-//     }
-
-//     new_scaffold_result = cur_scaffold_result;
-//     for(auto n : nodes_to_insert){
-//         cout << id_contig[n] << endl;
-//         vector<uint32_t> scores;
-//         for(auto s: cur_scaffold_result){
-//             vector<uint32_t> best_2(1,0);
-//             for(auto sn : s){
-//                 uint32_t max_count = 0;
-//                 for(int i_s = 0; i_s<4; i_s++){
-//                     for(int j_s = 0; j_s<4; j_s++){
-//                         max_count = max(max_count, connect_num[(sn<<2)+i_s][(n<<2)+j_s]);
-//                         max_count = max(max_count, connect_num[(n<<2)+j_s][(sn<<2)+i_s]);
-//                     }
-//                 }
-//                 for(int i = 0; i < best_2.size(); i++){
-//                     if(max_count > best_2[i]){
-//                         uint32_t buf = max_count;
-//                         max_count = best_2[i];
-//                         best_2[i] = buf;
-//                     }
-//                 }
-//             }
-//             bool valid = true;
-//             uint32_t idx_0 = 1;
-//             for(int i = 0; i < best_2.size()-1; i++){
-//                 if(best_2[i+1] > 0){
-//                     idx_0++;
-//                     if(best_2[i]*0.3 > best_2[i+1] || best_2[i] < 100*(3-i) || best_2[i+1] < 100*(2-i)){
-//                         // valid = false;
-//                         break;
-//                     }
-//                 }else{
-//                     break;
-//                 }
-//             }
-//             uint32_t best_2_total = 0;
-//             for(auto i : best_2){
-//                 best_2_total += i;
-//             }
-//             if(!valid){
-//                 scores.push_back(0);
-//             }else{
-//                 scores.push_back(best_2_total/idx_0);
-//             }
-//         }
-        
-//         uint32_t max_idx = 0;
-//         uint32_t max_score = 900;
-//         for(int i = 0; i < scores.size(); i++){
-//             if(max_score < scores[i]){
-//                 max_score = scores[i];
-//                 max_idx = i;
-//             }
-//         }
-//         if(max_idx!=900){
-//             cur_scaffold_result[max_idx].push_back(n);
-//             seen_node.insert(n);
-//         }
-//     }
-//     cur_scaffold_result = new_scaffold_result;
-
+    //         uint32_t max_idx = 0;
+    //         uint32_t max_score = 900;
+    //         for(int i = 0; i < scores.size(); i++){
+    //             if(max_score < scores[i]){
+    //                 max_score = scores[i];
+    //                 max_idx = i;
+    //             }
+    //         }
+    //         if(max_idx!=900){
+    //             cur_scaffold_result[max_idx].push_back(n);
+    //             seen_node.insert(n);
+    //         }
+    //     }
+    //     cur_scaffold_result = new_scaffold_result;
 
     // new_scaffold_result = vector<vector<uint32_t>>();
     // for(auto res: cur_scaffold_result){
@@ -7104,8 +8478,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                 }
     //             }
 
-
-
     //             // cout << current_score << endl;
     //             if(current_score > best_perm_score){
     //                 best_perm_score = current_score;
@@ -7136,11 +8508,9 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // }
     // cur_scaffold_result = new_scaffold_result;
 
-
     // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
     // nodes_to_insert = vector<uint32_t>();
 
-    
     // for(int i = 0; i < len; i++){
     //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
     //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
@@ -7150,7 +8520,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
     //     return r1.second > r2.second;
     // });
-    
+
     // for(auto n: not_seen_nodes_len){
     //     nodes_to_insert.push_back(n.first);
     // }
@@ -7200,7 +8570,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //             scores.push_back(best_2_total/idx_0);
     //         }
     //     }
-        
+
     //     uint32_t max_idx = 900;
     //     uint32_t max_score = 0;
     //     for(int i = 0; i < scores.size(); i++){
@@ -7214,7 +8584,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //         seen_node.insert(n);
     //     }
     // }
-
 
     // new_scaffold_result = vector<vector<uint32_t>>();
     // vector<uint32_t> scaffold_orientation = vector<uint32_t>();
@@ -7248,7 +8617,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     cur_best_orientation = orders;
     //                 }
     //             }
-                
+
     //             if(cur_max_score > best_perm_score){
     //                 best_orientation = cur_best_orientation;
     //                 best_perm_score = cur_max_score;
@@ -7264,11 +8633,10 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }
     // }
     // cur_scaffold_result = new_scaffold_result;
-    
 
     // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
     // nodes_to_insert = vector<uint32_t>();
-    
+
     // for(int i = 0; i < len; i++){
     //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 4000000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
     //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
@@ -7278,7 +8646,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
     //     return r1.second > r2.second;
     // });
-    
+
     // for(auto n: not_seen_nodes_len){
     //     nodes_to_insert.push_back(n.first);
     // }
@@ -7324,7 +8692,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     best_2_backward_connecting[1] = connect_num[(n<<2)+1][(s[p+1]<<2)+(orientation>>(p+1))%2];
     //                     valid_counter = 2;
     //                 }
-                    
+
     //                 uint32_t max_count_forward = 0;
     //                 uint32_t max_count_backward = 0;
 
@@ -7345,7 +8713,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                 }
     //                 best_2[0]/=valid_counter;
     //                 best_2[1]/=valid_counter;
-
 
     //                 bool valid = true;
     //                 uint32_t idx_0 = 1;
@@ -7384,7 +8751,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //             poses.push_back(1);
     //         }
     //     }
-        
+
     //     uint32_t max_idx = 900;
     //     uint32_t max_score = 0;
     //     for(int i = 0; i < scores.size(); i++){
@@ -7399,11 +8766,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }
     // }
     // cur_scaffold_result = new_scaffold_result;
-
-
-
-
-
 
     // // new_scaffold_result = vector<vector<uint32_t>>();
     // // scaffold_orientation = vector<uint32_t>();
@@ -7437,7 +8799,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // //                     cur_best_orientation = orders;
     // //                 }
     // //             }
-                
+
     // //             if(cur_max_score > best_perm_score){
     // //                 best_orientation = cur_best_orientation;
     // //                 best_perm_score = cur_max_score;
@@ -7455,13 +8817,9 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // // }
     // // cur_scaffold_result = new_scaffold_result;
 
-
-
-
-
     // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
     // nodes_to_insert = vector<uint32_t>();
-    
+
     // for(int i = 0; i < len; i++){
     //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 1500000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
     //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
@@ -7471,7 +8829,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
     //     return r1.second > r2.second;
     // });
-    
+
     // for(auto n: not_seen_nodes_len){
     //     nodes_to_insert.push_back(n.first);
     // }
@@ -7517,7 +8875,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     best_2_backward_connecting[1] = connect_num[(n<<2)+1][(s[p+1]<<2)+(orientation>>(p+1))%2];
     //                     valid_counter = 2;
     //                 }
-                    
+
     //                 uint32_t max_count_forward = 0;
     //                 uint32_t max_count_backward = 0;
 
@@ -7538,7 +8896,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                 }
     //                 best_2[0]/=valid_counter;
     //                 best_2[1]/=valid_counter;
-
 
     //                 bool valid = true;
     //                 uint32_t idx_0 = 1;
@@ -7577,7 +8934,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //             poses.push_back(1);
     //         }
     //     }
-        
+
     //     uint32_t max_idx = 900;
     //     uint32_t max_score = 0;
     //     for(int i = 0; i < scores.size(); i++){
@@ -7592,15 +8949,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }
     // }
     // cur_scaffold_result = new_scaffold_result;
-
-
-
-
-
-
-
-
-
 
     // new_scaffold_result = vector<vector<uint32_t>>();
     // vector<uint32_t> scaffold_orientation = vector<uint32_t>();
@@ -7634,7 +8982,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     cur_best_orientation = orders;
     //                 }
     //             }
-                
+
     //             if(cur_max_score > best_perm_score){
     //                 best_orientation = cur_best_orientation;
     //                 best_perm_score = cur_max_score;
@@ -7651,17 +8999,9 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // }
     // cur_scaffold_result = new_scaffold_result;
 
-
-
-
-
-
-
-
-
     // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
     // nodes_to_insert = vector<uint32_t>();
-    
+
     // for(int i = 0; i < len; i++){
     //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 2300000 && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
     //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
@@ -7671,7 +9011,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
     //     return r1.second > r2.second;
     // });
-    
+
     // for(auto n: not_seen_nodes_len){
     //     nodes_to_insert.push_back(n.first);
     // }
@@ -7717,7 +9057,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     best_2_backward_connecting[1] = connect_num[(n<<2)+1][(s[p+1]<<2)+(orientation>>(p+1))%2];
     //                     valid_counter = 2;
     //                 }
-                    
+
     //                 uint32_t max_count_forward = 0;
     //                 uint32_t max_count_backward = 0;
 
@@ -7738,7 +9078,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                 }
     //                 best_2[0]/=valid_counter;
     //                 best_2[1]/=valid_counter;
-
 
     //                 bool valid = true;
     //                 uint32_t idx_0 = 1;
@@ -7777,7 +9116,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //             poses.push_back(1);
     //         }
     //     }
-        
+
     //     uint32_t max_idx = 900;
     //     uint32_t max_score = 0;
     //     for(int i = 0; i < scores.size(); i++){
@@ -7826,7 +9165,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     cur_best_orientation = orientations;
     //                 }
     //             }
-                
+
     //             if(cur_max_score > best_perm_score){
     //                 best_orientation = cur_best_orientation;
     //                 best_perm_score = cur_max_score;
@@ -7845,11 +9184,10 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }
     // }
     // cur_scaffold_result = new_scaffold_result;
-    
-    
+
     // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
     // nodes_to_insert = vector<uint32_t>();
-    
+
     // for(int i = 0; i < len; i++){
     //     if(seen_node.find(i) == seen_node.end() && exclude_contigs.find(id_contig[i]) == exclude_contigs.end()){
     //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
@@ -7859,7 +9197,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
     //     return r1.second > r2.second;
     // });
-    
+
     // for(auto n: not_seen_nodes_len){
     //     nodes_to_insert.push_back(n.first);
     // }
@@ -7899,7 +9237,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     cur_best_orientation = orientations;
     //                 }
     //             }
-                
+
     //             if(cur_max_score > best_perm_score){
     //                 best_orientation = cur_best_orientation;
     //                 best_perm_score = cur_max_score;
@@ -7930,7 +9268,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }
     // }
     // cur_scaffold_result = new_scaffold_result;
-        
 
     // new_scaffold_result = vector<vector<uint32_t>>();
     // prev_best_scores = vector<uint32_t>();
@@ -7965,7 +9302,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     cur_best_orientation = orientations;
     //                 }
     //             }
-                
+
     //             if(cur_max_score > best_perm_score){
     //                 best_orientation = cur_best_orientation;
     //                 best_perm_score = cur_max_score;
@@ -8131,9 +9468,9 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     }else{
     //         to_break_stable = 0;
     //     }
-    //     cur_scaffold_result = separated_connections; 
+    //     cur_scaffold_result = separated_connections;
     // }
-    
+
     // max_iter = 100;
     // while(cur_scaffold_result.size()!=23 && max_iter > 0){
     //     max_iter--;
@@ -8193,7 +9530,6 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //         }
     //     }
 
-
     //     vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections, check_identity);
     //     for(auto i: scaffold_graph){
     //         for(auto j: i){
@@ -8228,12 +9564,11 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //     cur_scaffold_result = new_scaffold_result;
     // }
 
-        // cur_scaffold_result = new_scaffold_result;
-    
-    
+    // cur_scaffold_result = new_scaffold_result;
+
     // not_seen_nodes_len =  vector<pair<uint32_t,uint32_t>>();
     // nodes_to_insert = vector<uint32_t>();
-    
+
     // for(int i = 0; i < len; i++){
     //     if(seen_node.find(i) == seen_node.end() && contig_lengths[id_contig[i]] > 5000000){
     //         not_seen_nodes_len.push_back(make_pair(i,contig_lengths[id_contig[i]]));
@@ -8243,11 +9578,10 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // [](const pair<uint32_t,uint32_t>& r1, const pair<uint32_t,uint32_t>& r2){
     //     return r1.second > r2.second;
     // });
-    
+
     // for(auto n: not_seen_nodes_len){
     //     nodes_to_insert.push_back(n.first);
     // }
-    
 
     // new_scaffold_result = cur_scaffold_result;
     // for(auto n : nodes_to_insert){
@@ -8311,7 +9645,7 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     //                     cur_best_orientation = orientations;
     //                 }
     //             }
-                
+
     //             if(cur_max_score > best_perm_score){
     //                 best_orientation = cur_best_orientation;
     //                 best_perm_score = cur_max_score;
@@ -8350,40 +9684,52 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
     // }
     // cur_scaffold_result = new_scaffold_result;
 
-    
     max_iter = 100;
-    while(cur_scaffold_result.size()!=23 && max_iter > 0){
+    while (cur_scaffold_result.size() != 23 && max_iter > 0)
+    {
         max_iter--;
         uint32_t scaffold_len = cur_scaffold_result.size();
-        uint32_t** scaffold_connect_num;
+        uint32_t **scaffold_connect_num;
         float **scaffold_best_buddy;
         bool **scaffold_seen;
-        scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
-        scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
-        scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-        for(int i = 0; i < scaffold_len; ++i){
-            scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
-            scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
-            scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+        scaffold_connect_num = (uint32_t **)calloc(scaffold_len, sizeof(uint32_t *));
+        scaffold_best_buddy = (float **)calloc(scaffold_len, sizeof(float *));
+        scaffold_seen = (bool **)calloc(scaffold_len, sizeof(bool *));
+        for (int i = 0; i < scaffold_len; ++i)
+        {
+            scaffold_connect_num[i] = (uint32_t *)calloc(scaffold_len, sizeof(uint32_t));
+            scaffold_best_buddy[i] = (float *)calloc(scaffold_len, sizeof(float));
+            scaffold_seen[i] = (bool *)calloc(scaffold_len, sizeof(bool));
         }
 
-        for(int i = 0; i < scaffold_len; i++){
-            for(int j = 0; j< scaffold_len; j++){
-                if(i==j){
+        for (int i = 0; i < scaffold_len; i++)
+        {
+            for (int j = 0; j < scaffold_len; j++)
+            {
+                if (i == j)
+                {
                     scaffold_seen[i][j] = true;
-                }else{
-                    vector<uint32_t> best_2(2,0);
-                    for(auto n1: cur_scaffold_result[i]){
-                        for(auto n2: cur_scaffold_result[j]){
+                }
+                else
+                {
+                    vector<uint32_t> best_2(2, 0);
+                    for (auto n1 : cur_scaffold_result[i])
+                    {
+                        for (auto n2 : cur_scaffold_result[j])
+                        {
                             uint32_t this_max = 0;
-                            for(uint32_t n1_s = 0; n1_s < 4; n1_s++){
-                                for(uint32_t n2_s = 0; n2_s < 4; n2_s++){
-                                    this_max = max(this_max, connect_num[(n1<<2)+n1_s][(n2<<2)+n2_s]);
+                            for (uint32_t n1_s = 0; n1_s < 4; n1_s++)
+                            {
+                                for (uint32_t n2_s = 0; n2_s < 4; n2_s++)
+                                {
+                                    this_max = max(this_max, connect_num[(n1 << 2) + n1_s][(n2 << 2) + n2_s]);
                                 }
                             }
                             scaffold_connect_num[i][j] += this_max;
-                            for(int i = 0; i<best_2.size(); i++){
-                                if(best_2[i]<this_max){
+                            for (int i = 0; i < best_2.size(); i++)
+                            {
+                                if (best_2[i] < this_max)
+                                {
                                     uint32_t buf = best_2[i];
                                     best_2[i] = this_max;
                                     this_max = buf;
@@ -8392,28 +9738,37 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         }
                     }
                     scaffold_connect_num[i][j] /= (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
-                    if(best_2[1]>0 && best_2[0]*0.2>best_2[1]){
-                        scaffold_connect_num[i][j] -= best_2[0]/(cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
+                    if (best_2[1] > 0 && best_2[0] * 0.2 > best_2[1])
+                    {
+                        scaffold_connect_num[i][j] -= best_2[0] / (cur_scaffold_result[i].size() * cur_scaffold_result[j].size());
                     }
-                    if((cur_scaffold_result[i].size()==1 || cur_scaffold_result[j].size()==1) && !check_identity){
-                        scaffold_connect_num[i][j]*=4;
+                    if ((cur_scaffold_result[i].size() == 1 || cur_scaffold_result[j].size() == 1) && !check_identity)
+                    {
+                        scaffold_connect_num[i][j] *= 4;
                     }
                 }
             }
         }
         vector<uint32_t> inside_connections;
-        for(int i = 0; i < scaffold_len; i++){
+        for (int i = 0; i < scaffold_len; i++)
+        {
             uint32_t connection_counter = 0;
             uint32_t total_connection = 0;
-            if(cur_scaffold_result[i].size()>1){
-                for(auto p : cur_scaffold_result[i]){
-                    for(auto q: cur_scaffold_result[i]){
-                        if(p!=q){
+            if (cur_scaffold_result[i].size() > 1)
+            {
+                for (auto p : cur_scaffold_result[i])
+                {
+                    for (auto q : cur_scaffold_result[i])
+                    {
+                        if (p != q)
+                        {
                             uint32_t max_count = 0;
-                            for(int i_c = 0; i_c < 4; i_c++){
-                                for(int j_c = 0; j_c < 4; j_c++){
-                                    max_count = max(max_count, connect_num[(p<<2)+i_c][(q<<2)+j_c]);
-                                    max_count = max(max_count, connect_num[(q<<2)+i_c][(p<<2)+j_c]);
+                            for (int i_c = 0; i_c < 4; i_c++)
+                            {
+                                for (int j_c = 0; j_c < 4; j_c++)
+                                {
+                                    max_count = max(max_count, connect_num[(p << 2) + i_c][(q << 2) + j_c]);
+                                    max_count = max(max_count, connect_num[(q << 2) + i_c][(p << 2) + j_c]);
                                 }
                             }
                             // total_connection= max(total_connection,max_count);
@@ -8422,34 +9777,41 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
                         }
                     }
                 }
-                if (total_connection!=0 && connection_counter!=0){
-                float f =total_connection/connection_counter;
-                inside_connections.push_back(static_cast<uint32_t>(f));
-                }else
-                inside_connections.push_back(0);
+                if (total_connection != 0 && connection_counter != 0)
+                {
+                    float f = total_connection / connection_counter;
+                    inside_connections.push_back(static_cast<uint32_t>(f));
+                }
+                else
+                    inside_connections.push_back(0);
                 // inside_connections.push_back(total_connection);
-            }else{
+            }
+            else
+            {
                 inside_connections.push_back(0);
             }
         }
 
         uint32_t average_inside_connections = 0;
         uint32_t valid_counter = 0;
-        for(int i = 0; i < scaffold_len; i++){
-            if(inside_connections[i]>0){
+        for (int i = 0; i < scaffold_len; i++)
+        {
+            if (inside_connections[i] > 0)
+            {
                 average_inside_connections += inside_connections[i];
                 valid_counter++;
             }
         }
 
-        average_inside_connections/=valid_counter;
+        average_inside_connections /= valid_counter;
 
-        for(int i = 0; i < scaffold_len; i++){
-            if(inside_connections[i]==0){
+        for (int i = 0; i < scaffold_len; i++)
+        {
+            if (inside_connections[i] == 0)
+            {
                 inside_connections[i] = average_inside_connections;
             }
         }
-
 
         vector<vector<uint32_t>> scaffold_graph = best_buddy_merge(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections, check_identity);
         // for(auto i: scaffold_graph){
@@ -8460,21 +9822,26 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         // }
         vector<vector<uint32_t>> new_scaffold_result;
         set<uint32_t> seen_idx;
-        for(auto i : scaffold_graph){
+        for (auto i : scaffold_graph)
+        {
             vector<uint32_t> merged_graph;
-            for(auto j:i){
-                merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+            for (auto j : i)
+            {
+                merged_graph.insert(merged_graph.end(), cur_scaffold_result[j].begin(), cur_scaffold_result[j].end());
                 seen_idx.insert(j);
             }
             new_scaffold_result.push_back(merged_graph);
         }
-        for(int i = 0; i<cur_scaffold_result.size();i++){
-            if(seen_idx.find(i)==seen_idx.end()){
+        for (int i = 0; i < cur_scaffold_result.size(); i++)
+        {
+            if (seen_idx.find(i) == seen_idx.end())
+            {
                 new_scaffold_result.push_back(cur_scaffold_result[i]);
             }
         }
 
-        for(int i = 0; i < scaffold_len; ++i){
+        for (int i = 0; i < scaffold_len; ++i)
+        {
             free(scaffold_connect_num[i]);
             free(scaffold_best_buddy[i]);
             free(scaffold_seen[i]);
@@ -8484,12 +9851,16 @@ void haplotypes_scaffold(uint32_t **connect_num, map<string, string> contig_hap1
         free(scaffold_seen);
         cur_scaffold_result = new_scaffold_result;
     }
- 
-new_scaffold_result = vector<vector<uint32_t>>();
-    for(auto i : cur_scaffold_result){
-        if(i.size() != 1){
+
+    new_scaffold_result = vector<vector<uint32_t>>();
+    for (auto i : cur_scaffold_result)
+    {
+        if (i.size() != 1)
+        {
             new_scaffold_result.push_back(i);
-        }else{
+        }
+        else
+        {
             seen_node.erase(seen_node.find(i[0]));
         }
     }
@@ -8497,16 +9868,18 @@ new_scaffold_result = vector<vector<uint32_t>>();
     scaffold_orientation = vector<uint32_t>();
     vector<uint32_t> scaffold_haps = vector<uint32_t>();
     new_scaffold_result = order_fixing(connect_num, cur_scaffold_result, &scaffold_orientation, &scaffold_haps);
-    if(!check_identity){
+    if (!check_identity)
+    {
         new_scaffold_result = ordered_breaking(connect_num, new_scaffold_result, scaffold_orientation, scaffold_haps);
         new_scaffold_result = order_fixing(connect_num, new_scaffold_result, &scaffold_orientation, &scaffold_haps);
         cur_scaffold_result = vector<vector<uint32_t>>();
-        for(auto i : new_scaffold_result){
-            if(i.size()>1){
+        for (auto i : new_scaffold_result)
+        {
+            if (i.size() > 1)
+            {
                 cur_scaffold_result.push_back(i);
             }
         }
-
 
         // ofstream outFileIterationResult;
         // outFileIterationResult.open(string(output_directory)+string("/scaffold_result_iterated.txt"), ofstream::out | ofstream::trunc);
@@ -8521,39 +9894,49 @@ new_scaffold_result = vector<vector<uint32_t>>();
 
         {
             uint32_t scaffold_len = cur_scaffold_result.size();
-            uint32_t** scaffold_connect_num;
+            uint32_t **scaffold_connect_num;
             float **scaffold_best_buddy;
             bool **scaffold_seen;
-            scaffold_connect_num = (uint32_t**)calloc(scaffold_len,sizeof(uint32_t*));
-            scaffold_best_buddy = (float**)calloc(scaffold_len,sizeof(float*));
-            scaffold_seen = (bool**)calloc(scaffold_len,sizeof(bool*));
-            for(int i = 0; i < scaffold_len; ++i){
-                scaffold_connect_num[i] = (uint32_t*)calloc(scaffold_len, sizeof(uint32_t));
-                scaffold_best_buddy[i] = (float*)calloc(scaffold_len, sizeof(float));
-                scaffold_seen[i] = (bool*)calloc(scaffold_len, sizeof(bool));
+            scaffold_connect_num = (uint32_t **)calloc(scaffold_len, sizeof(uint32_t *));
+            scaffold_best_buddy = (float **)calloc(scaffold_len, sizeof(float *));
+            scaffold_seen = (bool **)calloc(scaffold_len, sizeof(bool *));
+            for (int i = 0; i < scaffold_len; ++i)
+            {
+                scaffold_connect_num[i] = (uint32_t *)calloc(scaffold_len, sizeof(uint32_t));
+                scaffold_best_buddy[i] = (float *)calloc(scaffold_len, sizeof(float));
+                scaffold_seen[i] = (bool *)calloc(scaffold_len, sizeof(bool));
             }
 
-            for(int i = 0; i < scaffold_len; i++){
+            for (int i = 0; i < scaffold_len; i++)
+            {
                 vector<uint32_t> end_is;
-                end_is.push_back(cur_scaffold_result[i][cur_scaffold_result[i].size()-1]);
-                end_is.push_back(cur_scaffold_result[i][cur_scaffold_result[i].size()-2]);
-                for(int j = 0; j< scaffold_len; j++){
+                end_is.push_back(cur_scaffold_result[i][cur_scaffold_result[i].size() - 1]);
+                end_is.push_back(cur_scaffold_result[i][cur_scaffold_result[i].size() - 2]);
+                for (int j = 0; j < scaffold_len; j++)
+                {
                     vector<uint32_t> beg_js;
                     beg_js.push_back(cur_scaffold_result[j][0]);
                     beg_js.push_back(cur_scaffold_result[j][1]);
-                    if(i==j){
+                    if (i == j)
+                    {
                         scaffold_seen[i][j] = true;
-                    }else{
+                    }
+                    else
+                    {
                         bool false_connection = false;
                         vector<uint32_t> scores;
-                        for(auto end_i : end_is){
-                            for(auto beg_j: beg_js){
+                        for (auto end_i : end_is)
+                        {
+                            for (auto beg_j : beg_js)
+                            {
                                 uint32_t this_max = 0;
-                                uint32_t this_min = connect_num[(end_i<<2)][(beg_j<<2)];
-                                for(int i_c = 0; i_c < 2; i_c++){
-                                    for(int j_c = 0; j_c < 4; j_c++){
-                                        this_max = max(this_max, connect_num[(end_i<<2)+i_c][(beg_j<<2)+j_c]);
-                                        this_min = min(this_min, connect_num[(end_i<<2)+i_c][(beg_j<<2)+j_c]);
+                                uint32_t this_min = connect_num[(end_i << 2)][(beg_j << 2)];
+                                for (int i_c = 0; i_c < 2; i_c++)
+                                {
+                                    for (int j_c = 0; j_c < 4; j_c++)
+                                    {
+                                        this_max = max(this_max, connect_num[(end_i << 2) + i_c][(beg_j << 2) + j_c]);
+                                        this_min = min(this_min, connect_num[(end_i << 2) + i_c][(beg_j << 2) + j_c]);
                                     }
                                 }
                                 scores.push_back(this_max);
@@ -8562,25 +9945,35 @@ new_scaffold_result = vector<vector<uint32_t>>();
                                 // }
                             }
                         }
-                        if(false_connection){
+                        if (false_connection)
+                        {
                             scaffold_connect_num[i][j] = 0;
                             scaffold_seen[i][j] = true;
-                        }else{
+                        }
+                        else
+                        {
                             int final_score = 0;
-                            sort(scores.begin(), scores.end(),greater<>());
-                            for(int idx = 0; idx < scores.size(); idx++){
-                                if(idx < 2){
+                            sort(scores.begin(), scores.end(), greater<>());
+                            for (int idx = 0; idx < scores.size(); idx++)
+                            {
+                                if (idx < 2)
+                                {
                                     final_score += scores[idx];
                                 }
-                                if(idx>0){
-                                    if(scores[idx-1]/4 >= scores[idx]){
+                                if (idx > 0)
+                                {
+                                    if (scores[idx - 1] / 4 >= scores[idx])
+                                    {
                                         final_score -= scores[idx];
                                     }
                                 }
                             }
-                            if(final_score > 0){
-                                scaffold_connect_num[i][j] = final_score/2;
-                            }else{
+                            if (final_score > 0)
+                            {
+                                scaffold_connect_num[i][j] = final_score / 2;
+                            }
+                            else
+                            {
                                 scaffold_connect_num[i][j] = 0;
                                 scaffold_seen[i][j] = true;
                             }
@@ -8590,66 +9983,85 @@ new_scaffold_result = vector<vector<uint32_t>>();
             }
 
             vector<uint32_t> inside_connections;
-            for(int i = 0; i < scaffold_len; i++){
+            for (int i = 0; i < scaffold_len; i++)
+            {
                 uint32_t connection_counter = 0;
                 uint32_t total_connection = 0;
-                if(cur_scaffold_result[i].size()>1){
-                    for(int p = 0; p < cur_scaffold_result[i].size()-1; p++){
+                if (cur_scaffold_result[i].size() > 1)
+                {
+                    for (int p = 0; p < cur_scaffold_result[i].size() - 1; p++)
+                    {
                         uint32_t max_count = 0;
-                        for(int i_c = 0; i_c < 4; i_c++){
-                            for(int j_c = 0; j_c < 4; j_c++){
-                                max_count = max(max_count, connect_num[(cur_scaffold_result[i][p]<<2)+i_c][((cur_scaffold_result[i][p+1])<<2)+j_c]);
+                        for (int i_c = 0; i_c < 4; i_c++)
+                        {
+                            for (int j_c = 0; j_c < 4; j_c++)
+                            {
+                                max_count = max(max_count, connect_num[(cur_scaffold_result[i][p] << 2) + i_c][((cur_scaffold_result[i][p + 1]) << 2) + j_c]);
                             }
                         }
-                        total_connection+=max_count;
+                        total_connection += max_count;
                         connection_counter++;
                     }
-                if (total_connection!=0 && connection_counter!=0){
-                float f =total_connection/connection_counter;
-                inside_connections.push_back(static_cast<uint32_t>(f));
-                }else
-                inside_connections.push_back(0);
-                }else{
+                    if (total_connection != 0 && connection_counter != 0)
+                    {
+                        float f = total_connection / connection_counter;
+                        inside_connections.push_back(static_cast<uint32_t>(f));
+                    }
+                    else
+                        inside_connections.push_back(0);
+                }
+                else
+                {
                     inside_connections.push_back(0);
                 }
             }
             uint32_t average_inside_connections = 0;
             uint32_t valid_counter = 0;
-            
-            for(int i = 0; i < scaffold_len; i++){
-                if(inside_connections[i]>0){
+
+            for (int i = 0; i < scaffold_len; i++)
+            {
+                if (inside_connections[i] > 0)
+                {
                     average_inside_connections += inside_connections[i];
                     valid_counter++;
                 }
             }
-            if(valid_counter > 0){
-                average_inside_connections/=valid_counter;
+            if (valid_counter > 0)
+            {
+                average_inside_connections /= valid_counter;
             }
 
-            for(int i = 0; i < scaffold_len; i++){
+            for (int i = 0; i < scaffold_len; i++)
+            {
                 // cout << i+1<< "\t"<< inside_connections[i] << endl;
-                if(inside_connections[i] <= average_inside_connections){
+                if (inside_connections[i] <= average_inside_connections)
+                {
                     inside_connections[i] = average_inside_connections;
                 }
             }
             vector<vector<uint32_t>> scaffold_graph = best_buddy_merge_final(scaffold_seen, scaffold_best_buddy, scaffold_connect_num, scaffold_len, 23, inside_connections);
             vector<vector<uint32_t>> new_scaffold_result;
             set<uint32_t> seen_idx;
-            for(auto i : scaffold_graph){
+            for (auto i : scaffold_graph)
+            {
                 vector<uint32_t> merged_graph;
-                for(auto j:i){
-                    merged_graph.insert(merged_graph.end(),cur_scaffold_result[j].begin(),cur_scaffold_result[j].end());
+                for (auto j : i)
+                {
+                    merged_graph.insert(merged_graph.end(), cur_scaffold_result[j].begin(), cur_scaffold_result[j].end());
                     seen_idx.insert(j);
                 }
                 new_scaffold_result.push_back(merged_graph);
             }
-            for(int i = 0; i<cur_scaffold_result.size();i++){
-                if(seen_idx.find(i)==seen_idx.end()){
+            for (int i = 0; i < cur_scaffold_result.size(); i++)
+            {
+                if (seen_idx.find(i) == seen_idx.end())
+                {
                     new_scaffold_result.push_back(cur_scaffold_result[i]);
                 }
             }
 
-            for(int i = 0; i < scaffold_len; ++i){
+            for (int i = 0; i < scaffold_len; ++i)
+            {
                 free(scaffold_connect_num[i]);
                 free(scaffold_best_buddy[i]);
                 free(scaffold_seen[i]);
@@ -8660,16 +10072,19 @@ new_scaffold_result = vector<vector<uint32_t>>();
             cur_scaffold_result = new_scaffold_result;
         }
         cur_scaffold_result = order_fixing(connect_num, cur_scaffold_result, &scaffold_orientation, &scaffold_haps);
-    }else{
+    }
+    else
+    {
         cur_scaffold_result = new_scaffold_result;
     }
     ofstream outFileReorderedResult;
-    outFileReorderedResult.open(string(output_directory)+string("/scaffold_result_reordered.txt"), ofstream::out | ofstream::trunc);
-    vector<pair<string,string>> hap2s;
+    outFileReorderedResult.open(string(output_directory) + string("/scaffold_result_reordered.txt"), ofstream::out | ofstream::trunc);
+    vector<pair<string, string>> hap2s;
     vector<string> hap1s;
     // vector<set<uint32_t>> hap1_nodes;
     // vector<set<uint32_t>> hap2_nodes;
-    for(int i = 0; i< cur_scaffold_result.size(); i++){
+    for (int i = 0; i < cur_scaffold_result.size(); i++)
+    {
         uint32_t cur_length_hap1 = 0;
         uint32_t cur_length_hap2 = 0;
         // set<uint32_t> hap1_node;
@@ -8677,20 +10092,23 @@ new_scaffold_result = vector<vector<uint32_t>>();
         stringstream result_hap1;
         stringstream result_hap2;
         bool is_repeated = false;
-        for(int j = 0; j < cur_scaffold_result[i].size(); j++){
+        for (int j = 0; j < cur_scaffold_result[i].size(); j++)
+        {
             string cur_name = id_contig[cur_scaffold_result[i][j]];
-            is_repeated = is_repeated || cur_name[cur_name.size()-1] == 's';
+            is_repeated = is_repeated || cur_name[cur_name.size() - 1] == 's';
         }
-        for(int j = 0; j < cur_scaffold_result[i].size(); j++){
-            outFileReorderedResult << id_contig[cur_scaffold_result[i][j]] << "_hap" << ((scaffold_haps[i]>>j)%2==0 ? "1" : "2") << ((scaffold_orientation[i]>>j)%2==0 ? "+" : "-") << ", ";
-            
+        for (int j = 0; j < cur_scaffold_result[i].size(); j++)
+        {
+            outFileReorderedResult << id_contig[cur_scaffold_result[i][j]] << "_hap" << ((scaffold_haps[i] >> j) % 2 == 0 ? "1" : "2") << ((scaffold_orientation[i] >> j) % 2 == 0 ? "+" : "-") << ", ";
+
             string cur_hap1 = contig_hap1s[id_contig[cur_scaffold_result[i][j]]];
             string cur_hap2 = contig_hap2s[id_contig[cur_scaffold_result[i][j]]];
 
             string cur_name = id_contig[cur_scaffold_result[i][j]];
-            bool is_repeated_cur = cur_name[cur_name.size()-1] == 's';
+            bool is_repeated_cur = cur_name[cur_name.size() - 1] == 's';
 
-            if((scaffold_haps[i]>>j)%2!=0){
+            if ((scaffold_haps[i] >> j) % 2 != 0)
+            {
                 string buf = cur_hap1;
                 cur_hap1 = cur_hap2;
                 cur_hap2 = buf;
@@ -8700,35 +10118,40 @@ new_scaffold_result = vector<vector<uint32_t>>();
                 // hap2_node.insert(path.begin(),path.end());
             }
             // else{
-                // vector<uint32_t> path = (step.haplo_pathes)[cur_scaffold_result[i][j]<<1];
-                // hap1_node.insert(path.begin(),path.end());
-                // path = (step.haplo_pathes)[(cur_scaffold_result[i][j]<<1)+1];
-                // hap2_node.insert(path.begin(),path.end());
+            // vector<uint32_t> path = (step.haplo_pathes)[cur_scaffold_result[i][j]<<1];
+            // hap1_node.insert(path.begin(),path.end());
+            // path = (step.haplo_pathes)[(cur_scaffold_result[i][j]<<1)+1];
+            // hap2_node.insert(path.begin(),path.end());
             // }
-            
-            if((scaffold_orientation[i]>>j)%2==0){
+
+            if ((scaffold_orientation[i] >> j) % 2 == 0)
+            {
                 cur_hap1 = complement(cur_hap1);
                 cur_hap2 = complement(cur_hap2);
             }
 
             result_hap1 << cur_hap1 << string(100, 'N');
             cur_length_hap1 += cur_hap1.size() + 100;
-            if(!is_repeated){
+            if (!is_repeated)
+            {
                 result_hap2 << cur_hap2 << string(100, 'N');
                 cur_length_hap2 += cur_hap2.size() + 100;
             }
-            if(is_repeated){
-                if(!is_repeated_cur){
-                    hap2s.push_back(make_pair(string("scaffold")+to_string(i)+string("l_hap2_")+cur_name, cur_hap2));
+            if (is_repeated)
+            {
+                if (!is_repeated_cur)
+                {
+                    hap2s.push_back(make_pair(string("scaffold") + to_string(i) + string("l_hap2_") + cur_name, cur_hap2));
                 }
             }
         }
-        
+
         // hap1_nodes.push_back(hap1_node);
         // hap2_nodes.push_back(hap2_node);
 
-        if(!is_repeated){
-            hap2s.push_back(make_pair(string("scaffold")+to_string(i)+string("l_hap2"), result_hap2.str()));
+        if (!is_repeated)
+        {
+            hap2s.push_back(make_pair(string("scaffold") + to_string(i) + string("l_hap2"), result_hap2.str()));
         }
 
         hap1s.push_back(result_hap1.str());
@@ -8739,20 +10162,20 @@ new_scaffold_result = vector<vector<uint32_t>>();
     map<string, string> hap1s_remain;
     map<string, string> hap2s_remain;
 
-    for(int i = 0; i < len; i++){
-        if(seen_node.find(i) == seen_node.end()){
+    for (int i = 0; i < len; i++)
+    {
+        if (seen_node.find(i) == seen_node.end())
+        {
             hap1s_remain[id_contig[i]] = contig_hap1s[id_contig[i]];
             hap2s_remain[id_contig[i]] = contig_hap2s[id_contig[i]];
         }
     }
 
-
     // set<set<uint32_t>> to_merge = before_merged_graph_connections;
-    
+
     // for(auto i: to_merge){
 
     // }
-
 
     // ofstream outFileScaffoldResult;
     // outFileScaffoldResult.open(string(output_directory)+string("/scaffold_result.txt"), ofstream::out | ofstream::trunc);
@@ -8776,7 +10199,7 @@ new_scaffold_result = vector<vector<uint32_t>>();
     //             hap2.push_back((hap2[hap2.size()-1] ^ ((cur_node&2)>0)) ^ ((next_node&2)>0));
     //         }
     //     }
-        
+
     //     for(int i = 0; i < path.size(); i++){
     //         string cur_hap1 = cstep.haplo_sequences[path[i]<<1];
     //         string cur_hap2 = cstep.haplo_sequences[(path[i]<<1)+1];
@@ -8831,22 +10254,20 @@ new_scaffold_result = vector<vector<uint32_t>>();
 
     // outFileScaffoldResult.close();
 
-	// printf("Result:\n");
+    // printf("Result:\n");
     // ofstream outFileScaffoldResult;
     // outFileScaffoldResult.open(string(output_directory)+string("/scaffold_result.txt"), ofstream::out | ofstream::trunc);
-	// for(int i = 0; i < graph_connection.size(); i++){
-	// 	vector<uint32_t> cur_set = graph_connection[i];
-	// 	for(auto p:cur_set){
+    // for(int i = 0; i < graph_connection.size(); i++){
+    // 	vector<uint32_t> cur_set = graph_connection[i];
+    // 	for(auto p:cur_set){
     //         outFileScaffoldResult << string(graph->seq[(*step.beg_node)[p]>>1].name) + string("_") + string(string(graph->seq[(*step.end_node)[p]>>1].name))+string(", ");
-	// 	}
+    // 	}
     //     outFileScaffoldResult << endl;
-	// }
+    // }
     // outFileScaffoldResult.close();
 
-
-
     // vector<pair<string,uint64_t>> scaffold_result_length;
-	// for(int i = 0; i < hap1s.size(); i++){
+    // for(int i = 0; i < hap1s.size(); i++){
     //     stringstream name;
     //     name <<"scaffold" << i << "l";
     //     scaffold_result_length.push_back(make_pair(name.str(),hap1s[i].size()));
@@ -8854,12 +10275,12 @@ new_scaffold_result = vector<vector<uint32_t>>();
     // for(auto i : hap1s_remain){
     //     scaffold_result_length.push_back(make_pair(i.first,i.second.size()));
     // }
-    
+
     // sort(scaffold_result_length.begin(), scaffold_result_length.end(),
     // [](const pair<string,uint64_t>& r1, const pair<string,uint64_t>& r2){
     //     return r1.second > r2.second;
     // });
-    
+
     // ofstream outFileHap1Length;
     // outFileHap1Length.open(string(output_directory)+string("/pred_hap1_length.txt"), ofstream::out | ofstream::trunc);
     // for(auto i : scaffold_result_length){
@@ -8868,37 +10289,40 @@ new_scaffold_result = vector<vector<uint32_t>>();
     // outFileHap1Length.close();
 
     ofstream outFileHap1;
-    outFileHap1.open(string(output_directory)+string("/pred_hap1.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap1s.size(); i++){
+    outFileHap1.open(string(output_directory) + string("/pred_hap1.fa"), ofstream::out | ofstream::trunc);
+    for (int i = 0; i < hap1s.size(); i++)
+    {
         outFileHap1 << ">scaffold" << i << "l_hap1" << endl;
         outFileHap1 << hap1s[i] << endl;
-	}
-    for(auto i : hap1s_remain){
+    }
+    for (auto i : hap1s_remain)
+    {
         outFileHap1 << ">" << i.first << "_hap1" << endl;
         outFileHap1 << i.second << endl;
     }
     outFileHap1.close();
-    
 
     ofstream outFileHap2;
-    outFileHap2.open(string(output_directory)+string("/pred_hap2.fa"), ofstream::out | ofstream::trunc);
-	for(int i = 0; i < hap2s.size(); i++){
+    outFileHap2.open(string(output_directory) + string("/pred_hap2.fa"), ofstream::out | ofstream::trunc);
+    for (int i = 0; i < hap2s.size(); i++)
+    {
         outFileHap2 << ">" << hap2s[i].first << endl;
         outFileHap2 << hap2s[i].second << endl;
-	}
-    for(auto i : hap2s_remain){
-        bool is_repeated_cur = i.first[i.first.size()-1] == 's';
-        if(!is_repeated_cur){
+    }
+    for (auto i : hap2s_remain)
+    {
+        bool is_repeated_cur = i.first[i.first.size() - 1] == 's';
+        if (!is_repeated_cur)
+        {
             outFileHap2 << ">" << i.first << "_hap2" << endl;
             outFileHap2 << i.second << endl;
-        }  
+        }
     }
     outFileHap2.close();
 
-
     // ofstream outFileHap1Nodes;
     // outFileHap1Nodes.open(string(output_directory)+string("/pred_hap1_nodes.txt"), ofstream::out | ofstream::trunc);
-	// for(auto ns: hap1_nodes){
+    // for(auto ns: hap1_nodes){
     //     for(auto n:ns){
     //         outFileHap1Nodes <<graph->seq[n>>1].name << ",";
     //     }
@@ -8908,7 +10332,7 @@ new_scaffold_result = vector<vector<uint32_t>>();
 
     // ofstream outFileHap2Nodes;
     // outFileHap2Nodes.open(string(output_directory)+string("/pred_hap2_nodes.txt"), ofstream::out | ofstream::trunc);
-	// for(auto ns: hap2_nodes){
+    // for(auto ns: hap2_nodes){
     //     for(auto n:ns){
     //         outFileHap2Nodes <<graph->seq[n>>1].name << ",";
     //     }
@@ -8916,15 +10340,14 @@ new_scaffold_result = vector<vector<uint32_t>>();
     // }
     // outFileHap2Nodes.close();
 
-
     // ofstream outFileHap1Broken;
     // outFileHap1Broken.open(string(output_directory)+string("/pred_hap1_broken.fa"), ofstream::out | ofstream::trunc);
-	// for(int i = 0; i < hap1s.size(); i++){
+    // for(int i = 0; i < hap1s.size(); i++){
     //     for (unsigned j = 0; j < hap1s[i].length(); j += 3000000) {
     //         outFileHap1Broken << ">scaffold" << i << "l_hap1" << "_" << to_string(j) << endl;
     //         outFileHap1Broken << hap1s[i].substr(j, 3000000) << endl;
     //     }
-	// }
+    // }
     // for(auto i : hap1s_remain){
     //     outFileHap1Broken << ">" << i.first << "_hap1" << endl;
     //     outFileHap1Broken << i.second << endl;
@@ -8933,12 +10356,12 @@ new_scaffold_result = vector<vector<uint32_t>>();
 
     // ofstream outFileHap2Broken;
     // outFileHap2Broken.open(string(output_directory)+string("/pred_hap2_broken.fa"), ofstream::out | ofstream::trunc);
-	// for(int i = 0; i < hap2s.size(); i++){
+    // for(int i = 0; i < hap2s.size(); i++){
     //     for (unsigned j = 0; j < hap2s[i].length(); j += 3000000) {
     //         outFileHap2Broken << ">scaffold" << i << "l_hap2" << "_" << to_string(j) << endl;
     //         outFileHap2Broken << hap2s[i].substr(j, 3000000) << endl;
     //     }
-	// }
+    // }
     // for(auto i : hap2s_remain){
     //     outFileHap2Broken << ">" << i.first  << "_hap2" << endl;
     //     outFileHap2Broken << i.second << endl;
@@ -8946,101 +10369,107 @@ new_scaffold_result = vector<vector<uint32_t>>();
     // outFileHap2Broken.close();
 }
 
+// ofstream outFileHap1Nodes;
+// outFileHap1Nodes.open(string(output_directory)+string("/pred_hap1_nodes.txt"), ofstream::out | ofstream::trunc);
+// for(auto ns: hap1_nodes){
+//     for(auto n:ns){
+//         outFileHap1Nodes <<graph->seq[n>>1].name << ",";
+//     }
+//     outFileHap1Nodes << endl;
+// }
+// outFileHap1Nodes.close();
 
-    // ofstream outFileHap1Nodes;
-    // outFileHap1Nodes.open(string(output_directory)+string("/pred_hap1_nodes.txt"), ofstream::out | ofstream::trunc);
-	// for(auto ns: hap1_nodes){
-    //     for(auto n:ns){
-    //         outFileHap1Nodes <<graph->seq[n>>1].name << ",";
-    //     }
-    //     outFileHap1Nodes << endl;
-    // }
-    // outFileHap1Nodes.close();
+// ofstream outFileHap2Nodes;
+// outFileHap2Nodes.open(string(output_directory)+string("/pred_hap2_nodes.txt"), ofstream::out | ofstream::trunc);
+// for(auto ns: hap2_nodes){
+//     for(auto n:ns){
+//         outFileHap2Nodes <<graph->seq[n>>1].name << ",";
+//     }
+//     outFileHap2Nodes << endl;
+// }
+// outFileHap2Nodes.close();
 
-    // ofstream outFileHap2Nodes;
-    // outFileHap2Nodes.open(string(output_directory)+string("/pred_hap2_nodes.txt"), ofstream::out | ofstream::trunc);
-	// for(auto ns: hap2_nodes){
-    //     for(auto n:ns){
-    //         outFileHap2Nodes <<graph->seq[n>>1].name << ",";
-    //     }
-    //     outFileHap2Nodes << endl;
-    // }
-    // outFileHap2Nodes.close();
-
-
-
-
-
-
-
-
-vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections, bool check_identity){
+vector<vector<uint32_t>> best_buddy_merge(bool **seen, float **best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections, bool check_identity)
+{
     vector<vector<uint32_t>> graph_connection;
     // cout << "Merge Started" << endl;
     // cout << len << endl;
-	bool next = true;
-	set<uint32_t> seen_node;
+    bool next = true;
+    set<uint32_t> seen_node;
     uint32_t safe_break = 0;
     uint32_t iteration = 0;
-	// while(next){
+    // while(next){
     uint32_t low_connect = 0;
     vector<uint32_t> all_connect;
-    for(int i = 0; i < len; i++){
-        for(int j = 0; j < len; j++){
-            low_connect+= connect_num[i][j];
+    for (int i = 0; i < len; i++)
+    {
+        for (int j = 0; j < len; j++)
+        {
+            low_connect += connect_num[i][j];
             all_connect.push_back(connect_num[i][j]);
         }
     }
     sort(all_connect.begin(), all_connect.end());
-    if(len > target){
-        low_connect = all_connect[all_connect.size() - (len - target) ];
+    if (len > target)
+    {
+        low_connect = all_connect[all_connect.size() - (len - target)];
         // cout << "Low connect:" << low_connect << endl;
     }
-	while(seen_node.size()<len && safe_break <= 5 && next && len - seen_node.size() + graph_connection.size() > target){
+    while (seen_node.size() < len && safe_break <= 5 && next && len - seen_node.size() + graph_connection.size() > target)
+    {
         next = false;
         safe_break++;
-		// for(auto n: seen_node){
-		// 	printf("%d, ",n);
-		// }
-		// printf("\n");
-		vector<pair<float, pair<uint32_t,uint32_t>>> result;
-		// next = false;
-		update_best_buddy_haplo_general(seen, best_buddy,connect_num,len);
+        // for(auto n: seen_node){
+        // 	printf("%d, ",n);
+        // }
+        // printf("\n");
+        vector<pair<float, pair<uint32_t, uint32_t>>> result;
+        // next = false;
+        update_best_buddy_haplo_general(seen, best_buddy, connect_num, len);
         // cout << "Update best buddy score." << endl;
-		for(int i = 0; i < len; i++){
-			for(int j = 0; j < len; j++){
-				if(best_buddy[i][j] > 0.999){
-                    if(connect_num[i][j]>low_connect){
+        for (int i = 0; i < len; i++)
+        {
+            for (int j = 0; j < len; j++)
+            {
+                if (best_buddy[i][j] > 0.999)
+                {
+                    if (connect_num[i][j] > low_connect)
+                    {
                         next = true;
                     }
-					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-				}
-			}
-		}
-		if(!next){
+                    result.push_back(make_pair(best_buddy[i][j], make_pair(i, j)));
+                }
+            }
+        }
+        if (!next)
+        {
             break;
         }
-		sort(result.begin(), result.end(),
-		[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-			return r1.first > r2.first;
-		});
+        sort(result.begin(), result.end(),
+             [](const pair<float, pair<uint32_t, uint32_t>> &r1, const pair<float, pair<uint32_t, uint32_t>> &r2)
+             {
+                 return r1.first > r2.first;
+             });
         // cout << "Get potential connections " << result.size() << "." << endl;
 
-        for(auto res:result){
-            if(!seen[res.second.first][res.second.second]){
+        for (auto res : result)
+        {
+            if (!seen[res.second.first][res.second.second])
+            {
                 bool erase_connection = false;
                 // if((inside_connections[res.second.first] + inside_connections[res.second.second])/10 > connect_num[res.second.first][res.second.second]){
                 //     seen[res.second.first][res.second.second] = true;
                 //     seen[res.second.second][res.second.first] = true;
                 //     continue;
                 // }
-                if(inside_connections[res.second.first]/3 > connect_num[res.second.first][res.second.second]
-                && inside_connections[res.second.second]/3 > connect_num[res.second.first][res.second.second] && !check_identity){
+                if (inside_connections[res.second.first] / 3 > connect_num[res.second.first][res.second.second] && inside_connections[res.second.second] / 3 > connect_num[res.second.first][res.second.second] && !check_identity)
+                {
                     seen[res.second.first][res.second.second] = true;
                     seen[res.second.second][res.second.first] = true;
                     continue;
                 }
-                if(connect_num[res.second.first][res.second.second] < low_connect){
+                if (connect_num[res.second.first][res.second.second] < low_connect)
+                {
                     erase_connection = true;
                 }
                 // cout << res.second.first << "\t"<< res.second.second << "\t" << res.first << endl;
@@ -9050,19 +10479,26 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                 uint16_t idx_j = 65535;
                 uint16_t idx_i_sub = 65535;
                 uint16_t idx_j_sub = 65535;
-                for(int i = 0; i < graph_connection.size(); i++){
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.first)){
+                for (int i = 0; i < graph_connection.size(); i++)
+                {
+                    if (find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first)) != graph_connection[i].end())
+                    {
+                        for (int idx = 0; idx < graph_connection[i].size(); idx++)
+                        {
+                            if (graph_connection[i][idx] == (res.second.first))
+                            {
                                 idx_i_sub = idx;
                             }
                         }
                         idx_i = i;
                         found = true;
                     }
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.second)){
+                    if (find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second)) != graph_connection[i].end())
+                    {
+                        for (int idx = 0; idx < graph_connection[i].size(); idx++)
+                        {
+                            if (graph_connection[i][idx] == (res.second.second))
+                            {
                                 idx_j_sub = idx;
                             }
                         }
@@ -9070,85 +10506,107 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                         found = true;
                     }
                 }
-                if(erase_connection){
-                
-                }else if(found && idx_i == idx_j){
+                if (erase_connection)
+                {
+                }
+                else if (found && idx_i == idx_j)
+                {
                     erase_connection = true;
-                }else if(!found){
+                }
+                else if (!found)
+                {
                     vector<uint32_t> buf;
                     buf.push_back(res.second.first);
                     buf.push_back(res.second.second);
                     graph_connection.push_back(buf);
-                }else if(idx_j!=65535 && idx_i!=65535){
+                }
+                else if (idx_j != 65535 && idx_i != 65535)
+                {
                     // erase_connection = true;
                     // assert(idx_j_sub == 0);
                     // assert(idx_i_sub == graph_connection[idx_i].size()-1);
 
-
                     uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
+                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size() - 2]][res.second.second]);
                     adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
                     uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
+                    for (int i_c = 0; i_c < graph_connection[idx_i].size() - 1; i_c++)
+                    {
+                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c + 1]];
                     }
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
+                    for (int j_c = 0; j_c < graph_connection[idx_j].size() - 1; j_c++)
+                    {
+                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c + 1]];
                     }
-                    average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
+                    average_connection /= graph_connection[idx_i].size() + graph_connection[idx_j].size() - 2;
                     // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 300|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                    if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
+                    if (average_connection * 0.4 > connect_num[res.second.first][res.second.second] || adj_connection < connect_num[res.second.first][res.second.second] * 0.3)
+                    {
                         erase_connection = true;
-                    }else{
-                        graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
-                        graph_connection.erase(graph_connection.begin()+idx_j);
                     }
-                }else if(idx_j!=65535){
+                    else
+                    {
+                        graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
+                        graph_connection.erase(graph_connection.begin() + idx_j);
+                    }
+                }
+                else if (idx_j != 65535)
+                {
                     // assert(idx_j_sub == 0);
                     uint32_t adj_connection = 65335;
                     adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
                     uint32_t average_connection = 0;
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
+                    for (int j_c = 0; j_c < graph_connection[idx_j].size() - 1; j_c++)
+                    {
+                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c + 1]];
                     }
-                    average_connection/=graph_connection[idx_j].size()-1;
+                    average_connection /= graph_connection[idx_j].size() - 1;
                     // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 300 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                        // erase_connection = true;
+                    // erase_connection = true;
                     // }else{
-                        graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first));
+                    graph_connection[idx_j].insert(graph_connection[idx_j].begin(), (res.second.first));
                     // }
-                }else if(idx_i!=65535){
+                }
+                else if (idx_i != 65535)
+                {
                     // assert(idx_i_sub == graph_connection[idx_i].size()-1);
                     uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
+                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size() - 2]][res.second.second]);
                     uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
+                    for (int i_c = 0; i_c < graph_connection[idx_i].size() - 1; i_c++)
+                    {
+                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c + 1]];
                     }
-                    average_connection/=graph_connection[idx_i].size()-1;
+                    average_connection /= graph_connection[idx_i].size() - 1;
                     // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 300 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                        // erase_connection = true;
+                    // erase_connection = true;
                     // }else{
-                        graph_connection[idx_i].push_back((res.second.second));
+                    graph_connection[idx_i].push_back((res.second.second));
                     // }
                 }
                 seen_node.clear();
-                for(auto i:graph_connection){
-                    for(auto j:i){
+                for (auto i : graph_connection)
+                {
+                    for (auto j : i)
+                    {
                         seen_node.insert(j);
                     }
                 }
-                if(len - seen_node.size() + graph_connection.size() <= target){
+                if (len - seen_node.size() + graph_connection.size() <= target)
+                {
                     break;
                 }
-                if(!erase_connection){
-                    for(int q = 0; q < len; q++){
+                if (!erase_connection)
+                {
+                    for (int q = 0; q < len; q++)
+                    {
                         seen[res.second.first][q] = true;
                         seen[q][res.second.second] = true;
                         seen[res.second.second][res.second.first] = true;
                     }
-                    
-                }else{
+                }
+                else
+                {
                     seen_node.insert((res.second.first));
                     seen_node.insert((res.second.second));
 
@@ -9156,24 +10614,29 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
                     seen[res.second.second][res.second.first] = true;
                 }
             }
-        }                
+        }
         // cout << "Insert connections." << endl;
         // cout << "Save graphs and scores." << endl;
         uint32_t counting_left = 0;
-        for(int i = 0; i < len ; i++){
-            for(int j = 0; j < len ; j++){
-                if(!seen[i][j]){
+        for (int i = 0; i < len; i++)
+        {
+            for (int j = 0; j < len; j++)
+            {
+                if (!seen[i][j])
+                {
                     next = true;
                     counting_left++;
                 }
             }
         }
-		// cout << "Nodes in graph: " << seen_node.size() << "." << endl;
-		// cout << "Left edges: " << counting_left << "." << endl;
+        // cout << "Nodes in graph: " << seen_node.size() << "." << endl;
+        // cout << "Left edges: " << counting_left << "." << endl;
         iteration++;
-	}
-	for(int i = 0; i<len; i++){
-        if(seen_node.find(i)==seen_node.end()){
+    }
+    for (int i = 0; i < len; i++)
+    {
+        if (seen_node.find(i) == seen_node.end())
+        {
             vector<uint32_t> to_insert;
             to_insert.push_back(i);
             graph_connection.push_back(to_insert);
@@ -9183,65 +10646,81 @@ vector<vector<uint32_t>> best_buddy_merge(bool** seen, float** best_buddy, uint3
     return graph_connection;
 }
 
-vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len){
+vector<vector<uint32_t>> best_buddy_separate(bool **seen, float **best_buddy, uint32_t **connect_num, uint32_t len)
+{
     vector<vector<uint32_t>> graph_connection;
 
-	bool next = true;
-	set<uint32_t> seen_node;
+    bool next = true;
+    set<uint32_t> seen_node;
     uint32_t safe_break = 0;
     uint32_t iteration = 0;
     uint32_t low_connect = 0;
-	// while(next){
+    // while(next){
     vector<uint32_t> all_connections;
-    for(int i = 0; i < len; i++){
-        for(int j = 0; j < len; j++){
+    for (int i = 0; i < len; i++)
+    {
+        for (int j = 0; j < len; j++)
+        {
             all_connections.push_back(connect_num[i][j]);
         }
     }
     sort(all_connections.begin(), all_connections.end());
 
-    if(len > 2){
+    if (len > 2)
+    {
         low_connect = all_connections[all_connections.size() - len];
-    }else{
+    }
+    else
+    {
         low_connect = 0;
     }
     // low_connect = all_connections[all_connections.size() - len*2];
     // cout << "Low connect in separate:" << low_connect << endl;
 
-	while(seen_node.size()<len && safe_break <= 5 && next){
+    while (seen_node.size() < len && safe_break <= 5 && next)
+    {
         next = false;
         safe_break++;
-		// for(auto n: seen_node){
-		// 	printf("%d, ",n);
-		// }
-		// printf("\n");
-		vector<pair<float, pair<uint32_t,uint32_t>>> result;
-		// next = false;
-		update_best_buddy_haplo_general(seen, best_buddy,connect_num,len);
+        // for(auto n: seen_node){
+        // 	printf("%d, ",n);
+        // }
+        // printf("\n");
+        vector<pair<float, pair<uint32_t, uint32_t>>> result;
+        // next = false;
+        update_best_buddy_haplo_general(seen, best_buddy, connect_num, len);
         // cout << "Update best buddy score." << endl;
-		for(int i = 0; i < len; i++){
-			for(int j = 0; j < len; j++){
-				if(best_buddy[i][j] > 0.999){
-                    if(connect_num[i][j]>low_connect){
+        for (int i = 0; i < len; i++)
+        {
+            for (int j = 0; j < len; j++)
+            {
+                if (best_buddy[i][j] > 0.999)
+                {
+                    if (connect_num[i][j] > low_connect)
+                    {
                         next = true;
                     }
-					result.push_back(make_pair(best_buddy[i][j], make_pair(i,j)));
-				}
-			}
-		}
-		if(!next){
+                    result.push_back(make_pair(best_buddy[i][j], make_pair(i, j)));
+                }
+            }
+        }
+        if (!next)
+        {
             break;
         }
-		sort(result.begin(), result.end(),
-		[](const pair<float, pair<uint32_t,uint32_t>>& r1, const pair<float, pair<uint32_t,uint32_t>>& r2){
-			return r1.first > r2.first;
-		});
+        sort(result.begin(), result.end(),
+             [](const pair<float, pair<uint32_t, uint32_t>> &r1, const pair<float, pair<uint32_t, uint32_t>> &r2)
+             {
+                 return r1.first > r2.first;
+             });
         // cout << "Get potential connections " << result.size() << "." << endl;
 
-        for(auto res:result){
-            if(!seen[res.second.first][res.second.second]){
+        for (auto res : result)
+        {
+            if (!seen[res.second.first][res.second.second])
+            {
                 bool erase_connection = false;
-                if(connect_num[res.second.first][res.second.second] < low_connect){
+                if (connect_num[res.second.first][res.second.second] < low_connect)
+                {
                     erase_connection = true;
                 }
                 safe_break = 0;
@@ -9250,19 +10729,26 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                 uint16_t idx_j = 65535;
                 uint16_t idx_i_sub = 65535;
                 uint16_t idx_j_sub = 65535;
-                for(int i = 0; i < graph_connection.size(); i++){
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.first)){
+                for (int i = 0; i < graph_connection.size(); i++)
+                {
+                    if (find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.first)) != graph_connection[i].end())
+                    {
+                        for (int idx = 0; idx < graph_connection[i].size(); idx++)
+                        {
+                            if (graph_connection[i][idx] == (res.second.first))
+                            {
                                 idx_i_sub = idx;
                             }
                         }
                         idx_i = i;
                         found = true;
                     }
-                    if(find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second))!=graph_connection[i].end()){
-                        for(int idx=0; idx<graph_connection[i].size(); idx++){
-                            if(graph_connection[i][idx]==(res.second.second)){
+                    if (find(graph_connection[i].begin(), graph_connection[i].end(), (res.second.second)) != graph_connection[i].end())
+                    {
+                        for (int idx = 0; idx < graph_connection[i].size(); idx++)
+                        {
+                            if (graph_connection[i][idx] == (res.second.second))
+                            {
                                 idx_j_sub = idx;
                             }
                         }
@@ -9270,84 +10756,113 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
                         found = true;
                     }
                 }
-                if(erase_connection){
-
-                }else if(found && idx_i == idx_j){
+                if (erase_connection)
+                {
+                }
+                else if (found && idx_i == idx_j)
+                {
                     erase_connection = true;
-                }else if(!found){
-                    if(connect_num[res.second.first][res.second.second] > low_connect){
+                }
+                else if (!found)
+                {
+                    if (connect_num[res.second.first][res.second.second] > low_connect)
+                    {
                         vector<uint32_t> buf;
                         buf.push_back(res.second.first);
                         buf.push_back(res.second.second);
                         graph_connection.push_back(buf);
-                    }else{
+                    }
+                    else
+                    {
                         erase_connection = true;
                     }
-                }else if(idx_j!=65535 && idx_i!=65535){
+                }
+                else if (idx_j != 65535 && idx_i != 65535)
+                {
                     // erase_connection = true;
                     assert(idx_j_sub == 0);
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
-
+                    assert(idx_i_sub == graph_connection[idx_i].size() - 1);
 
                     uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
+                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size() - 2]][res.second.second]);
                     adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
                     uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
+                    for (int i_c = 0; i_c < graph_connection[idx_i].size() - 1; i_c++)
+                    {
+                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c + 1]];
                     }
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
+                    for (int j_c = 0; j_c < graph_connection[idx_j].size() - 1; j_c++)
+                    {
+                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c + 1]];
                     }
-                    average_connection/=graph_connection[idx_i].size()+graph_connection[idx_j].size()-2;
+                    average_connection /= graph_connection[idx_i].size() + graph_connection[idx_j].size() - 2;
                     // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 1000|| adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                    if(average_connection*0.4>connect_num[res.second.first][res.second.second] ){
+                    if (average_connection * 0.4 > connect_num[res.second.first][res.second.second])
+                    {
                         erase_connection = true;
-                    }else{
-                        graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
-                        graph_connection.erase(graph_connection.begin()+idx_j);
                     }
-                }else if(idx_j!=65535){
+                    else
+                    {
+                        graph_connection[idx_i].insert(graph_connection[idx_i].end(), graph_connection[idx_j].begin(), graph_connection[idx_j].end());
+                        graph_connection.erase(graph_connection.begin() + idx_j);
+                    }
+                }
+                else if (idx_j != 65535)
+                {
                     assert(idx_j_sub == 0);
                     uint32_t adj_connection = 65335;
                     adj_connection = min(adj_connection, connect_num[res.second.first][graph_connection[idx_j][1]]);
                     uint32_t average_connection = 0;
-                    for(int j_c = 0; j_c < graph_connection[idx_j].size()-1; j_c++){
-                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c+1]];
+                    for (int j_c = 0; j_c < graph_connection[idx_j].size() - 1; j_c++)
+                    {
+                        average_connection += connect_num[graph_connection[idx_j][j_c]][graph_connection[idx_j][j_c + 1]];
                     }
-                    average_connection/=graph_connection[idx_j].size()-1;
+                    average_connection /= graph_connection[idx_j].size() - 1;
                     // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 1000 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                    if(average_connection*0.4>connect_num[res.second.first][res.second.second] ){
+                    if (average_connection * 0.4 > connect_num[res.second.first][res.second.second])
+                    {
                         erase_connection = true;
-                    }else{
-                        graph_connection[idx_j].insert(graph_connection[idx_j].begin(),(res.second.first));
                     }
-                }else if(idx_i!=65535){
-                    assert(idx_i_sub == graph_connection[idx_i].size()-1);
+                    else
+                    {
+                        graph_connection[idx_j].insert(graph_connection[idx_j].begin(), (res.second.first));
+                    }
+                }
+                else if (idx_i != 65535)
+                {
+                    assert(idx_i_sub == graph_connection[idx_i].size() - 1);
                     uint32_t adj_connection = 65335;
-                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size()-2]][res.second.second]);
+                    adj_connection = min(adj_connection, connect_num[graph_connection[idx_i][graph_connection[idx_i].size() - 2]][res.second.second]);
                     uint32_t average_connection = 0;
-                    for(int i_c = 0; i_c < graph_connection[idx_i].size()-1; i_c++){
-                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c+1]];
+                    for (int i_c = 0; i_c < graph_connection[idx_i].size() - 1; i_c++)
+                    {
+                        average_connection += connect_num[graph_connection[idx_i][i_c]][graph_connection[idx_i][i_c + 1]];
                     }
-                    average_connection/=graph_connection[idx_i].size()-1;
+                    average_connection /= graph_connection[idx_i].size() - 1;
                     // if(average_connection*0.4>connect_num[res.second.first][res.second.second] || adj_connection < 1000 || adj_connection < connect_num[res.second.first][res.second.second]*0.3){
-                    if(average_connection*0.4>connect_num[res.second.first][res.second.second]){
+                    if (average_connection * 0.4 > connect_num[res.second.first][res.second.second])
+                    {
                         erase_connection = true;
-                    }else{
+                    }
+                    else
+                    {
                         graph_connection[idx_i].push_back((res.second.second));
                     }
                 }
-                
-                if(!erase_connection){
-                    for(int q = 0; q < len; q++){
+
+                if (!erase_connection)
+                {
+                    for (int q = 0; q < len; q++)
+                    {
                         seen[res.second.first][q] = true;
                         seen[q][res.second.second] = true;
                         seen[res.second.second][res.second.first] = true;
                     }
                     seen_node.insert((res.second.first));
                     seen_node.insert((res.second.second));
-                }else{
+                }
+                else
+                {
                     seen[res.second.first][res.second.second] = true;
                     seen[res.second.second][res.second.first] = true;
                 }
@@ -9357,26 +10872,33 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
         // cout << "Save graphs and scores." << endl;
 
         uint32_t counting_left = 0;
-        for(int i = 0; i < len ; i++){
-            for(int j = 0; j < len ; j++){
-                if(!seen[i][j]){
+        for (int i = 0; i < len; i++)
+        {
+            for (int j = 0; j < len; j++)
+            {
+                if (!seen[i][j])
+                {
                     next = true;
                     counting_left++;
                 }
             }
         }
-		// cout << "Nodes in graph: " << seen_node.size() << "." << endl;
-		// cout << "Left edges: " << counting_left << "." << endl;
+        // cout << "Nodes in graph: " << seen_node.size() << "." << endl;
+        // cout << "Left edges: " << counting_left << "." << endl;
         iteration++;
-	}
+    }
     seen_node.clear();
-    for(auto i:graph_connection){
-        for(auto j:i){
+    for (auto i : graph_connection)
+    {
+        for (auto j : i)
+        {
             seen_node.insert(j);
         }
     }
-	for(int i = 0; i<len; i++){
-        if(seen_node.find(i)==seen_node.end()){
+    for (int i = 0; i < len; i++)
+    {
+        if (seen_node.find(i) == seen_node.end())
+        {
             vector<uint32_t> to_insert;
             to_insert.push_back(i);
             graph_connection.push_back(to_insert);
@@ -9386,136 +10908,159 @@ vector<vector<uint32_t>> best_buddy_separate(bool** seen, float** best_buddy, ui
     return graph_connection;
 }
 
-
-vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint32_t>> order_input, vector<uint32_t>* orientation_result, vector<uint32_t>* haplo_result){
+vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint32_t>> order_input, vector<uint32_t> *orientation_result, vector<uint32_t> *haplo_result)
+{
     vector<vector<uint32_t>> order_result;
-    for(auto res: order_input){
-        if(res.size()>1){
+    for (auto res : order_input)
+    {
+        if (res.size() > 1)
+        {
             vector<uint32_t> nodes = res;
             sort(nodes.begin(), nodes.end());
             vector<uint32_t> best_perm = nodes;
             uint32_t best_perm_score = 0;
             uint32_t single_len = nodes.size();
             uint32_t best_orientation = 0;
-            if(res.size() < 9){
-                do {
+            if (res.size() < 9)
+            {
+                do
+                {
                     // for(auto i : nodes){
                     //     cout << id_contig[i] << ", ";
                     // }
                     // cout << endl;
-                    uint32_t ids = 1<<nodes.size();
+                    uint32_t ids = 1 << nodes.size();
                     uint32_t cur_max_score = 0;
                     uint32_t cur_best_orientation = 0;
-                    for(uint32_t orientation = 0; orientation < ids; orientation++){
+                    for (uint32_t orientation = 0; orientation < ids; orientation++)
+                    {
                         uint32_t orientations = orientation;
                         uint32_t current_score = 0;
-                        for(int i = 0; i < single_len-1; i++){
-                            current_score += max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+1]<<2)+((orientations>>(i+1))%2)]);
+                        for (int i = 0; i < single_len - 1; i++)
+                        {
+                            current_score += max(connect_num[(nodes[i] << 2) + ((orientations >> i) % 2)][(nodes[i + 1] << 2) + ((orientations >> (i + 1)) % 2) + 2], connect_num[(nodes[i] << 2) + ((orientations >> i) % 2)][(nodes[i + 1] << 2) + ((orientations >> (i + 1)) % 2)]);
                             // if(i!=single_len-2){
                             //     current_score +=  0.5*max(connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(nodes[i]<<2)+((orientations>>i)%2)][(nodes[i+2]<<2)+((orientations>>(i+2))%2)]);
                             // }
                         }
-                        if(current_score>cur_max_score){
+                        if (current_score > cur_max_score)
+                        {
                             cur_max_score = current_score;
                             cur_best_orientation = orientations;
                         }
                     }
-                    
-                    if(cur_max_score > best_perm_score){
+
+                    if (cur_max_score > best_perm_score)
+                    {
                         best_orientation = cur_best_orientation;
                         best_perm_score = cur_max_score;
                         best_perm = nodes;
-
                     }
                 } while (std::next_permutation(nodes.begin(), nodes.end()));
-            }else if(res.size() < 18){
-                uint32_t half_size = res.size()/2;
-                vector<uint32_t> haf1(res.begin(), res.begin()+half_size);
+            }
+            else if (res.size() < 18)
+            {
+                uint32_t half_size = res.size() / 2;
+                vector<uint32_t> haf1(res.begin(), res.begin() + half_size);
                 sort(haf1.begin(), haf1.end());
                 vector<uint32_t> best_perm_haf1 = haf1;
                 uint32_t best_perm_score_haf1 = 0;
                 uint32_t single_len_haf1 = haf1.size();
                 uint32_t best_orientation_haf1 = 0;
-                vector<uint32_t> haf2(res.begin()+half_size, res.end());
+                vector<uint32_t> haf2(res.begin() + half_size, res.end());
                 sort(haf2.begin(), haf2.end());
                 vector<uint32_t> best_perm_haf2 = haf2;
                 uint32_t best_perm_score_haf2 = 0;
                 uint32_t single_len_haf2 = haf2.size();
                 uint32_t best_orientation_haf2 = 0;
-                do {
-                    uint32_t ids = 1<<haf1.size();
+                do
+                {
+                    uint32_t ids = 1 << haf1.size();
                     uint32_t cur_max_score = 0;
                     uint32_t cur_best_orientation = 0;
-                    for(uint32_t orientation = 0; orientation < ids; orientation++){
+                    for (uint32_t orientation = 0; orientation < ids; orientation++)
+                    {
                         uint32_t orientations = orientation;
                         uint32_t current_score = 0;
-                        for(int i = 0; i < single_len_haf1-1; i++){
-                            current_score += max(connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+1]<<2)+((orientations>>(i+1))%2)]);
-                            if(i!=single_len_haf1-2){
+                        for (int i = 0; i < single_len_haf1 - 1; i++)
+                        {
+                            current_score += max(connect_num[(haf1[i] << 2) + ((orientations >> i) % 2)][(haf1[i + 1] << 2) + ((orientations >> (i + 1)) % 2) + 2], connect_num[(haf1[i] << 2) + ((orientations >> i) % 2)][(haf1[i + 1] << 2) + ((orientations >> (i + 1)) % 2)]);
+                            if (i != single_len_haf1 - 2)
+                            {
                                 // current_score +=  0.5*max(connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(haf1[i]<<2)+((orientations>>i)%2)][(haf1[i+2]<<2)+((orientations>>(i+2))%2)]);
                             }
                         }
-                        if(current_score>cur_max_score){
+                        if (current_score > cur_max_score)
+                        {
                             cur_max_score = current_score;
                             cur_best_orientation = orientations;
                         }
                     }
-                    if(cur_max_score > best_perm_score_haf1){
+                    if (cur_max_score > best_perm_score_haf1)
+                    {
                         best_orientation_haf1 = cur_best_orientation;
                         best_perm_score_haf1 = cur_max_score;
                         best_perm_haf1 = haf1;
                     }
                 } while (std::next_permutation(haf1.begin(), haf1.end()));
 
-                do {
-                    uint32_t ids = 1<<haf2.size();
+                do
+                {
+                    uint32_t ids = 1 << haf2.size();
                     uint32_t cur_max_score = 0;
                     uint32_t cur_best_orientation = 0;
-                    for(uint32_t orientation = 0; orientation < ids; orientation++){
+                    for (uint32_t orientation = 0; orientation < ids; orientation++)
+                    {
                         uint32_t orientations = orientation;
                         uint32_t current_score = 0;
-                        for(int i = 0; i < single_len_haf2-1; i++){
-                            current_score += max(connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+1]<<2)+((orientations>>(i+1))%2)]);
-                            if(i!=single_len_haf2-2){
+                        for (int i = 0; i < single_len_haf2 - 1; i++)
+                        {
+                            current_score += max(connect_num[(haf2[i] << 2) + ((orientations >> i) % 2)][(haf2[i + 1] << 2) + ((orientations >> (i + 1)) % 2) + 2], connect_num[(haf2[i] << 2) + ((orientations >> i) % 2)][(haf2[i + 1] << 2) + ((orientations >> (i + 1)) % 2)]);
+                            if (i != single_len_haf2 - 2)
+                            {
                                 // current_score +=  0.5*max(connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+2]<<2)+((orientations>>(i+2))%2)+2], connect_num[(haf2[i]<<2)+((orientations>>i)%2)][(haf2[i+2]<<2)+((orientations>>(i+2))%2)]);
                             }
                         }
-                        if(current_score>cur_max_score){
+                        if (current_score > cur_max_score)
+                        {
                             cur_max_score = current_score;
                             cur_best_orientation = orientations;
                         }
                     }
-                    if(cur_max_score > best_perm_score_haf2){
+                    if (cur_max_score > best_perm_score_haf2)
+                    {
                         best_orientation_haf2 = cur_best_orientation;
-                        best_perm_score_haf2= cur_max_score;
+                        best_perm_score_haf2 = cur_max_score;
                         best_perm_haf2 = haf2;
                     }
                 } while (std::next_permutation(haf2.begin(), haf2.end()));
-                
+
                 uint32_t haf1_beg = best_perm_haf1[0];
-                uint32_t haf1_end = best_perm_haf1[best_perm_haf1.size()-1];
-                
+                uint32_t haf1_end = best_perm_haf1[best_perm_haf1.size() - 1];
+
                 uint32_t haf2_beg = best_perm_haf2[0];
-                uint32_t haf2_end = best_perm_haf2[best_perm_haf2.size()-1];
-                
+                uint32_t haf2_end = best_perm_haf2[best_perm_haf2.size() - 1];
+
                 uint32_t max_beg_beg = 0;
                 uint32_t max_beg_end = 0;
                 uint32_t max_end_beg = 0;
                 uint32_t max_end_end = 0;
-                
-                for(uint32_t i_s = 0; i_s < 4; i_s++){
-                    for(uint32_t j_s = 0; j_s < 4; j_s++){
-                        max_beg_beg = max(max_beg_beg, connect_num[(haf1_beg<<2)+i_s][(haf2_beg<<2)+j_s]);
-                        max_beg_beg = max(max_beg_beg, connect_num[(haf2_beg<<2)+i_s][(haf1_beg<<2)+j_s]);
 
-                        max_beg_end = max(max_beg_end, connect_num[(haf1_beg<<2)+i_s][(haf2_end<<2)+j_s]);
-                        max_beg_end = max(max_beg_end, connect_num[(haf2_end<<2)+i_s][(haf1_beg<<2)+j_s]);
+                for (uint32_t i_s = 0; i_s < 4; i_s++)
+                {
+                    for (uint32_t j_s = 0; j_s < 4; j_s++)
+                    {
+                        max_beg_beg = max(max_beg_beg, connect_num[(haf1_beg << 2) + i_s][(haf2_beg << 2) + j_s]);
+                        max_beg_beg = max(max_beg_beg, connect_num[(haf2_beg << 2) + i_s][(haf1_beg << 2) + j_s]);
 
-                        max_end_beg = max(max_end_beg, connect_num[(haf1_end<<2)+i_s][(haf2_beg<<2)+j_s]);
-                        max_end_beg = max(max_end_beg, connect_num[(haf2_beg<<2)+i_s][(haf1_end<<2)+j_s]);
+                        max_beg_end = max(max_beg_end, connect_num[(haf1_beg << 2) + i_s][(haf2_end << 2) + j_s]);
+                        max_beg_end = max(max_beg_end, connect_num[(haf2_end << 2) + i_s][(haf1_beg << 2) + j_s]);
 
-                        max_end_end = max(max_end_end, connect_num[(haf1_end<<2)+i_s][(haf2_end<<2)+j_s]);
-                        max_end_end = max(max_end_end, connect_num[(haf2_end<<2)+i_s][(haf1_end<<2)+j_s]);
+                        max_end_beg = max(max_end_beg, connect_num[(haf1_end << 2) + i_s][(haf2_beg << 2) + j_s]);
+                        max_end_beg = max(max_end_beg, connect_num[(haf2_beg << 2) + i_s][(haf1_end << 2) + j_s]);
+
+                        max_end_end = max(max_end_end, connect_num[(haf1_end << 2) + i_s][(haf2_end << 2) + j_s]);
+                        max_end_end = max(max_end_end, connect_num[(haf2_end << 2) + i_s][(haf1_end << 2) + j_s]);
                     }
                 }
 
@@ -9527,32 +11072,42 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
 
                 best_perm = vector<uint32_t>();
 
-                if(max_score == max_beg_beg){
+                if (max_score == max_beg_beg)
+                {
                     reverse(best_perm_haf1.begin(), best_perm_haf1.end());
                     best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
                     best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
-                }else if(max_score == max_beg_end){
+                }
+                else if (max_score == max_beg_end)
+                {
                     best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
                     best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
-                }else if(max_score == max_end_beg){
+                }
+                else if (max_score == max_end_beg)
+                {
                     best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
                     best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
-                }else{
+                }
+                else
+                {
                     reverse(best_perm_haf2.begin(), best_perm_haf2.end());
                     best_perm.insert(best_perm.end(), best_perm_haf1.begin(), best_perm_haf1.end());
                     best_perm.insert(best_perm.end(), best_perm_haf2.begin(), best_perm_haf2.end());
                 }
 
-                uint32_t ids = 1<<best_perm.size();
+                uint32_t ids = 1 << best_perm.size();
                 uint32_t cur_max_score = 0;
                 single_len = best_perm.size();
-                for(uint32_t orientation = 0; orientation < ids; orientation++){
+                for (uint32_t orientation = 0; orientation < ids; orientation++)
+                {
                     uint32_t orientations = orientation;
                     uint32_t current_score = 0;
-                    for(int i = 0; i < single_len-1; i++){
-                        current_score += max(connect_num[(best_perm[i]<<2)+((orientations>>i)%2)][(best_perm[i+1]<<2)+((orientations>>(i+1))%2)+2], connect_num[(best_perm[i]<<2)+((orientations>>i)%2)][(best_perm[i+1]<<2)+((orientations>>(i+1))%2)]);
+                    for (int i = 0; i < single_len - 1; i++)
+                    {
+                        current_score += max(connect_num[(best_perm[i] << 2) + ((orientations >> i) % 2)][(best_perm[i + 1] << 2) + ((orientations >> (i + 1)) % 2) + 2], connect_num[(best_perm[i] << 2) + ((orientations >> i) % 2)][(best_perm[i + 1] << 2) + ((orientations >> (i + 1)) % 2)]);
                     }
-                    if(current_score>cur_max_score){
+                    if (current_score > cur_max_score)
+                    {
                         cur_max_score = current_score;
                         best_orientation = orientations;
                     }
@@ -9561,14 +11116,17 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
             order_result.push_back(best_perm);
             orientation_result->push_back(best_orientation);
             uint32_t haps = 0;
-            for(int p = 0; p < best_perm.size()-1; p++){
+            for (int p = 0; p < best_perm.size() - 1; p++)
+            {
                 bool pre_hap2 = (haps >> p) % 2 == 1;
-                bool this_switch = connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)+2] > connect_num[(best_perm[p]<<2)+((best_orientation>>p)%2)][(best_perm[p+1]<<2)+((best_orientation>>(p+1))%2)];
-                uint32_t num = (this_switch ^ pre_hap2)?1:0;
-                haps |= (num<<(p+1));
+                bool this_switch = connect_num[(best_perm[p] << 2) + ((best_orientation >> p) % 2)][(best_perm[p + 1] << 2) + ((best_orientation >> (p + 1)) % 2) + 2] > connect_num[(best_perm[p] << 2) + ((best_orientation >> p) % 2)][(best_perm[p + 1] << 2) + ((best_orientation >> (p + 1)) % 2)];
+                uint32_t num = (this_switch ^ pre_hap2) ? 1 : 0;
+                haps |= (num << (p + 1));
             }
             haplo_result->push_back(haps);
-        }else{
+        }
+        else
+        {
             order_result.push_back(res);
             orientation_result->push_back(0);
             haplo_result->push_back(0);
@@ -9577,47 +11135,59 @@ vector<vector<uint32_t>> order_fixing(uint32_t **connect_num, vector<vector<uint
     return order_result;
 }
 
-
-
-vector<vector<uint32_t>> ordered_breaking(uint32_t** connect_num,vector<vector<uint32_t>> order_result, vector<uint32_t> orientation_result, vector<uint32_t> haplo_result){
+vector<vector<uint32_t>> ordered_breaking(uint32_t **connect_num, vector<vector<uint32_t>> order_result, vector<uint32_t> orientation_result, vector<uint32_t> haplo_result)
+{
     vector<vector<uint32_t>> new_scaffold_result;
-    for(int idx = 0; idx < order_result.size(); idx++){
-        if(order_result[idx].size()>2){
+    for (int idx = 0; idx < order_result.size(); idx++)
+    {
+        if (order_result[idx].size() > 2)
+        {
             int last_break = -1;
             vector<uint32_t> node = order_result[idx];
             uint32_t orientation = orientation_result[idx];
             uint32_t haplo = haplo_result[idx];
             uint32_t average_connection = 0;
-            for(int i = 0; i < node.size() - 1; i++){
-                uint32_t i_ori = (orientation>>i)%2;
-                uint32_t i_1_ori = (orientation>>(i+1))%2;
-                uint32_t i_hap = (haplo>>i)%2;
-                uint32_t i_1_hap = (haplo>>(i+1))%2;
-                if(i_hap == i_1_hap){
-                    average_connection += connect_num[(node[i]<<2)+i_ori][(node[i+1]<<2)+i_1_ori];
-                }else{
-                    average_connection += connect_num[(node[i]<<2)+i_ori][(node[i+1]<<2)+i_1_ori+2];
+            for (int i = 0; i < node.size() - 1; i++)
+            {
+                uint32_t i_ori = (orientation >> i) % 2;
+                uint32_t i_1_ori = (orientation >> (i + 1)) % 2;
+                uint32_t i_hap = (haplo >> i) % 2;
+                uint32_t i_1_hap = (haplo >> (i + 1)) % 2;
+                if (i_hap == i_1_hap)
+                {
+                    average_connection += connect_num[(node[i] << 2) + i_ori][(node[i + 1] << 2) + i_1_ori];
+                }
+                else
+                {
+                    average_connection += connect_num[(node[i] << 2) + i_ori][(node[i + 1] << 2) + i_1_ori + 2];
                 }
             }
             average_connection /= node.size() - 1;
-            for(int i = 0; i < node.size() - 1; i++){
+            for (int i = 0; i < node.size() - 1; i++)
+            {
                 uint32_t cur_connection = 0;
-                uint32_t i_ori = (orientation>>i)%2;
-                uint32_t i_1_ori = (orientation>>(i+1))%2;
-                uint32_t i_hap = (haplo>>i)%2;
-                uint32_t i_1_hap = (haplo>>(i+1))%2;
-                if(i_hap == i_1_hap){
-                    cur_connection = connect_num[(node[i]<<2)+i_ori][(node[i+1]<<2)+i_1_ori];
-                }else{
-                    cur_connection = connect_num[(node[i]<<2)+i_ori][(node[i+1]<<2)+i_1_ori+2];
+                uint32_t i_ori = (orientation >> i) % 2;
+                uint32_t i_1_ori = (orientation >> (i + 1)) % 2;
+                uint32_t i_hap = (haplo >> i) % 2;
+                uint32_t i_1_hap = (haplo >> (i + 1)) % 2;
+                if (i_hap == i_1_hap)
+                {
+                    cur_connection = connect_num[(node[i] << 2) + i_ori][(node[i + 1] << 2) + i_1_ori];
                 }
-                if(cur_connection < average_connection/4 ){
-                    new_scaffold_result.push_back(vector<uint32_t>(node.begin()+last_break+1 , node.begin()+i+1));
+                else
+                {
+                    cur_connection = connect_num[(node[i] << 2) + i_ori][(node[i + 1] << 2) + i_1_ori + 2];
+                }
+                if (cur_connection < average_connection / 4)
+                {
+                    new_scaffold_result.push_back(vector<uint32_t>(node.begin() + last_break + 1, node.begin() + i + 1));
                     last_break = i;
                 }
             }
-            new_scaffold_result.push_back(vector<uint32_t>(node.begin()+last_break+1 , node.begin()+node.size()));
-        }else{
+            new_scaffold_result.push_back(vector<uint32_t>(node.begin() + last_break + 1, node.begin() + node.size()));
+        }
+        else
+        {
             new_scaffold_result.push_back(order_result[idx]);
         }
     }
@@ -9625,78 +11195,94 @@ vector<vector<uint32_t>> ordered_breaking(uint32_t** connect_num,vector<vector<u
     return new_scaffold_result;
 }
 
-
-
-
-
-
-vector<vector<uint32_t>> best_buddy_merge_final(bool** seen, float** best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections){
+vector<vector<uint32_t>> best_buddy_merge_final(bool **seen, float **best_buddy, uint32_t **connect_num, uint32_t len, uint32_t target, vector<uint32_t> inside_connections)
+{
     vector<vector<uint32_t>> graph_connection;
     // cout << "Merge Started" << endl;
     // cout << len << endl;
-	if(len > target){
+    if (len > target)
+    {
         bool next = true;
         set<uint32_t> seen_node;
         uint32_t safe_break = 0;
         uint32_t iteration = 0;
         // while(next){
-        vector<pair<double, pair<uint32_t,uint32_t>>> all_connect;
-        for(int i = 0; i < len; i++){
-            for(int j = 0; j < len; j++){
-                if(i!=j && connect_num[i][j] > 0){
-                    all_connect.push_back(make_pair(((double)connect_num[i][j])/inside_connections[i]/inside_connections[j]*10, make_pair(i,j)));
+        vector<pair<double, pair<uint32_t, uint32_t>>> all_connect;
+        for (int i = 0; i < len; i++)
+        {
+            for (int j = 0; j < len; j++)
+            {
+                if (i != j && connect_num[i][j] > 0)
+                {
+                    all_connect.push_back(make_pair(((double)connect_num[i][j]) / inside_connections[i] / inside_connections[j] * 10, make_pair(i, j)));
                 }
             }
         }
         sort(all_connect.begin(), all_connect.end(),
-        [](const pair<double, pair<uint32_t,uint32_t>>& r1, const pair<double, pair<uint32_t,uint32_t>>& r2){
-            return r1.first > r2.first;
-        });
-        uint32_t left_to_connect = (len - target)*3;
+             [](const pair<double, pair<uint32_t, uint32_t>> &r1, const pair<double, pair<uint32_t, uint32_t>> &r2)
+             {
+                 return r1.first > r2.first;
+             });
+        uint32_t left_to_connect = (len - target) * 3;
         set<uint32_t> seen_beg;
         set<uint32_t> seen_end;
         set<uint32_t> black_listed_beg;
         set<uint32_t> black_listed_end;
-        for(int i = 0; i < min((uint32_t)all_connect.size(),left_to_connect); i++){
+        for (int i = 0; i < min((uint32_t)all_connect.size(), left_to_connect); i++)
+        {
             uint32_t node_i = all_connect[i].second.first;
             uint32_t node_j = all_connect[i].second.second;
-            if(seen_beg.find(node_i)!=seen_beg.end()){
+            if (seen_beg.find(node_i) != seen_beg.end())
+            {
                 black_listed_beg.insert(node_i);
             }
-            if(seen_end.find(node_j)!=seen_end.end()){
+            if (seen_end.find(node_j) != seen_end.end())
+            {
                 black_listed_end.insert(node_j);
             }
             seen_beg.insert(node_i);
             seen_end.insert(node_j);
         }
         uint32_t cur_len = len;
-        for(int i = 0; i < min((uint32_t)all_connect.size(),left_to_connect); i++){
+        for (int i = 0; i < min((uint32_t)all_connect.size(), left_to_connect); i++)
+        {
             uint32_t node_i = all_connect[i].second.first;
             uint32_t node_j = all_connect[i].second.second;
-            if(black_listed_beg.find(node_i) == black_listed_beg.end() && black_listed_end.find(node_j) == black_listed_end.end()){
+            if (black_listed_beg.find(node_i) == black_listed_beg.end() && black_listed_end.find(node_j) == black_listed_end.end())
+            {
                 bool found = false;
                 uint16_t idx_i = 65535;
                 uint16_t idx_j = 65535;
-                for(int cur_idx = 0; cur_idx < graph_connection.size(); cur_idx++){
-                    if(find(graph_connection[cur_idx].begin(), graph_connection[cur_idx].end(), node_i)!=graph_connection[cur_idx].end()){
+                for (int cur_idx = 0; cur_idx < graph_connection.size(); cur_idx++)
+                {
+                    if (find(graph_connection[cur_idx].begin(), graph_connection[cur_idx].end(), node_i) != graph_connection[cur_idx].end())
+                    {
                         idx_i = cur_idx;
                         found = true;
                     }
-                    if(find(graph_connection[cur_idx].begin(), graph_connection[cur_idx].end(), node_j)!=graph_connection[cur_idx].end()){
+                    if (find(graph_connection[cur_idx].begin(), graph_connection[cur_idx].end(), node_j) != graph_connection[cur_idx].end())
+                    {
                         idx_j = cur_idx;
                         found = true;
                     }
                 }
-                if(idx_i == 65535 && idx_j == 65535){
+                if (idx_i == 65535 && idx_j == 65535)
+                {
                     vector<uint32_t> to_insert;
                     to_insert.push_back(node_i);
                     to_insert.push_back(node_j);
                     graph_connection.push_back(to_insert);
-                }else if(idx_i != 65535 && idx_j != 65535){
+                }
+                else if (idx_i != 65535 && idx_j != 65535)
+                {
                     cur_len++;
-                }else if(idx_i!=65535){
+                }
+                else if (idx_i != 65535)
+                {
                     graph_connection[idx_i].push_back(node_j);
-                }else if(idx_j!=65535){
+                }
+                else if (idx_j != 65535)
+                {
                     graph_connection[idx_j].push_back(node_i);
                 }
                 cur_len--;
@@ -9704,20 +11290,23 @@ vector<vector<uint32_t>> best_buddy_merge_final(bool** seen, float** best_buddy,
                 seen_node.insert(node_j);
                 // cout << node_i << "\t" << node_j << endl;
             }
-            if(cur_len <= target){
+            if (cur_len <= target)
+            {
                 break;
             }
         }
 
-        for(int i = 0; i<len; i++){
-            if(seen_node.find(i)==seen_node.end()){
+        for (int i = 0; i < len; i++)
+        {
+            if (seen_node.find(i) == seen_node.end())
+            {
                 vector<uint32_t> to_insert;
                 to_insert.push_back(i);
                 graph_connection.push_back(to_insert);
             }
         }
         cout << graph_connection.size() << endl;
-    // cout << "Finish get scaffolds." << endl;
+        // cout << "Finish get scaffolds." << endl;
     }
     return graph_connection;
 }
