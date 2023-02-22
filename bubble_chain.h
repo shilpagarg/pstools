@@ -76,7 +76,7 @@ int clean_graph(asg_t *g, string inFileName, string outFileName, map<string, str
 
 pair<vector<uint32_t>, vector<uint32_t>> get_sources(asg_t *g)
 {
-    cout << "start source search" << endl;
+   // cout << "start source search" << endl;
     vector<uint32_t> sources;
     vector<uint32_t> ends;
 
@@ -139,7 +139,7 @@ pair<vector<uint32_t>, vector<uint32_t>> get_sources(asg_t *g)
                 }
             }
         } */
-    cout << "finish source and end search" << endl;
+   // cout << "finish source and end search" << endl;
     return {sources, ends};
 }
 

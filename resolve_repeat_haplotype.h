@@ -5391,7 +5391,7 @@ static void worker_for_single_step_gen(void *data, long i, int tid)
     // cout<<graph->seq[path_2_src / 2].name<<"\t"<<graph->seq[path_1_end / 2].name<<endl;
 
     // find path_2
-    cout << "\n\n\nFinding path 2..." << endl;
+    //cout << "\n\n\nFinding path 2..." << endl;
     int cost_path2 = 0;
     if (path_2_src)
     {
@@ -5578,7 +5578,8 @@ static void worker_for_single_step_gen(void *data, long i, int tid)
     set<uint32_t> path_1_included; // store nodes divided by 2
     set<uint32_t> path_2_included;
 
-    cout << "\n\nhaplotype 1: " << all_paths[0].second << "\t";
+    //cout << "\n\nhaplotype 1: " << all_paths[0].second << "\t";
+    cout << "\n\nhaplotype 1: " << "\t";
     for (auto node : path_1_included_v) // max cost path
     {
         path_1_included.insert(node / 2); // order changed in set
@@ -5586,7 +5587,8 @@ static void worker_for_single_step_gen(void *data, long i, int tid)
     }
     cout << endl;
 
-    cout << "\n\nhaplotype 2: " << cost_path2 << "\t";
+   // cout << "\n\nhaplotype 2: " << cost_path2 << "\t";
+   cout << "\n\nhaplotype 2: " << "\t";
     for (auto node : path_2_included_v)
     {
         path_2_included.insert(node / 2);
@@ -5676,7 +5678,7 @@ void get_haplotype_path(uint32_t **connection_count_forward, uint32_t **connecti
 
     for (uint32_t i = 0; i < graph->n_seq * 2; i++)
     {
-        cout << "nodeID_compID:" << i << "\t" << nodeID_compID[i] << endl;
+       // cout << "nodeID_compID:" << i << "\t" << nodeID_compID[i] << endl;
     }
     // map<uint32_t,map<uint32_t,uint32_t>> connections_count_forward;
     // map<uint32_t,map<uint32_t,uint32_t>> connections_count_backward;
@@ -5775,7 +5777,7 @@ void get_haplotype_path(uint32_t **connection_count_forward, uint32_t **connecti
         uint32_t bubble_beginning = bubble->begNode;
         uint32_t bubble_end = bubble->endNode;
 
-        cout << "start get bubble paths from " << graph->seq[bubble_beginning / 2].name << " to " << graph->seq[bubble_end / 2].name << endl;
+       // cout << "start get bubble paths from " << graph->seq[bubble_beginning / 2].name << " to " << graph->seq[bubble_end / 2].name << endl;
 
         vector<asg_arc_t *> arc_stack;
         vector<uint32_t> node_stack; // DFS
@@ -5927,7 +5929,7 @@ void get_haplotype_path(uint32_t **connection_count_forward, uint32_t **connecti
 
     for (auto bubble : complex_bubbles)
     {
-        cout << "begNode -> bubble:" << bubble->begNode << endl;
+        //cout << "begNode -> bubble:" << bubble->begNode << endl;
         node_bubble_map[bubble->begNode] = bubble;
     }
 
@@ -5997,11 +5999,11 @@ void get_haplotype_path(uint32_t **connection_count_forward, uint32_t **connecti
                 step.beg_node->push_back(beg.first);
                 step.end_node->push_back(end.first);
                 step.current_nodes->push_back(end.second);
-                cout << "Multi-Contigs in one cc: " << graph->seq[beg.first >> 1].name << (beg.first % 2 == 0 ? "+" : "-") << " to " << graph->seq[end.first >> 1].name << (end.first % 2 == 0 ? "+" : "-") << ": " << endl;
-                for (auto node : end.second)
+                //cout << "Multi-Contigs in one cc: " << graph->seq[beg.first >> 1].name << (beg.first % 2 == 0 ? "+" : "-") << " to " << graph->seq[end.first >> 1].name << (end.first % 2 == 0 ? "+" : "-") << ": " << endl;
+/*                 for (auto node : end.second)
                 {
                     cout << graph->seq[node].name << ", ";
-                }
+                } */
                 cout << endl;
                 counting_contigs++;
                 seen_beg_end.insert(make_pair(beg.first, end.first));
@@ -6048,7 +6050,7 @@ void get_haplotype_path(uint32_t **connection_count_forward, uint32_t **connecti
     step.haplo_pathes = (vector<uint32_t> *)calloc(step.beg_node->size() * 2, sizeof(vector<uint32_t>));
     step.node_positions = (map<uint32_t, uint32_t> *)calloc(step.beg_node->size() * 2, sizeof(map<uint32_t, uint32_t>));
 
-    cout << "step.beg_node->size: " << step.beg_node->size() << endl;
+  //  cout << "step.beg_node->size: " << step.beg_node->size() << endl;
     // kt_for(n_threads, worker_for_single_step_gen, &step, 1);
     kt_for(n_threads, worker_for_single_step_gen, &step, step.beg_node->size());
     // kt_for(n_threads, worker_for_single_step, &step, step.beg_node->size());
